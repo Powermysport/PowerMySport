@@ -14,47 +14,44 @@ export const DOB_BOUNDS = (() => {
 
 // ─── Step sequence definition ─────────────────────────────────────────────────
 
-export type StepKind = "welcome" | "name" | "question" | "transition" | "processing" | "results";
+export type StepKind = "welcome" | "name" | "question" | "processing" | "results";
 
 export type Step =
   | { kind: "welcome" }
   | { kind: "name" }
   | { kind: "question"; questionKey: keyof WizardAnswers | "priorSports" }
-  | { kind: "transition"; text: string; sub: string }
   | { kind: "processing" }
   | { kind: "results" };
 
+/**
+ * The questionnaire, one screen per entry (audit F4: 31 screens became 22).
+ * - The name screen also asks boy or girl.
+ * - `priorSports` shows "plays now" and "considering" together.
+ * - `contactComfort` shows contact, water and indoor/outdoor as three short rows.
+ * - The three "next section" interstitials are gone; the section label stays above each
+ *   question.
+ * - `focusStyle` also sets `repetitionTolerance`: one question, four answers (see
+ *   PRACTICE_OPTIONS), at the user's request to merge the two.
+ * `motorType` and `competitiveResponse` were never used by the scorer and are no longer
+ * asked (F1); answers already stored on profiles stay.
+ */
 export const STEPS: Step[] = [
   { kind: "welcome" },
   { kind: "name" },
   { kind: "question", questionKey: "dob" },
-  { kind: "question", questionKey: "gender" },
   { kind: "question", questionKey: "state" },
   { kind: "question", questionKey: "priorSports" },
-  { kind: "question", questionKey: "consideringSports" },
-  {
-    kind: "transition",
-    text: "Good. Let's understand {name} physically.",
-    sub: "7 quick questions.",
-  },
   { kind: "question", questionKey: "height" },
   { kind: "question", questionKey: "weight" },
   { kind: "question", questionKey: "energyType" },
-  { kind: "question", questionKey: "motorType" },
   { kind: "question", questionKey: "visualTracking" },
   { kind: "question", questionKey: "eyesight" },
   { kind: "question", questionKey: "agility" },
-  { kind: "transition", text: "Now the interesting part.", sub: "How {name} thinks and competes." },
   { kind: "question", questionKey: "teamIndividual" },
-  { kind: "question", questionKey: "competitiveResponse" },
   { kind: "question", questionKey: "focusStyle" },
   { kind: "question", questionKey: "decisionStyle" },
   { kind: "question", questionKey: "pressureResponse" },
-  { kind: "question", questionKey: "repetitionTolerance" },
-  { kind: "transition", text: "Almost done.", sub: "A few practical questions for your family." },
   { kind: "question", questionKey: "contactComfort" },
-  { kind: "question", questionKey: "environment" },
-  { kind: "question", questionKey: "waterComfort" },
   { kind: "question", questionKey: "budget" },
   { kind: "question", questionKey: "ambition" },
   { kind: "question", questionKey: "weeklyHours" },
@@ -65,6 +62,13 @@ export const STEPS: Step[] = [
 export const QUESTION_STEPS = STEPS.filter((s) => s.kind === "question");
 export const TOTAL_QUESTIONS = QUESTION_STEPS.length;
 
+/**
+ * How many things a parent answers, for the copy ("20 short questions"). Some screens
+ * ask more than one: the name screen adds boy or girl, the sports screen adds the
+ * shortlist, the comfort screen adds water and indoor/outdoor.
+ */
+export const QUESTIONS_ASKED = TOTAL_QUESTIONS + 1 + 1 + 2;
+
 // The step lives in the URL. `processing` — the only step with a side-effect
 // (it creates or updates the child profile) — is gated on the questionnaire
 // being complete, i.e. the last question is answered. A bare `?step=processing`
@@ -72,18 +76,99 @@ export const TOTAL_QUESTIONS = QUESTION_STEPS.length;
 // report: it clamps back to the final question instead. Every other step is a
 // question or a screen that is safe to open directly.
 export const PROCESSING_INDEX = STEPS.findIndex((s) => s.kind === "processing");
-type AssessmentFlowContext = { completed: boolean };
+
+/**
+ * Below this age a parent can only guess at "repeats the same drill for months" and
+ * "performs better with all eyes on them": the child has not trained yet. Those two are
+ * skipped and score as neutral (audit F8).
+ */
+export const YOUNG_CHILD_AGE = 8;
+export const YOUNG_CHILD_SKIPPED: ReadonlyArray<keyof WizardAnswers> = [
+  "repetitionTolerance",
+  "pressureResponse",
+];
+export const isYoungChild = (age: number | null): boolean => age !== null && age < YOUNG_CHILD_AGE;
+
+export type AssessmentFlowContext = {
+  completed: boolean;
+  age: number | null;
+  /** Not logged in: the welcome splash is skipped, the name screen opens the quiz. */
+  guest: boolean;
+  /** A saved child is selected whose date of birth, gender and state are known. */
+  knownChild: boolean;
+};
+const stepNumberOf = (key: keyof WizardAnswers) =>
+  String(STEPS.findIndex((s) => s.kind === "question" && s.questionKey === key) + 1);
+
 export const ASSESSMENT_FLOW = defineFlow<string, AssessmentFlowContext>({
   id: "sport-assessment",
   steps: STEPS.map((_, i) => String(i + 1)),
   canEnter: {
     [String(PROCESSING_INDEX + 1)]: (ctx) => ctx.completed,
   },
+  skipWhen: {
+    // Guests arrive from the /assessment card, which already says what this is and how
+    // long it takes. Logged-in parents keep it: it is where they pick the child.
+    "1": (ctx: AssessmentFlowContext) => ctx.guest,
+    // A returning child: the profile already holds these, so do not ask again.
+    "2": (ctx: AssessmentFlowContext) => ctx.knownChild,
+    [stepNumberOf("dob")]: (ctx: AssessmentFlowContext) => ctx.knownChild,
+    [stepNumberOf("state")]: (ctx: AssessmentFlowContext) => ctx.knownChild,
+    // Repetition has no screen of its own (it rides on the practice question, which shows
+    // only its focus half to a young child), so pressure is the one step to skip.
+    [stepNumberOf("pressureResponse")]: (ctx: AssessmentFlowContext) => isYoungChild(ctx.age),
+  },
 });
 
-// Every step is unconditional, so navigation is a straight walk in both
-// directions — there is no longer any question shown only in response to a
-// previous answer.
+// ─── The practice question: focus and repetition in one ─────────────────────
+
+/**
+ * One question that answers two: how long the child can focus, and whether they can take
+ * repeating the same thing. The four answers are the 2x2, so both stored answers stay
+ * independent and the scorer still tells them apart. A child under YOUNG_CHILD_AGE is only
+ * asked the focus half (repetition is a guess at that age, audit F8).
+ */
+export const PRACTICE_OPTIONS: ReadonlyArray<{
+  value: string;
+  focus: NonNullable<WizardAnswers["focusStyle"]>;
+  repetition: NonNullable<WizardAnswers["repetitionTolerance"]>;
+  label: string;
+  context: string;
+}> = [
+  {
+    value: "sustained-high",
+    focus: "sustained",
+    repetition: "high",
+    label: "Stays with it for a long time, and happy to repeat it",
+    context: "Can practise the same thing over and over without getting bored",
+  },
+  {
+    value: "sustained-low",
+    focus: "sustained",
+    repetition: "low",
+    label: "Stays with it for a long time, but needs variety",
+    context: "Absorbed for ages, as long as it keeps changing",
+  },
+  {
+    value: "bursts-high",
+    focus: "bursts",
+    repetition: "high",
+    label: "Focuses in short bursts, but fine with repetition",
+    context: "Needs breaks, then happily goes back to the same drill",
+  },
+  {
+    value: "bursts-low",
+    focus: "bursts",
+    repetition: "low",
+    label: "Focuses in short bursts, and needs variety",
+    context: "20 to 30 minutes on one thing, and only if it keeps changing",
+  },
+];
+
+/** The practice option matching the stored answers, if both are set. */
+export const practiceValue = (a: WizardAnswers): string | null =>
+  PRACTICE_OPTIONS.find((o) => o.focus === a.focusStyle && o.repetition === a.repetitionTolerance)
+    ?.value ?? null;
 
 // ─── Left sidebar metadata ────────────────────────────────────────────────────
 

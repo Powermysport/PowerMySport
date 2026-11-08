@@ -1,12 +1,12 @@
 "use client";
 
-import React from "react";
-import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, CheckCircle, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { Button } from "@/modules/shared/ui/Button";
 import { ResultsView } from "./results/ResultsView";
-import { SectionTransition } from "./SectionTransition";
 import { QuestionScreen, ProcessingScreen } from "./wizard/WizardStepScreens";
-import { SECTION_META, SECTION_ORDER, TOTAL_QUESTIONS } from "./wizard/wizardSteps";
+import { SECTION_META, SECTION_ORDER, QUESTIONS_ASKED } from "./wizard/wizardSteps";
+import { ChoiceRows } from "./inputs/ChoiceRows";
+import { chipClass, fieldClass } from "./inputs/optionStyles";
 import { useWizardShell } from "../hooks/useWizardShell";
 
 // ─── Main wizard shell ────────────────────────────────────────────────────────
@@ -18,6 +18,8 @@ export function WizardShell() {
     setAnswer,
     nameInput,
     setNameInput,
+    confirmName,
+    nameTarget,
     nameRef,
     chosenSport,
     choosingSport,
@@ -27,6 +29,8 @@ export function WizardShell() {
     startNewChild,
     savedStatus,
     savedForName,
+    suggestedChildId,
+    saveResultsTo,
     results,
     chosenFits,
     stepIndex,
@@ -41,416 +45,261 @@ export function WizardShell() {
     currentSection,
     sectionMeta,
     profileChips,
-    transitionText,
     retake,
     chooseSport,
     selectedPlayer,
   } = useWizardShell();
 
+  const firstName = selectedPlayer?.name.split(" ")[0];
+
   return (
-    <div className="flex min-h-screen bg-white">
-      {/* ── Left sidebar (desktop only, hidden on full-screen steps) ── */}
-      {/* Outer wrapper carries the dark background and stretches to match the
-          right panel's height (which can exceed one viewport, e.g. long
-          multi-select lists); the inner aside stays pinned via sticky. */}
+    <div className="bg-paper flex min-h-screen">
+      {/* ── Section sidebar (desktop, question steps only) ──
+          A deeper-cream band, per client/DESIGN.md: sections are told apart by tone, and
+          nothing outside the homepage goes dark. */}
       {!isFullScreen && (
-        <div className="hidden w-[320px] shrink-0 bg-slate-900 lg:block xl:w-[360px]">
+        <div className="bg-paper-deep border-hairline hidden w-[300px] shrink-0 border-r lg:block xl:w-[340px]">
           <aside className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
-            {/* Brand */}
-            <div className="border-b border-slate-800 px-8 pb-6 pt-8">
-              <p className="text-power-orange mb-0.5 text-[11px] font-bold uppercase tracking-widest">
-                PowerMySport
-              </p>
-              <p className="text-sm text-slate-400">Sport Assessment</p>
-            </div>
+            <div className="flex-1 overflow-y-auto px-8 py-10">
+              <p className="text-ink-muted text-sm font-medium">Sport assessment</p>
 
-            {/* Section context */}
-            <div className="flex-1 overflow-y-auto px-8 py-7">
               {sectionMeta && (
-                <div key={currentSection} className="animate-in fade-in duration-300">
-                  {/* Section progress dots */}
-                  <div className="mb-6 flex gap-1.5">
-                    {SECTION_ORDER.map((s) => (
-                      <div
-                        key={s}
-                        className={`h-1 rounded-full transition-all duration-300 ${
-                          s === currentSection
-                            ? "bg-power-orange w-6"
-                            : SECTION_ORDER.indexOf(s) < SECTION_ORDER.indexOf(currentSection)
-                              ? "w-3 bg-slate-600"
-                              : "w-3 bg-slate-800"
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Icon */}
-                  <div className="bg-power-orange/15 text-power-orange mb-5 flex h-11 w-11 items-center justify-center rounded-2xl">
-                    {sectionMeta.icon}
-                  </div>
-
-                  <h2 className="font-title mb-2 text-xl font-bold leading-snug text-white">
+                <div key={currentSection} className="mt-6">
+                  <h2 className="font-editorial text-ink text-balance text-3xl font-light leading-tight">
                     {sectionMeta.title}
                   </h2>
-                  <p className="text-sm leading-relaxed text-slate-400">{sectionMeta.desc}</p>
+                  <p className="text-ink-body mt-3 text-pretty text-sm leading-relaxed">
+                    {sectionMeta.desc}
+                  </p>
                 </div>
               )}
 
-              {/* Profile chips — grow as answers fill in */}
+              <ol className="border-hairline mt-8 space-y-2.5 border-t pt-6">
+                {SECTION_ORDER.map((key) => {
+                  const here = key === currentSection;
+                  const done = SECTION_ORDER.indexOf(key) < SECTION_ORDER.indexOf(currentSection);
+                  return (
+                    <li
+                      key={key}
+                      aria-current={here ? "step" : undefined}
+                      className={`flex items-center gap-2.5 text-sm ${
+                        here ? "text-ink font-medium" : done ? "text-ink-body" : "text-ink-muted"
+                      }`}
+                    >
+                      {done ? (
+                        <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className={`mx-1 h-1.5 w-1.5 rounded-full ${here ? "bg-ink" : "bg-ink/25"}`}
+                        />
+                      )}
+                      {SECTION_META[key].title}
+                    </li>
+                  );
+                })}
+              </ol>
+
+              {/* What the parent has told us so far, as it fills in */}
               {profileChips.length > 0 && (
                 <div className="mt-8">
-                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                    Profile so far
-                  </p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-ink-muted mb-3 text-sm font-medium">So far</p>
+                  <dl className="flex flex-wrap gap-1.5">
                     {profileChips.map((chip) => (
                       <div
                         key={chip.label}
-                        className="flex items-center gap-1.5 rounded-full bg-slate-800 px-3 py-1"
+                        className="border-hairline bg-paper flex items-baseline gap-1.5 rounded-md border px-2.5 py-1"
                       >
-                        <span className="text-[10px] text-slate-500">{chip.label}</span>
-                        <span className="text-[11px] font-semibold text-slate-200">
-                          {chip.value}
-                        </span>
+                        <dt className="text-ink-muted text-xs">{chip.label}</dt>
+                        <dd className="text-ink text-xs font-medium">{chip.value}</dd>
                       </div>
                     ))}
-                  </div>
+                  </dl>
                 </div>
               )}
             </div>
 
-            {/* Progress at bottom */}
-            <div className="border-t border-slate-800 px-8 py-6">
-              <div className="mb-2 flex justify-between text-xs text-slate-500">
+            <div className="border-hairline border-t px-8 py-6">
+              <div className="text-ink-body mb-2 flex justify-between text-sm">
                 <span>Progress</span>
-                <span className="font-medium text-slate-300">{progress}%</span>
+                <span className="text-ink font-medium tabular-nums">{progress}%</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                <motion.div
-                  className="bg-power-orange h-full rounded-full"
-                  animate={{ width: `${progress}%` }}
-                  transition={{ ease: "easeOut", duration: 0.5 }}
-                />
-              </div>
+              <ProgressLine value={progress} />
             </div>
           </aside>
         </div>
       )}
 
-      {/* ── Right panel ── */}
+      {/* ── Main column ── */}
       <div className="flex min-h-screen flex-1 flex-col">
-        {/* Mobile progress bar */}
         {showProgress && (
-          <div className="h-1 w-full shrink-0 bg-slate-100 lg:hidden">
-            <motion.div
-              className="bg-power-orange h-full"
-              animate={{ width: `${progress}%` }}
-              transition={{ ease: "easeOut", duration: 0.4 }}
-            />
+          <div className={isFullScreen ? "" : "lg:hidden"}>
+            <ProgressLine value={progress} flush />
           </div>
         )}
 
-        {/* Desktop progress bar — only when no sidebar (full-screen steps) */}
-        {showProgress && isFullScreen && (
-          <div className="hidden h-1 w-full shrink-0 bg-slate-100 lg:block">
-            <motion.div
-              className="bg-power-orange h-full"
-              animate={{ width: `${progress}%` }}
-              transition={{ ease: "easeOut", duration: 0.4 }}
-            />
-          </div>
-        )}
-
-        {/* Back button */}
         {showBack && (
-          <div className="flex shrink-0 items-center px-5 pt-4 lg:px-10">
+          <div className="flex shrink-0 items-center px-5 pt-5 lg:px-10">
             <button
               type="button"
               onClick={goBack}
-              className="flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-700"
+              className="text-ink-body hover:text-ink focus-visible:ring-ink focus-visible:ring-offset-paper -ml-1 flex items-center gap-1.5 rounded-md px-1 py-1 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
               Back
             </button>
           </div>
         )}
 
-        {/* Content */}
-        {/* The results step is a report, not a single question — it needs the
-            extra track width for side-by-side fit/gap columns and a 3-up card
-            row. Welcome and processing stay narrower. */}
+        {/* The results step is a report: it needs the extra width for side-by-side
+            fit and gap columns. Questions keep a reading measure. */}
         <div
-          className={`mx-auto w-full flex-1 px-5 py-8 lg:py-10 ${
+          className={`mx-auto w-full flex-1 px-5 py-8 lg:py-12 ${
             currentStep.kind === "results"
               ? "max-w-6xl lg:px-10 xl:px-12"
               : isFullScreen
-                ? "max-w-5xl lg:px-10 xl:px-14"
+                ? "max-w-3xl lg:px-10"
                 : "max-w-2xl lg:mx-0 lg:px-10 xl:px-16"
           }`}
         >
           <div
             key={stepIndex}
-            className={`animate-in fade-in duration-200 ${direction >= 0 ? "slide-in-from-right-8" : "slide-in-from-left-8"}`}
+            className={`animate-in fade-in duration-200 motion-reduce:animate-none ${direction >= 0 ? "slide-in-from-right-8" : "slide-in-from-left-8"}`}
           >
+            {/* Welcome: logged-in parents only (guests start on the name screen). It is where
+                they say which child this is for. */}
             {currentStep.kind === "welcome" && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.35 }}
-                className="py-4"
-              >
-                <div className="relative flex flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-white shadow-[0_28px_70px_-28px_rgba(15,23,42,0.22)] lg:flex-row">
-                  {/* ── Left panel — branded showcase ── */}
-                  <div className="flex flex-col gap-7 bg-slate-900 p-7 lg:w-[52%] lg:shrink-0 xl:w-[55%] xl:p-9">
-                    {/* Brand eyebrow */}
-                    <div className="flex items-center gap-2">
-                      <span className="bg-power-orange/15 text-power-orange inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest">
-                        <span className="bg-power-orange h-1.5 w-1.5 animate-pulse rounded-full" />
-                        Sport Assessment
-                      </span>
-                    </div>
+              <div className="py-6 sm:py-10">
+                <p className="text-ink-muted text-sm font-medium">Sport assessment</p>
+                <h1 className="text-ink mt-4 text-balance text-[33px] font-semibold leading-[1.04] tracking-[-0.04em] sm:text-5xl">
+                  Find the sports that{" "}
+                  <span className="font-editorial text-[1.22em] font-light italic tracking-[-0.02em]">
+                    suit your child.
+                  </span>
+                </h1>
+                <p className="text-ink-body mt-6 max-w-[56ch] text-pretty text-lg leading-relaxed">
+                  {QUESTIONS_ASKED} short questions about how your child moves and plays, and what
+                  your family can commit to. Answer as you see them today. There are no right or
+                  wrong answers.
+                </p>
 
-                    {/* Headline */}
-                    <div>
-                      <h1 className="font-editorial mb-3 text-2xl font-normal leading-tight text-white xl:text-3xl">
-                        Find the right sport
-                        <br />
-                        for your child.
-                      </h1>
-                      <p className="max-w-sm text-sm leading-relaxed text-slate-400">
-                        We analyse {TOTAL_QUESTIONS} data points, the same things a top sports
-                        consultant would want to know.
-                      </p>
-                    </div>
+                <ul className="border-hairline text-ink-body mt-8 flex flex-wrap gap-x-6 gap-y-2 border-y py-4 text-sm">
+                  {["Free", "About 5 minutes", "See which sports fit, and why"].map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <Check className="text-ink h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
 
-                    {/* Trust stats */}
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { value: TOTAL_QUESTIONS.toString(), label: "Questions" },
-                        { value: "5", label: "Categories" },
-                        { value: "~10", label: "Minutes" },
-                      ].map((stat) => (
-                        <div
-                          key={stat.label}
-                          className="rounded-2xl border border-white/5 bg-white/[0.04] p-4 text-center"
+                {players.length > 0 && (
+                  <fieldset className="mt-10">
+                    <legend className="text-ink text-base font-medium">Who is this for?</legend>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {players.map((p) => (
+                        <button
+                          key={p._id}
+                          type="button"
+                          aria-pressed={selectedDependentId === p._id}
+                          onClick={() => selectDependent(p)}
+                          className={chipClass(selectedDependentId === p._id)}
                         >
-                          <p className="font-title mb-0.5 text-2xl font-bold text-white">
-                            {stat.value}
-                          </p>
-                          <p className="text-[11px] font-medium text-slate-500">{stat.label}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Category list */}
-                    <div className="flex flex-col gap-2.5">
-                      <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-600">
-                        What we evaluate
-                      </p>
-                      <motion.div
-                        initial="hidden"
-                        animate="show"
-                        variants={{
-                          hidden: { opacity: 0 },
-                          show: {
-                            opacity: 1,
-                            transition: { staggerChildren: 0.07, delayChildren: 0.1 },
-                          },
-                        }}
-                        className="grid grid-cols-2 gap-2"
-                      >
-                        {SECTION_ORDER.map((key, idx) => {
-                          const sec = SECTION_META[key];
-                          const gradients = [
-                            "from-orange-500 to-amber-400",
-                            "from-blue-500 to-cyan-400",
-                            "from-violet-500 to-purple-400",
-                            "from-rose-500 to-pink-400",
-                            "from-emerald-500 to-teal-400",
-                          ];
-                          const isLast = idx === SECTION_ORDER.length - 1;
-                          return (
-                            <motion.div
-                              key={key}
-                              variants={{
-                                hidden: { opacity: 0, y: 10 },
-                                show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-                              }}
-                              className={`flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.04] p-3 transition-colors duration-200 hover:bg-white/[0.07] cursor-default${isLast ? "col-span-2" : ""}`}
-                            >
-                              <div
-                                className={`h-8 w-8 rounded-lg bg-gradient-to-br ${gradients[idx]} flex shrink-0 items-center justify-center text-white shadow-sm`}
-                              >
-                                {React.cloneElement(
-                                  sec.icon as React.ReactElement<{ className?: string }>,
-                                  { className: "w-4 h-4" }
-                                )}
-                              </div>
-                              <p className="truncate text-[12px] font-semibold leading-tight text-white">
-                                {sec.title}
-                              </p>
-                            </motion.div>
-                          );
-                        })}
-                      </motion.div>
-                    </div>
-                  </div>
-
-                  {/* ── Right panel — CTA ── */}
-                  <div className="relative flex flex-1 flex-col justify-center gap-7 overflow-hidden p-7 xl:p-9">
-                    {/* Ambient glow — echoes the left panel's dark treatment without repeating it */}
-                    <div className="bg-power-orange/[0.06] pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full blur-3xl" />
-                    <div className="pointer-events-none absolute -bottom-24 -left-12 h-56 w-56 rounded-full bg-sky-400/[0.06] blur-3xl" />
-
-                    <div className="relative">
-                      <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                        Personalised recommendation
-                      </p>
-                      <h2 className="font-title mb-3 text-2xl font-bold leading-snug text-slate-900">
-                        Ready to find the perfect match?
-                      </h2>
-                      <p className="text-sm leading-relaxed text-slate-500">
-                        Answer honestly. There are no right or wrong answers. The more accurate you
-                        are, the better the match.
-                      </p>
-                    </div>
-
-                    {/* How it works mini steps */}
-                    <div className="relative flex flex-col gap-3">
-                      {[
-                        { step: "1", text: "Tell us about your child" },
-                        { step: "2", text: "We score across 5 dimensions" },
-                        { step: "3", text: "Get your personalised sport report" },
-                      ].map((item) => (
-                        <div key={item.step} className="flex items-center gap-3">
-                          <span className="bg-power-orange/10 text-power-orange flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold">
-                            {item.step}
-                          </span>
-                          <p className="text-[13px] font-medium text-slate-600">{item.text}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Child picker */}
-                    {players.length > 0 && (
-                      <div className="relative">
-                        <p className="mb-2.5 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                          Who is this for?
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {players.map((p) => (
-                            <button
-                              key={p._id}
-                              type="button"
-                              onClick={() => selectDependent(p)}
-                              className={`rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-                                selectedDependentId === p._id
-                                  ? "border-power-orange-solid bg-power-orange-solid text-white shadow-sm"
-                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                              }`}
-                            >
-                              {p.name.split(" ")[0]}
-                              {selectedDependentId === p._id && p.wizardCompletedAt && (
-                                <span className="ml-1.5 text-[10px] opacity-75">· retake</span>
-                              )}
-                            </button>
-                          ))}
-                          {players.length > 0 && selectedDependentId && (
-                            <button
-                              type="button"
-                              onClick={startNewChild}
-                              className="rounded-full border-2 border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-500 transition-all duration-200 hover:border-slate-300"
-                            >
-                              Someone new
-                            </button>
+                          {p.name.split(" ")[0]}
+                          {selectedDependentId === p._id && p.wizardCompletedAt && (
+                            <span className="ml-1.5 text-xs opacity-75">retake</span>
                           )}
-                        </div>
-                        {selectedDependentId && selectedPlayer?.wizardCompletedAt && (
-                          <p className="mt-2 text-xs text-slate-400">
-                            Answers pre-filled from previous assessment. Update anything that&apos;s
-                            changed.
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* CTA */}
-                    <div className="relative flex flex-col gap-3">
-                      <button
-                        type="button"
-                        onClick={goNext}
-                        className="bg-power-orange-solid group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl px-8 py-4 text-[15px] font-bold text-white shadow-[0_4px_24px_-4px_rgba(234,88,12,0.5)] transition-all duration-200 hover:bg-orange-600 hover:shadow-[0_8px_32px_-4px_rgba(234,88,12,0.6)] active:scale-[0.99]"
-                      >
-                        <span>
-                          {selectedDependentId
-                            ? `Start for ${selectedPlayer?.name.split(" ")[0]}`
-                            : "Start the assessment"}
-                        </span>
-                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                      </button>
-                      <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <CheckCircle className="h-3 w-3 text-emerald-500" /> Free
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <CheckCircle className="h-3 w-3 text-emerald-500" /> No account needed
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> ~10 min
-                        </span>
-                      </div>
+                        </button>
+                      ))}
+                      {selectedDependentId && (
+                        <button type="button" onClick={startNewChild} className={chipClass(false)}>
+                          Someone new
+                        </button>
+                      )}
                     </div>
-                  </div>
+                    {selectedDependentId && selectedPlayer?.wizardCompletedAt && (
+                      <p className="text-ink-body mt-3 text-sm">
+                        Answers are filled in from {firstName}&apos;s last assessment. Change
+                        anything that is different now.
+                      </p>
+                    )}
+                  </fieldset>
+                )}
+
+                <div className="mt-10">
+                  <Button size="lg" onClick={goNext} className="w-full sm:w-auto">
+                    {selectedDependentId ? `Start for ${firstName}` : "Start the assessment"}
+                    <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                  </Button>
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {currentStep.kind === "name" && (
               <div className="space-y-6 py-4">
                 <div>
-                  <h2 className="font-title mb-2 text-2xl font-bold text-slate-900">
+                  <h2 className="font-editorial text-ink text-balance text-3xl font-light leading-tight sm:text-4xl">
                     Let&apos;s start. What&apos;s your child&apos;s name?
                   </h2>
-                  <p className="text-sm text-slate-400">
-                    Just so we can make this feel personal, not generic.
+                  <p className="text-ink-body mt-3 text-base">
+                    {token
+                      ? "Just so the questions can use their name."
+                      : "About 5 minutes. Free, and no account needed to see the results."}
                   </p>
                 </div>
-                <input
-                  ref={nameRef}
-                  type="text"
-                  placeholder="e.g. Aryan"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && nameInput.trim()) {
-                      setAnswer("childName", nameInput.trim());
-                      goNext();
-                    }
-                  }}
-                  className="focus:border-power-orange focus:ring-power-orange/15 w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2"
+                <div>
+                  <label htmlFor="wizard-child-name" className="sr-only">
+                    Child&apos;s first name
+                  </label>
+                  <input
+                    id="wizard-child-name"
+                    ref={nameRef}
+                    type="text"
+                    autoComplete="off"
+                    placeholder="e.g. Aryan"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && nameInput.trim() && answers.gender)
+                        confirmName(nameInput);
+                    }}
+                    className={fieldClass}
+                  />
+                  {nameTarget && (
+                    <p className="text-ink-body mt-2 text-sm" aria-live="polite">
+                      {nameTarget}
+                    </p>
+                  )}
+                </div>
+                {/* Boy or girl rides on the name screen (audit F4): one tap, and every
+                    question after it can say "he" or "she". */}
+                <ChoiceRows
+                  rows={[
+                    {
+                      id: "gender",
+                      label: "Boy or girl?",
+                      value: answers.gender,
+                      onChange: (v) => setAnswer("gender", v as typeof answers.gender),
+                      options: [
+                        { value: "boy", label: "Boy" },
+                        { value: "girl", label: "Girl" },
+                        { value: "prefer-not", label: "Prefer not to say" },
+                      ],
+                    },
+                  ]}
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAnswer("childName", nameInput.trim());
-                    goNext();
-                  }}
-                  disabled={!nameInput.trim()}
-                  className="bg-power-orange-solid hover:bg-power-orange-solid/90 w-full rounded-xl py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
+                  size="lg"
+                  fullWidth
+                  onClick={() => confirmName(nameInput)}
+                  disabled={!nameInput.trim() || !answers.gender}
                 >
-                  {nameInput.trim()
-                    ? `Continue with ${nameInput.trim()}`
-                    : "Enter a name to continue"}
-                </button>
+                  {!nameInput.trim()
+                    ? "Enter a name to continue"
+                    : !answers.gender
+                      ? "Choose boy, girl or prefer not to say"
+                      : `Continue with ${nameInput.trim()}`}
+                </Button>
               </div>
-            )}
-
-            {currentStep.kind === "transition" && (
-              <SectionTransition
-                text={transitionText(currentStep.text)}
-                sub={transitionText(currentStep.sub)}
-                onContinue={goNext}
-              />
             )}
 
             {currentStep.kind === "question" && (
@@ -477,11 +326,33 @@ export function WizardShell() {
                 chosenSport={chosenSport}
                 choosingSport={choosingSport}
                 onChooseSport={chooseSport}
+                childrenOptions={players}
+                suggestedChildId={suggestedChildId}
+                onSaveTo={saveResultsTo}
               />
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A thin ink progress line on a hairline track. Ink, not orange: orange is the action. */
+function ProgressLine({ value, flush = false }: { value: number; flush?: boolean }) {
+  return (
+    <div
+      role="progressbar"
+      aria-label="Assessment progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value}
+      className={`bg-hairline h-1 w-full overflow-hidden ${flush ? "" : "rounded-full"}`}
+    >
+      <div
+        className="bg-ink h-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
+        style={{ width: `${value}%` }}
+      />
     </div>
   );
 }

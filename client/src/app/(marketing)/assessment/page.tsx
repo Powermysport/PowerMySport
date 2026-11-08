@@ -8,7 +8,7 @@ const PATHS = [
     href: "/assessment/discover",
     kicker: "Not sure yet?",
     title: "Help me find a sport",
-    body: "Answer a few questions about your child's personality, physical traits and goals. We'll recommend the best sport match.",
+    body: "A few questions about how your child moves and plays, and the budget and time you have. We'll suggest sports that fit, and say why.",
     time: "About 5 minutes",
     cta: "Find the sport",
   },

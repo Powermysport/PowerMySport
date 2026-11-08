@@ -7,12 +7,14 @@ import { useFlow } from "@/flow/useFlow";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { useRefreshProfile } from "@/modules/auth/hooks/useProfile";
 import { useSaveChild } from "@/modules/player/hooks/useSaveChild";
+import { trackGuest } from "@/modules/analytics/services/guestTracking";
 import type { PlayerProfile } from "@/modules/guidance/types";
-import type { WizardAnswers } from "../types";
+import type { SavedStatus, WizardAnswers } from "../types";
 import { EMPTY_ANSWERS } from "../types";
 import type { SportFitResult, SportResult } from "../types";
 import { scoreChosenSports, scoreSports } from "../utils/scorer";
 import { buildDependentPayload, prefillFromPlayer } from "../utils/dependentMapping";
+import { resolveWizardChild } from "../utils/resolveWizardChild";
 import {
   ASSESSMENT_FLOW,
   SECTION_META,
@@ -53,14 +55,33 @@ export function useWizardShell() {
   // so every existing call site (question auto-advance, transitions, the
   // processing screen's auto-advance) is unchanged. Completion = the last
   // question answered; see ASSESSMENT_FLOW.
+  // Child profile selection
+  const [players, setPlayers] = useState<PlayerProfile[]>([]);
+  const [selectedDependentId, setSelectedDependentId] = useState<string | null>(null);
+
   const flow = useMemo(() => ASSESSMENT_FLOW, []);
+  const [retaking, setRetaking] = useState(false);
   const {
     index: stepIndex,
     direction,
     next: goNext,
     back: goBack,
     goToStep,
-  } = useFlow(flow, { completed: answers.weeklyHours != null });
+  } = useFlow(flow, {
+    completed: retaking || answers.weeklyHours != null,
+    age: answers.age,
+    guest: !token,
+    knownChild:
+      selectedDependentId !== null && !!answers.dob && !!answers.gender && !!answers.state,
+  });
+
+  // A retake clears the answers and moves to the start in one handler, but the router's move
+  // lands a render later. In between, the flow sees "on the results, quiz not finished" and its
+  // clamp replaced the URL with the last question, beating the move (audit F16). `retaking`
+  // holds the gate open until the start is reached (the welcome, or the name screen for a
+  // guest, whose welcome is skipped); cleared by adjusting state during render, the same
+  // pattern useFlow uses for `direction`.
+  if (retaking && stepIndex <= 1) setRetaking(false);
   const [nameInput, setNameInput] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
   // The sport the parent explicitly committed to on the results page — the one
@@ -75,10 +96,7 @@ export function useWizardShell() {
     chosenSport?: string;
   } | null>(null);
 
-  // Child profile selection
-  const [players, setPlayers] = useState<PlayerProfile[]>([]);
-  const [selectedDependentId, setSelectedDependentId] = useState<string | null>(null);
-  const [savedStatus, setSavedStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [savedStatus, setSavedStatus] = useState<SavedStatus>("idle");
   const [savedForName, setSavedForName] = useState<string | undefined>(undefined);
 
   // Restore wizard session from localStorage on mount (works for both guests and
@@ -151,10 +169,13 @@ export function useWizardShell() {
               } catch {}
             })
             .catch(() => setSavedStatus("error"));
+        } else if (pendingImport.current) {
+          // Existing parent who took the quiz logged out. These results used to be dropped
+          // without a word (audit F13). Keep them on screen, unsaved, and let the parent say
+          // which child they belong to; the restored answers must not be replaced by a
+          // child's pre-fill, or the page would show someone else's report.
+          setSavedStatus("unsaved");
         } else {
-          // Existing parent — discard any pending import (they already have children)
-          pendingImport.current = null;
-          if (savedStatus === "saving") setSavedStatus("idle");
           // A dependent named in the URL wins over the single-child heuristic
           // below — that heuristic exists for the case where the parent typed
           // this URL by hand with no target in mind, not to override a card
@@ -210,8 +231,11 @@ export function useWizardShell() {
   const currentStep = STEPS[stepIndex];
   const progress = questionProgress(stepIndex);
   const showProgress = currentStep.kind !== "welcome" && currentStep.kind !== "results";
+  // A guest's quiz opens on the name screen (the welcome is skipped), so there is nothing
+  // to go back to there.
+  const firstVisibleStep = stepIndex === 0 || (currentStep.kind === "name" && !token);
   const showBack =
-    stepIndex > 0 && currentStep.kind !== "processing" && currentStep.kind !== "results";
+    !firstVisibleStep && currentStep.kind !== "processing" && currentStep.kind !== "results";
   const isFullScreen =
     currentStep.kind === "welcome" ||
     currentStep.kind === "results" ||
@@ -222,26 +246,19 @@ export function useWizardShell() {
     if (currentStep.kind === "question") {
       const sectionMap: Record<string, string> = {
         dob: "Child",
-        gender: "Child",
         state: "Child",
         priorSports: "Child",
-        consideringSports: "Child",
         height: "Physical",
         weight: "Physical",
         energyType: "Physical",
-        motorType: "Physical",
         visualTracking: "Physical",
         eyesight: "Physical",
         agility: "Physical",
         teamIndividual: "Personality",
-        competitiveResponse: "Personality",
         focusStyle: "Personality",
         decisionStyle: "Personality",
         pressureResponse: "Personality",
-        repetitionTolerance: "Personality",
         contactComfort: "Comfort",
-        environment: "Comfort",
-        waterComfort: "Comfort",
         budget: "Practical",
         ambition: "Practical",
         weeklyHours: "Practical",
@@ -249,13 +266,6 @@ export function useWizardShell() {
       return sectionMap[currentStep.questionKey] ?? "";
     }
     if (currentStep.kind === "name") return "Child";
-    if (currentStep.kind === "transition") {
-      // Pick section based on which transition (before Physical, Personality, Practical)
-      const textSnippet = currentStep.text;
-      if (textSnippet.includes("physically")) return "Physical";
-      if (textSnippet.includes("interesting")) return "Personality";
-      return "Practical";
-    }
     return "";
   })();
 
@@ -266,7 +276,98 @@ export function useWizardShell() {
     setAnswers((prev) => ({ ...prev, [key]: value }));
   };
 
+  /**
+   * The name screen's Continue. The name is editable even when a child is pre-selected, so it
+   * decides which child the answers are saved to: typing a sibling's name used to keep the
+   * first child selected and overwrite it with the sibling's answers (audit F11).
+   */
+  const confirmName = (typed: string) => {
+    const name = typed.trim();
+    if (!name) return;
+    const resolution = resolveWizardChild(players, selectedDependentId, name);
+    if (resolution.kind === "switch") {
+      setSelectedDependentId(resolution.child._id);
+      applyPlayer(resolution.child);
+    } else if (resolution.kind === "new") {
+      // Everything pre-filled came from the child we just moved away from, except the
+      // boy/girl answer, which the parent gives on this same screen.
+      setSelectedDependentId(null);
+      setAnswers((prev) => ({ ...EMPTY_ANSWERS, gender: prev.gender }));
+      setChosenSport(null);
+    }
+    setNameInput(name);
+    setAnswer("childName", name);
+    goNext();
+  };
+
+  /** For unsaved results: the existing child the quiz's name points at, offered first. */
+  const suggestedChildId: string | null = (() => {
+    if (savedStatus !== "unsaved") return null;
+    const r = resolveWizardChild(players, null, answers.childName);
+    return r.kind === "switch" ? (r.child._id ?? null) : null;
+  })();
+
+  /**
+   * Saves results brought back from a logged-out session to the child the parent picked, or
+   * to a new child when `childId` is null (audit F13).
+   */
+  const saveResultsTo = async (childId: string | null): Promise<boolean> => {
+    const pending = pendingImport.current;
+    if (!pending) return false;
+    setSavedStatus("saving");
+    const { answers: a, scored, chosen, chosenSport: pickedSport } = pending;
+    try {
+      if (childId) {
+        const child = players.find((p) => p._id === childId);
+        const name = child?.name.split(" ")[0] ?? a.childName;
+        await updateChild(
+          childId,
+          buildDependentPayload(a, scored, undefined, chosen, pickedSport)
+        );
+        setSelectedDependentId(childId);
+        setSavedForName(name);
+      } else {
+        const name = a.childName?.trim() || "My Child";
+        const { child } = await addChild({
+          name,
+          ...buildDependentPayload(a, scored, name, chosen, pickedSport),
+        });
+        if (child?._id) setSelectedDependentId(child._id);
+        setSavedForName(name);
+      }
+      pendingImport.current = null;
+      setSavedStatus("saved");
+      try {
+        localStorage.removeItem("pms_wizard_results");
+      } catch {}
+      void refreshProfile();
+      return true;
+    } catch {
+      setSavedStatus("unsaved");
+      return false;
+    }
+  };
+
+  /** Tells a logged-in parent which profile the typed name will save to, before they continue. */
+  const nameTarget: string | null = (() => {
+    const typed = nameInput.trim();
+    if (!token || players.length === 0 || !typed) return null;
+    const r = resolveWizardChild(players, selectedDependentId, typed);
+    const existing =
+      r.kind === "switch"
+        ? r.child
+        : r.kind === "keep"
+          ? players.find((p) => p._id === selectedDependentId)
+          : undefined;
+    return existing
+      ? `Saves to ${existing.name}'s profile.`
+      : `Creates a new profile for ${typed}.`;
+  })();
+
   const retake = () => {
+    setRetaking(true);
+    // Results from a logged-out session are being thrown away, not saved later by accident.
+    pendingImport.current = null;
     setAnswers({ ...EMPTY_ANSWERS });
     setNameInput("");
     setSavedStatus("idle");
@@ -391,14 +492,27 @@ export function useWizardShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex]);
 
+  // Where guests drop off. Page views carry only the path, so all of the wizard's steps
+  // counted as one page (audit F10). The step and question key only: never an answer.
+  useEffect(() => {
+    trackGuest({
+      eventName: "wizard_step",
+      entityType: "WIZARD",
+      entityId: ASSESSMENT_FLOW.id,
+      metadata: {
+        step: stepIndex + 1,
+        kind: currentStep.kind,
+        ...(currentStep.kind === "question" ? { question: currentStep.questionKey } : {}),
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepIndex]);
+
   // Focus name input when on name screen
   useEffect(() => {
     if (currentStep.kind === "name") nameRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex]);
-
-  const transitionText = (text: string) =>
-    text.replace("{name}", answers.childName || "your child");
 
   const selectedPlayer = players.find((p) => p._id === selectedDependentId);
 
@@ -408,6 +522,8 @@ export function useWizardShell() {
     setAnswer,
     nameInput,
     setNameInput,
+    confirmName,
+    nameTarget,
     nameRef,
     chosenSport,
     choosingSport,
@@ -417,6 +533,8 @@ export function useWizardShell() {
     startNewChild,
     savedStatus,
     savedForName,
+    suggestedChildId,
+    saveResultsTo,
     results,
     chosenFits,
     stepIndex,
@@ -431,7 +549,6 @@ export function useWizardShell() {
     currentSection,
     sectionMeta,
     profileChips,
-    transitionText,
     retake,
     chooseSport,
     selectedPlayer,

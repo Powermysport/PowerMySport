@@ -1,16 +1,26 @@
 import { motion } from "framer-motion";
+import { Button } from "@/modules/shared/ui/Button";
+import { fieldClass } from "../inputs/optionStyles";
 import { getDependentAge } from "@/modules/player/utils/dependentAge";
 import { PRIOR_SPORTS_OPTIONS } from "../../data/sportProfiles";
 import type { WizardAnswers } from "../../types";
 import { MAX_CONSIDERED_SPORTS } from "../../types";
 import { BinaryCards } from "../inputs/BinaryCards";
+import { ChoiceRows } from "../inputs/ChoiceRows";
 import { StateSelector } from "../inputs/StateSelector";
 import { FourContextCards } from "../inputs/FourContextCards";
 import { MultiSelectPills } from "../inputs/MultiSelectPills";
 import { SpectrumSlider } from "../inputs/SpectrumSlider";
 import { ThreeOptionCards } from "../inputs/ThreeOptionCards";
 import { cmToFeetInches } from "../../utils/dependentMapping";
-import { DOB_BOUNDS } from "./wizardSteps";
+import { defaultHeightCm, defaultWeightKg, displayedDefault } from "../../utils/questionDefaults";
+import {
+  DOB_BOUNDS,
+  isYoungChild,
+  PRACTICE_OPTIONS,
+  practiceValue,
+  YOUNG_CHILD_SKIPPED,
+} from "./wizardSteps";
 
 // ─── Question screen renderer ─────────────────────────────────────────────────
 
@@ -33,7 +43,6 @@ export function QuestionScreen({
   const isPlural = answers.gender !== "boy" && answers.gender !== "girl";
   const pn = answers.gender === "boy" ? "he" : answers.gender === "girl" ? "she" : "they";
   const pnObj = answers.gender === "boy" ? "him" : answers.gender === "girl" ? "her" : "them";
-  const pnContraction = isPlural ? "they're" : `${pn}'s`;
   const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   // 3rd-person singular conjugation for "he"/"she"; base form for "they". Pass
   // an explicit singular form for irregulars (catch -> catches, miss -> misses).
@@ -47,26 +56,19 @@ export function QuestionScreen({
 
   const section: Record<string, string> = {
     dob: "Child",
-    gender: "Child",
     state: "Child",
     priorSports: "Child",
-    consideringSports: "Child",
     height: "Physical",
     weight: "Physical",
     energyType: "Physical",
-    motorType: "Physical",
     visualTracking: "Physical",
     eyesight: "Physical",
     agility: "Physical",
     teamIndividual: "Personality",
-    competitiveResponse: "Personality",
     focusStyle: "Personality",
     decisionStyle: "Personality",
     pressureResponse: "Personality",
-    repetitionTolerance: "Personality",
     contactComfort: "Comfort",
-    environment: "Comfort",
-    waterComfort: "Comfort",
     budget: "Practical",
     ambition: "Practical",
     weeklyHours: "Practical",
@@ -84,84 +86,97 @@ export function QuestionScreen({
               max={DOB_BOUNDS.max}
               onChange={(e) => {
                 const val = e.target.value || null;
+                const age = getDependentAge(val);
                 onAnswer("dob", val);
-                onAnswer("age", getDependentAge(val));
+                onAnswer("age", age);
+                // Under 8 these two are skipped; drop any earlier guess so it can't score.
+                if (isYoungChild(age)) YOUNG_CHILD_SKIPPED.forEach((k) => onAnswer(k, null));
               }}
-              className="focus:border-power-orange focus:ring-power-orange/15 w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 focus:outline-none focus:ring-2"
+              aria-label="Date of birth"
+              className={fieldClass}
             />
             {answers.dob && answers.age !== null && (
-              <p className="text-sm text-slate-400">
+              <p className="text-ink-body text-sm">
                 That makes {cap} {answers.age} years old.
               </p>
             )}
           </div>
         );
 
-      case "gender":
-        return (
-          <ThreeOptionCards
-            options={[
-              { value: "boy", label: "Boy" },
-              { value: "girl", label: "Girl" },
-              { value: "prefer-not", label: "Prefer not to say" },
-            ]}
-            value={answers.gender}
-            onChange={(v) => {
-              onAnswer("gender", v as WizardAnswers["gender"]);
-              setTimeout(onNext, 200);
-            }}
-          />
-        );
-
       case "state":
         return <StateSelector value={answers.state} onChange={(s) => onAnswer("state", s)} />;
 
       case "priorSports":
+        // Two related answers on one screen (audit F4): what the child plays now, and what
+        // the family is weighing up. Same list, so they read as one decision.
         return (
-          <MultiSelectPills
-            options={PRIOR_SPORTS_OPTIONS}
-            selected={answers.priorSports}
-            onChange={(v) => onAnswer("priorSports", v)}
-            noneLabel="None yet"
-          />
+          <div className="space-y-7">
+            <MultiSelectPills
+              options={PRIOR_SPORTS_OPTIONS}
+              selected={answers.priorSports}
+              onChange={(v) => onAnswer("priorSports", v)}
+              noneLabel="None right now"
+            />
+            <div className="border-hairline border-t pt-6">
+              <p className="text-ink text-lg font-medium">
+                Any sports you are already considering?
+              </p>
+              <p className="text-ink-body mb-4 mt-1 text-pretty text-sm leading-relaxed">
+                Pick up to {MAX_CONSIDERED_SPORTS}, or skip and we will suggest some. We score each
+                one against your answers and say where {name} fits and where {pn}{" "}
+                {isPlural ? "don't" : "doesn't"}.
+              </p>
+              <MultiSelectPills
+                options={PRIOR_SPORTS_OPTIONS}
+                selected={answers.consideringSports}
+                onChange={(v) => onAnswer("consideringSports", v)}
+                noneLabel="No, help me decide"
+                max={MAX_CONSIDERED_SPORTS}
+              />
+            </div>
+          </div>
         );
 
       case "height": {
-        const hDefault = answers.age ? Math.round(Math.min(175, 85 + answers.age * 5.5)) : 130;
-        const hVal = answers.height ?? hDefault;
+        const hVal = answers.height ?? defaultHeightCm(answers.age);
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-center gap-6">
               <button
                 type="button"
+                aria-label="1 cm shorter"
                 onClick={() => onAnswer("height", Math.max(80, hVal - 1))}
-                className="hover:border-power-orange hover:text-power-orange flex h-12 w-12 select-none items-center justify-center rounded-full border-2 border-slate-200 text-2xl font-light text-slate-600 transition-colors"
+                className="text-ink border-hairline hover:border-ink/40 focus-visible:ring-ink focus-visible:ring-offset-paper flex h-12 w-12 select-none items-center justify-center rounded-md border bg-white text-2xl font-light transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               >
                 −
               </button>
               <div className="min-w-[120px] text-center">
-                <span className="text-6xl font-bold tabular-nums text-slate-900">{hVal}</span>
-                <span className="ml-2 text-xl text-slate-400">cm</span>
-                <p className="mt-1 text-sm tabular-nums text-slate-400">{cmToFeetInches(hVal)}</p>
+                <span className="font-editorial text-ink text-6xl font-light tabular-nums">
+                  {hVal}
+                </span>
+                <span className="text-ink-body ml-2 text-xl">cm</span>
+                <p className="text-ink-body mt-1 text-sm tabular-nums">{cmToFeetInches(hVal)}</p>
               </div>
               <button
                 type="button"
+                aria-label="1 cm taller"
                 onClick={() => onAnswer("height", Math.min(220, hVal + 1))}
-                className="hover:border-power-orange hover:text-power-orange flex h-12 w-12 select-none items-center justify-center rounded-full border-2 border-slate-200 text-2xl font-light text-slate-600 transition-colors"
+                className="text-ink border-hairline hover:border-ink/40 focus-visible:ring-ink focus-visible:ring-offset-paper flex h-12 w-12 select-none items-center justify-center rounded-md border bg-white text-2xl font-light transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               >
                 +
               </button>
             </div>
             <input
               type="range"
+              aria-label="Height in cm"
               min={80}
               max={220}
               step={1}
               value={hVal}
               onChange={(e) => onAnswer("height", parseInt(e.target.value))}
-              className="accent-power-orange w-full"
+              className="accent-ink w-full"
             />
-            <div className="-mt-2 flex justify-between text-xs text-slate-400">
+            <div className="text-ink-muted -mt-2 flex justify-between text-sm">
               <span>80 cm · 2′ 7″</span>
               <span>220 cm · 7′ 3″</span>
             </div>
@@ -170,40 +185,44 @@ export function QuestionScreen({
       }
 
       case "weight": {
-        const wDefault = answers.age ? Math.round(Math.min(80, 12 + answers.age * 2.8)) : 35;
-        const wVal = answers.weight ?? wDefault;
+        const wVal = answers.weight ?? defaultWeightKg(answers.age);
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-center gap-6">
               <button
                 type="button"
+                aria-label="1 kg lighter"
                 onClick={() => onAnswer("weight", Math.max(15, wVal - 1))}
-                className="hover:border-power-orange hover:text-power-orange flex h-12 w-12 select-none items-center justify-center rounded-full border-2 border-slate-200 text-2xl font-light text-slate-600 transition-colors"
+                className="text-ink border-hairline hover:border-ink/40 focus-visible:ring-ink focus-visible:ring-offset-paper flex h-12 w-12 select-none items-center justify-center rounded-md border bg-white text-2xl font-light transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               >
                 −
               </button>
               <div className="min-w-[120px] text-center">
-                <span className="text-6xl font-bold tabular-nums text-slate-900">{wVal}</span>
-                <span className="ml-2 text-xl text-slate-400">kg</span>
+                <span className="font-editorial text-ink text-6xl font-light tabular-nums">
+                  {wVal}
+                </span>
+                <span className="text-ink-body ml-2 text-xl">kg</span>
               </div>
               <button
                 type="button"
+                aria-label="1 kg heavier"
                 onClick={() => onAnswer("weight", Math.min(120, wVal + 1))}
-                className="hover:border-power-orange hover:text-power-orange flex h-12 w-12 select-none items-center justify-center rounded-full border-2 border-slate-200 text-2xl font-light text-slate-600 transition-colors"
+                className="text-ink border-hairline hover:border-ink/40 focus-visible:ring-ink focus-visible:ring-offset-paper flex h-12 w-12 select-none items-center justify-center rounded-md border bg-white text-2xl font-light transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               >
                 +
               </button>
             </div>
             <input
               type="range"
+              aria-label="Weight in kg"
               min={15}
               max={120}
               step={1}
               value={wVal}
               onChange={(e) => onAnswer("weight", parseInt(e.target.value))}
-              className="accent-power-orange w-full"
+              className="accent-ink w-full"
             />
-            <div className="-mt-2 flex justify-between text-xs text-slate-400">
+            <div className="text-ink-muted -mt-2 flex justify-between text-sm">
               <span>15 kg</span>
               <span>120 kg</span>
             </div>
@@ -228,26 +247,6 @@ export function QuestionScreen({
             ]}
             value={answers.energyType}
             onChange={(v) => autoAdvance("energyType", v as WizardAnswers["energyType"])}
-          />
-        );
-
-      case "motorType":
-        return (
-          <BinaryCards
-            options={[
-              {
-                value: "gross",
-                title: "Loves running, jumping, throwing things",
-                sub: "Whole-body movement, power and coordination, not precision",
-              },
-              {
-                value: "fine",
-                title: "Better at careful, steady-handed tasks",
-                sub: "Stacking blocks, threading things, careful aim, precision over power",
-              },
-            ]}
-            value={answers.motorType}
-            onChange={(v) => autoAdvance("motorType", v as WizardAnswers["motorType"])}
           />
         );
 
@@ -285,48 +284,44 @@ export function QuestionScreen({
           />
         );
 
-      case "competitiveResponse":
+      case "focusStyle":
+        // Focus and repetition in one question (PRACTICE_OPTIONS). Under 8 only the focus
+        // half is asked: repetition is a guess at that age.
+        if (isYoungChild(answers.age)) {
+          return (
+            <BinaryCards
+              options={[
+                {
+                  value: "bursts",
+                  title: "Focuses hard, then needs a break",
+                  sub: `${cap} is fully locked in for 20 to 30 minutes, then needs to get up and move`,
+                },
+                {
+                  value: "sustained",
+                  title: "Can stay with it for hours",
+                  sub: `Once ${name} is absorbed in something ${pn} ${v("like")}, ${pn} ${v("lose")} track of time`,
+                },
+              ]}
+              value={answers.focusStyle}
+              onChange={(v) => autoAdvance("focusStyle", v as WizardAnswers["focusStyle"])}
+            />
+          );
+        }
         return (
-          <ThreeOptionCards
-            options={[
-              {
-                value: "fired-up",
-                label: `${cap1(v("get"))} fired up and ${v("want")} to play again immediately`,
-              },
-              {
-                value: "calm",
-                label: `${cap1(v("accept"))} it calmly and ${v("move")} on without much fuss`,
-              },
-              {
-                value: "discouraged",
-                label: `${cap1(v("get"))} quite upset and ${v("need")} time before wanting to try again`,
-              },
-            ]}
-            value={answers.competitiveResponse}
+          <FourContextCards
+            options={PRACTICE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: o.label,
+              context: o.context,
+            }))}
+            value={practiceValue(answers)}
             onChange={(v) => {
-              onAnswer("competitiveResponse", v as WizardAnswers["competitiveResponse"]);
+              const opt = PRACTICE_OPTIONS.find((o) => o.value === v);
+              if (!opt) return;
+              onAnswer("focusStyle", opt.focus);
+              onAnswer("repetitionTolerance", opt.repetition);
               setTimeout(onNext, 200);
             }}
-          />
-        );
-
-      case "focusStyle":
-        return (
-          <BinaryCards
-            options={[
-              {
-                value: "bursts",
-                title: "Focuses hard, then needs a break",
-                sub: `${cap} is fully locked in for 20–30 minutes, then needs to get up and move`,
-              },
-              {
-                value: "sustained",
-                title: "Can stay with it for hours",
-                sub: `Once ${name} is absorbed in something ${pn} ${v("like")}, ${pn} ${v("lose")} track of time`,
-              },
-            ]}
-            value={answers.focusStyle}
-            onChange={(v) => autoAdvance("focusStyle", v as WizardAnswers["focusStyle"])}
           />
         );
 
@@ -376,28 +371,6 @@ export function QuestionScreen({
           />
         );
 
-      case "repetitionTolerance":
-        return (
-          <BinaryCards
-            options={[
-              {
-                value: "high",
-                title: "Happy to repeat the same drill for months",
-                sub: `${cap} doesn't get bored, repetition is how ${pn} ${v("get")} better`,
-              },
-              {
-                value: "low",
-                title: "Needs variety to stay motivated",
-                sub: `The same drill every day would kill ${name}'s enthusiasm quickly`,
-              },
-            ]}
-            value={answers.repetitionTolerance}
-            onChange={(v) =>
-              autoAdvance("repetitionTolerance", v as WizardAnswers["repetitionTolerance"])
-            }
-          />
-        );
-
       case "eyesight":
         return (
           <ThreeOptionCards
@@ -443,56 +416,45 @@ export function QuestionScreen({
         );
 
       case "contactComfort":
+        // Three small comfort questions as rows on one screen (audit F4). All three are
+        // still saved as before: contact and water are hard gates in the scorer.
         return (
-          <ThreeOptionCards
-            options={[
+          <ChoiceRows
+            rows={[
               {
-                value: "loves",
-                label: `${cap} loves physical contact, wrestling, jostling, bumping into others`,
+                id: "contact",
+                label: "Physical contact (bumping, tackling, wrestling)",
+                value: answers.contactComfort,
+                onChange: (v) => onAnswer("contactComfort", v as WizardAnswers["contactComfort"]),
+                options: [
+                  { value: "loves", label: "Loves it" },
+                  { value: "neutral", label: "Doesn't mind" },
+                  { value: "avoids", label: "Avoids it" },
+                ],
               },
-              { value: "neutral", label: "Neutral, doesn't mind physical contact either way" },
-              { value: "avoids", label: `${cap} prefers to avoid physical contact` },
-            ]}
-            value={answers.contactComfort}
-            onChange={(v) => {
-              onAnswer("contactComfort", v as WizardAnswers["contactComfort"]);
-              setTimeout(onNext, 200);
-            }}
-          />
-        );
-
-      case "environment":
-        return (
-          <ThreeOptionCards
-            options={[
-              { value: "outdoor", label: "Outdoors, parks, fields, open sky" },
-              { value: "indoor", label: "Indoors, gyms, courts, air-conditioned spaces" },
-              { value: "no-preference", label: "No strong preference either way" },
-            ]}
-            value={answers.environment}
-            onChange={(v) => {
-              onAnswer("environment", v as WizardAnswers["environment"]);
-              setTimeout(onNext, 200);
-            }}
-          />
-        );
-
-      case "waterComfort":
-        return (
-          <ThreeOptionCards
-            options={[
               {
-                value: "comfortable",
-                label: `${cap} is very comfortable in water, loves swimming or being in a pool`,
+                id: "water",
+                label: "Being in water",
+                value: answers.waterComfort,
+                onChange: (v) => onAnswer("waterComfort", v as WizardAnswers["waterComfort"]),
+                options: [
+                  { value: "comfortable", label: "Loves it" },
+                  { value: "neutral", label: "It's okay" },
+                  { value: "uncomfortable", label: "Uneasy or afraid" },
+                ],
               },
-              { value: "neutral", label: "Okay with water, no strong feeling" },
-              { value: "uncomfortable", label: `${cap} is uncomfortable or afraid of water` },
+              {
+                id: "environment",
+                label: "On a free afternoon, would rather be",
+                value: answers.environment,
+                onChange: (v) => onAnswer("environment", v as WizardAnswers["environment"]),
+                options: [
+                  { value: "outdoor", label: "Outdoors" },
+                  { value: "indoor", label: "Indoors" },
+                  { value: "no-preference", label: "Either" },
+                ],
+              },
             ]}
-            value={answers.waterComfort}
-            onChange={(v) => {
-              onAnswer("waterComfort", v as WizardAnswers["waterComfort"]);
-              setTimeout(onNext, 200);
-            }}
           />
         );
 
@@ -595,17 +557,6 @@ export function QuestionScreen({
           />
         );
 
-      case "consideringSports":
-        return (
-          <MultiSelectPills
-            options={PRIOR_SPORTS_OPTIONS}
-            selected={answers.consideringSports}
-            onChange={(v) => onAnswer("consideringSports", v)}
-            noneLabel="No, help me decide"
-            max={MAX_CONSIDERED_SPORTS}
-          />
-        );
-
       default:
         return null;
     }
@@ -613,33 +564,32 @@ export function QuestionScreen({
 
   const questions: Partial<Record<string, string>> = {
     dob: `What is ${name}'s date of birth?`,
-    gender: `Is ${name} a boy or a girl?`,
     state: "Which state are you based in?",
-    priorSports: `Has ${name} tried any sport formally before?`,
-    consideringSports: `Are there sports you're already considering for ${name}?`,
+    // Saved as the child's `sportsFocus`, which the rest of the app (dashboard, planner,
+    // AI chat, WhatsApp, mobile) reads as the sport they play. "Tried before" let a single
+    // school session become their sport everywhere (audit F14), so ask what is true now.
+    priorSports: `Which sports does ${name} play regularly now?`,
     height: `How tall is ${name}?`,
     weight: `How much does ${name} weigh?`,
     energyType: `In a game of tag or running around with friends, what does ${name} usually do?`,
-    motorType: `Think of ${name} building something or playing catch, ${pnContraction} better at:`,
     visualTracking: `When something moves fast toward ${name} (a ball, a shuttle), ${pn}:`,
     teamIndividual: `At a birthday party with a group game, does ${name} want a partner or team, or go it alone?`,
-    competitiveResponse: `When ${name} loses a game or competition, ${pn}:`,
-    focusStyle: `Think of ${name} doing homework or a puzzle, ${pn} ${v("tend")} to:`,
+    focusStyle: isYoungChild(answers.age)
+      ? `Think of ${name} doing a puzzle or building something, ${pn} ${v("tend")} to:`
+      : `Think of ${name} practising something (homework, a puzzle, a skill). Which sounds most like ${pnObj}?`,
     decisionStyle: `When ${name} plays a new game for the first time, ${pn} usually:`,
     pressureResponse: `When all attention is on ${name} (a school event, a family gathering):`,
-    repetitionTolerance: `To get really good at something, is ${name} willing to:`,
     eyesight: `How is ${name}'s eyesight?`,
     agility: `How agile and flexible is ${name}?`,
-    contactComfort: "How comfortable is your child with physical contact?",
-    environment: "Given a free afternoon, does your child gravitate toward:",
-    waterComfort: `How comfortable is ${name} in water?`,
+    contactComfort: `What is ${name} comfortable with?`,
     budget: "What can your family realistically invest in training each month?",
     ambition: "What is your honest goal for this sport journey?",
     weeklyHours: `How many hours per week can ${name} dedicate to sport training?`,
   };
 
   const questionSubs: Partial<Record<string, string>> = {
-    consideringSports: `Pick up to ${MAX_CONSIDERED_SPORTS}, or skip and let us suggest. We'll score each one honestly against everything you tell us next, where ${name} fits, and where ${pn} ${isPlural ? "don't" : "doesn't"}.`,
+    priorSports:
+      "Only sports with regular practice or coaching. Something tried once or twice does not count.",
   };
 
   const needsNextButton =
@@ -648,13 +598,14 @@ export function QuestionScreen({
     questionKey === "height" ||
     questionKey === "weight" ||
     questionKey === "priorSports" ||
-    questionKey === "consideringSports" ||
+    questionKey === "contactComfort" ||
     questionKey === "teamIndividual";
 
   const canAdvance = () => {
     if (questionKey === "dob") return !!answers.dob && answers.age !== null;
     if (questionKey === "priorSports") return true;
-    if (questionKey === "consideringSports") return true;
+    if (questionKey === "contactComfort")
+      return !!answers.contactComfort && !!answers.waterComfort && !!answers.environment;
     if (questionKey === "state") return !!answers.state;
     if (questionKey === "height") return true; // default pre-filled from age
     if (questionKey === "weight") return true; // default pre-filled from age
@@ -665,28 +616,32 @@ export function QuestionScreen({
   return (
     <div className="space-y-6">
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-          {section[questionKey] ?? ""}
-        </p>
-        <h2 className="font-title text-xl font-bold leading-snug text-slate-900">
+        <p className="text-ink-muted mb-3 text-sm font-medium">{section[questionKey] ?? ""}</p>
+        <h2 className="font-editorial text-ink text-balance text-3xl font-light leading-tight sm:text-[2.125rem]">
           {questions[questionKey] ?? ""}
         </h2>
         {questionSubs[questionKey] && (
-          <p className="mt-2 text-sm leading-relaxed text-slate-500">{questionSubs[questionKey]}</p>
+          <p className="text-ink-body mt-3 text-pretty text-base leading-relaxed">
+            {questionSubs[questionKey]}
+          </p>
         )}
       </div>
 
       {renderInput()}
 
       {needsNextButton && (
-        <button
-          type="button"
-          onClick={onNext}
+        <Button
+          size="lg"
+          fullWidth
+          onClick={() => {
+            const shown = displayedDefault(questionKey, answers);
+            if (shown) onAnswer(shown.key, shown.value);
+            onNext();
+          }}
           disabled={!canAdvance()}
-          className="bg-power-orange-solid hover:bg-power-orange-solid/90 w-full rounded-xl py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           Continue
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -701,11 +656,14 @@ export function ProcessingScreen({ name }: { name: string }) {
       animate={{ opacity: 1 }}
       className="flex flex-col items-center justify-center space-y-4 py-20 text-center"
     >
-      <div className="border-power-orange h-12 w-12 animate-spin rounded-full border-2 border-t-transparent" />
-      <p className="font-title text-xl font-bold text-slate-900">
+      <div
+        aria-hidden="true"
+        className="border-ink h-10 w-10 animate-spin rounded-full border-2 border-t-transparent motion-reduce:animate-none"
+      />
+      <p role="status" className="font-editorial text-ink text-3xl font-light">
         Building {name || "your child"}&apos;s sport profile...
       </p>
-      <p className="max-w-xs text-sm text-slate-400">
+      <p className="text-ink-body max-w-sm text-base">
         Matching what you&apos;ve shared with sport requirements, training pathways, and what&apos;s
         available in your city.
       </p>
