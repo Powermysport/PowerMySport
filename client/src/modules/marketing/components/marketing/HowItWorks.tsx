@@ -21,10 +21,13 @@ export function HowItWorks() {
           {HOW_STEPS.map((step, index) => (
             <li
               key={step.title}
+              data-reveal-line
               className={cn(
                 "reveal-on-scroll relative pb-10 pl-8 last:pb-0 lg:pb-0 lg:pl-0 lg:pt-10",
                 // the line: down the left on a phone, along the top from lg, ending at the last dot
                 "before:bg-ink/25 before:absolute before:left-[5px] before:top-2 before:h-full before:w-px before:content-[''] last:before:hidden lg:before:left-0 lg:before:top-[5px] lg:before:h-px lg:before:w-[calc(100%+2rem)]",
+                // the line draws in on reveal (useSectionReveals tweens --draw); with no script it is simply whole
+                "before:origin-top before:scale-y-[var(--draw,1)] lg:before:origin-left lg:before:scale-x-[var(--draw,1)] lg:before:scale-y-100",
                 "after:bg-ink after:absolute after:left-0 after:top-2 after:h-[11px] after:w-[11px] after:rounded-full after:content-[''] lg:after:top-0"
               )}
             >

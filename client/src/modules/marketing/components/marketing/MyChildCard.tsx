@@ -54,7 +54,10 @@ export function MyChildCard() {
             </div>
           </div>
 
-          <div className="reveal-on-scroll border-hairline w-full overflow-hidden rounded-2xl border bg-white">
+          <div
+            data-reveal="settle"
+            className="reveal-on-scroll border-hairline w-full overflow-hidden rounded-2xl border bg-white"
+          >
             <div className="border-hairline flex items-center gap-3 border-b px-5 py-4 sm:px-6">
               {/* An initial in a small square: a person, without a stock photo of a child. */}
               <span
@@ -73,6 +76,7 @@ export function MyChildCard() {
               {MY_CHILD_ROWS.map((row) => (
                 <div
                   key={row.key}
+                  data-reveal-row
                   className={cn(
                     "border-hairline grid gap-1 border-b px-5 py-4 last:border-b-0 sm:grid-cols-[7.5rem_1fr] sm:gap-4 sm:px-6",
                     // A real left border, rounded to match the card's inner corner (16px

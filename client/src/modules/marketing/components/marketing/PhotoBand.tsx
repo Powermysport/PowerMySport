@@ -27,6 +27,7 @@ export function PhotoBand({
       <Image
         src={image.src}
         alt={image.alt}
+        data-reveal-camera
         fill
         sizes="100vw"
         className={`-z-20 object-cover ${image.position ?? "object-center"}`}

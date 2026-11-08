@@ -19,9 +19,12 @@ import { roadmapHref } from "@/modules/pathway/data/sports";
 import type { PathwayGuideSummary } from "@/modules/pathway/services/pathway";
 import type { BoardEdition } from "@/modules/tournaments/components/FlipBoard";
 import { NextTournamentsSection } from "@/modules/tournaments/components/NextTournamentsSection";
+import { useSectionReveals } from "@/modules/marketing/hooks/useSectionReveals";
+import { useSmoothScroll } from "@/modules/marketing/hooks/useSmoothScroll";
 import { ArrowRight } from "lucide-react";
 
 import Link from "next/link";
+import { useRef } from "react";
 
 /** "Tennis and Chess", "Tennis, Chess and Golf". */
 function joinNames(names: string[]): string {
@@ -31,10 +34,11 @@ function joinNames(names: string[]): string {
 
 const WHATSAPP_HERO_HREF = buildWhatsAppUrl(WHATSAPP_OPENERS.helpJourney);
 
-// Section reveals use the `.reveal-on-scroll` utility in globals.css. The
-// framer-motion stagger this replaced left the homepage's copy at `opacity: 0`
-// in the server HTML until hydration ran. The hero keeps its own scroll-linked
-// motion — that one is a deliberate effect, not a reveal.
+// Motion: Lenis smooth scroll + GSAP ScrollTrigger reveals, all in
+// modules/marketing/hooks. Sections still mark what reveals with
+// `.reveal-on-scroll`; that class is also the CSS-only fallback, so nothing on
+// this page is at `opacity: 0` in the server HTML except the hero's intro items,
+// which carry their own 2.5s CSS failsafe.
 
 export default function HomeClient({
   pathway,
@@ -47,9 +51,12 @@ export default function HomeClient({
   tournaments: { editions: BoardEdition[]; sportSlug: string; sportLabel: string };
 }) {
   const { user } = useAuthStore();
+  const rootRef = useRef<HTMLElement>(null);
+  useSmoothScroll();
+  useSectionReveals(rootRef);
 
   return (
-    <main className="bg-paper">
+    <main ref={rootRef} className="bg-paper">
       {/* ── Hero ── */}
       <HeroAsk />
 
@@ -113,7 +120,7 @@ export default function HomeClient({
                 </Link>
               </div>
 
-              <div className="reveal-on-scroll mx-auto w-full max-w-[612px]">
+              <div data-reveal="settle" className="reveal-on-scroll mx-auto w-full max-w-[612px]">
                 <PathwayPreviewCard pathway={pathway} />
               </div>
             </div>

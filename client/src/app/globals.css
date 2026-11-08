@@ -419,7 +419,53 @@
            time it is being read rather than still arriving. */
         animation-range: entry 4% cover 20%;
       }
+      /* The homepage runs the same reveal through GSAP ScrollTrigger
+         (useSectionReveals adds this class only while it is active). */
+      .gsap-reveals .reveal-on-scroll {
+        animation: none;
+      }
     }
+  }
+
+  /* ── Homepage hero intro: pre-paint state ──
+     useHeroIntro animates these in. The hidden state is set here, in CSS, so
+     the server HTML does not paint the final layout and then snap back when the
+     script takes over. The 2.5s failsafe animation shows them regardless, so a
+     failed, blocked or very slow script can never leave the hero blank. The
+     photo is never hidden (it is the page's largest paint); only its crop is
+     narrowed. Reduced motion: none of this applies. */
+  @keyframes hero-failsafe {
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes hero-plate-failsafe {
+    to {
+      clip-path: inset(0% 0% 0% 0% round 16px);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-hero-item] {
+      opacity: 0;
+      animation: hero-failsafe 1ms 2.5s forwards;
+    }
+    [data-hero-plate] {
+      clip-path: inset(7% 7% 7% 7% round 16px);
+      animation: hero-plate-failsafe 1ms 2.5s forwards;
+    }
+  }
+
+  /* Lenis (useSmoothScroll) owns scrolling while it runs; native smooth
+     scrolling on top of it makes every programmatic scroll lag twice. */
+  html.lenis,
+  html.lenis body {
+    height: auto;
+  }
+  html.lenis {
+    scroll-behavior: auto;
+  }
+  .lenis.lenis-stopped {
+    overflow: clip;
   }
 
   .hide-scrollbar::-webkit-scrollbar {
