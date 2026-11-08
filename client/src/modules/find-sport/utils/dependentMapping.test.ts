@@ -108,6 +108,17 @@ describe("prefillFromPlayer", () => {
     expect(prefillFromPlayer({ quiz: null }).energyType).toBeUndefined();
   });
 
+  it("works out the age from the date of birth when the profile has no age", () => {
+    // The players list sends dob only. A known child skips the date-of-birth screen, so
+    // without this the height default, under-8 skips and scorer all ran with no age.
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - 14);
+    dob.setDate(dob.getDate() - 10);
+    expect(prefillFromPlayer({ dob: dob.toISOString() }).age).toBe(14);
+    expect(prefillFromPlayer({ dob: dob.toISOString(), age: 9 }).age).toBe(9);
+    expect(prefillFromPlayer({}).age).toBeUndefined();
+  });
+
   it("keeps a team-or-solo answer of 0 distinct from no answer", () => {
     expect(prefillFromPlayer({ quiz: { teamIndividual: 0 } }).teamIndividual).toBe(0);
     expect(prefillFromPlayer({ quiz: {} }).teamIndividual).toBeUndefined();

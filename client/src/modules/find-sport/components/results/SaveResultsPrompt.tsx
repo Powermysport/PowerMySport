@@ -38,6 +38,8 @@ export function SaveResultsPrompt({
     (a, b) => Number(b._id === suggestedChildId) - Number(a._id === suggestedChildId)
   );
   const hasMatch = suggestedChildId !== null;
+  // Old saved results can have no name; "A new child, " with nothing after it reads as broken.
+  const newLabel = childName ? `A new child, ${childName}` : "A new child";
 
   return (
     <section
@@ -85,11 +87,11 @@ export function SaveResultsPrompt({
             onClick={() => save(null)}
             className={`${chipClass(false)} disabled:opacity-50`}
           >
-            {busy === "new" ? "Saving..." : `A new child, ${childName}`}
+            {busy === "new" ? "Saving..." : newLabel}
           </button>
         ) : (
           <Button size="sm" disabled={busy !== null} onClick={() => save(null)} className="py-2">
-            {busy === "new" ? "Saving..." : `A new child, ${childName}`}
+            {busy === "new" ? "Saving..." : newLabel}
           </Button>
         )}
       </div>

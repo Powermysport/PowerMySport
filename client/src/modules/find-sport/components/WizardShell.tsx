@@ -20,6 +20,7 @@ export function WizardShell() {
     setNameInput,
     confirmName,
     nameTarget,
+    genderOnFile,
     nameRef,
     chosenSport,
     choosingSport,
@@ -259,7 +260,7 @@ export function WizardShell() {
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && nameInput.trim() && answers.gender)
+                      if (e.key === "Enter" && nameInput.trim() && (answers.gender || genderOnFile))
                         confirmName(nameInput);
                     }}
                     className={fieldClass}
@@ -271,31 +272,34 @@ export function WizardShell() {
                   )}
                 </div>
                 {/* Boy or girl rides on the name screen (audit F4): one tap, and every
-                    question after it can say "he" or "she". */}
-                <ChoiceRows
-                  rows={[
-                    {
-                      id: "gender",
-                      label: "Boy or girl?",
-                      value: answers.gender,
-                      onChange: (v) => setAnswer("gender", v as typeof answers.gender),
-                      options: [
-                        { value: "boy", label: "Boy" },
-                        { value: "girl", label: "Girl" },
-                        { value: "prefer-not", label: "Prefer not to say" },
-                      ],
-                    },
-                  ]}
-                />
+                    question after it can say "he" or "she". Not asked again for a child
+                    whose profile already has it. */}
+                {!genderOnFile && (
+                  <ChoiceRows
+                    rows={[
+                      {
+                        id: "gender",
+                        label: "Boy or girl?",
+                        value: answers.gender,
+                        onChange: (v) => setAnswer("gender", v as typeof answers.gender),
+                        options: [
+                          { value: "boy", label: "Boy" },
+                          { value: "girl", label: "Girl" },
+                          { value: "prefer-not", label: "Prefer not to say" },
+                        ],
+                      },
+                    ]}
+                  />
+                )}
                 <Button
                   size="lg"
                   fullWidth
                   onClick={() => confirmName(nameInput)}
-                  disabled={!nameInput.trim() || !answers.gender}
+                  disabled={!nameInput.trim() || !(answers.gender || genderOnFile)}
                 >
                   {!nameInput.trim()
                     ? "Enter a name to continue"
-                    : !answers.gender
+                    : !(answers.gender || genderOnFile)
                       ? "Choose boy, girl or prefer not to say"
                       : `Continue with ${nameInput.trim()}`}
                 </Button>

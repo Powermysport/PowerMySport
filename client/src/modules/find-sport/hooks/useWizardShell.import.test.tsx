@@ -28,7 +28,9 @@ vi.mock("@/lib/api/axios", () => ({
     post: vi.fn(async () => ({ data: { success: true } })),
   },
 }));
-vi.mock("@/modules/auth/store/authStore", () => ({ useAuthStore: () => ({ token: "t" }) }));
+vi.mock("@/modules/auth/store/authStore", () => ({
+  useAuthStore: () => ({ token: "t", hydrated: true }),
+}));
 vi.mock("@/modules/auth/hooks/useProfile", () => ({ useRefreshProfile: () => vi.fn() }));
 vi.mock("@/modules/player/hooks/useSaveChild", () => ({
   useSaveChild: () => ({ addChild: m.addChild, updateChild: m.updateChild }),

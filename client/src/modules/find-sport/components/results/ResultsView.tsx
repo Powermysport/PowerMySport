@@ -228,7 +228,7 @@ function SportCard({
   saving: boolean;
   onChoose: (sport: string) => void;
 }) {
-  const name = answers.childName || "Your child";
+  const name = answers.childName || "your child";
   const meta = PORTFOLIO_META[role];
 
   return (
@@ -342,7 +342,7 @@ export function ResultsView({
   choosingSport?: boolean;
   onChooseSport?: (sport: string) => void;
 }) {
-  const name = answers.childName || "Your child";
+  const name = answers.childName || "your child";
   const hasShortlist = chosenFits.length > 0;
 
   // Our own recommendations still run — but a sport the parent already
@@ -381,7 +381,7 @@ export function ResultsView({
     <div className="animate-in fade-in slide-in-from-bottom-4 pb-12 duration-300 motion-reduce:animate-none">
       {savedStatus === "unsaved" && onSaveTo && (
         <SaveResultsPrompt
-          childName={name}
+          childName={answers.childName?.trim() ?? ""}
           childrenOptions={childrenOptions}
           suggestedChildId={suggestedChildId}
           onSave={onSaveTo}

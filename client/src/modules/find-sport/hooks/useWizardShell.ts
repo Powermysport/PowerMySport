@@ -25,7 +25,7 @@ import {
 import { firstNoteFor, scheduleTrialCheckIn, trialSignals } from "../components/wizard/wizardTrial";
 
 export function useWizardShell() {
-  const { token } = useAuthStore();
+  const { token, hydrated } = useAuthStore();
   const refreshProfile = useRefreshProfile();
   const { addChild, updateChild } = useSaveChild();
   // A dashboard "Find their sport" card links here with ?dependentId=<id> so
@@ -70,7 +70,10 @@ export function useWizardShell() {
   } = useFlow(flow, {
     completed: retaking || answers.weeklyHours != null,
     age: answers.age,
-    guest: !token,
+    // Unknown until the auth store hydrates. Treating "not read yet" as a guest skipped the
+    // welcome (whose child picker is the logged-in parent's first step) and the clamp then
+    // replaced the URL with the name screen for good. resolveStep moves a real guest on.
+    guest: hydrated && !token,
     knownChild:
       selectedDependentId !== null && !!answers.dob && !!answers.gender && !!answers.state,
   });
@@ -122,19 +125,20 @@ export function useWizardShell() {
       if (saved.chosenSport) setChosenSport(saved.chosenSport);
       goToStep(STEPS.length);
 
-      // Logged-in user: defer the child profile creation until after the
-      // players fetch confirms they have no existing children (newly registered).
-      if (token) {
-        pendingImport.current = {
-          answers: restored,
-          scored,
-          chosen,
-          // A sport picked as a guest has nowhere to live until the dependent
-          // exists — it rides in on creation rather than being lost at signup.
-          ...(saved.chosenSport ? { chosenSport: saved.chosenSport } : {}),
-        };
-        setSavedStatus("saving");
-      }
+      // Queued whether or not a token is known yet: on a full page load the auth store is
+      // still hydrating when this runs (HydrationBoundary's effect fires after ours), so
+      // gating on `token` here dropped a logged-in parent's results with no prompt and no
+      // save. The players fetch, which re-runs once the token arrives, decides what happens:
+      // create the child for a new account, or ask an existing parent whose results these are.
+      pendingImport.current = {
+        answers: restored,
+        scored,
+        chosen,
+        // A sport picked as a guest has nowhere to live until the dependent
+        // exists — it rides in on creation rather than being lost at signup.
+        ...(saved.chosenSport ? { chosenSport: saved.chosenSport } : {}),
+      };
+      if (token) setSavedStatus("saving");
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -348,21 +352,27 @@ export function useWizardShell() {
     }
   };
 
-  /** Tells a logged-in parent which profile the typed name will save to, before they continue. */
-  const nameTarget: string | null = (() => {
+  /** The existing child the typed name will save to, if any (logged-in parents only). */
+  const nameTargetChild: PlayerProfile | undefined = (() => {
     const typed = nameInput.trim();
-    if (!token || players.length === 0 || !typed) return null;
+    if (!token || players.length === 0 || !typed) return undefined;
     const r = resolveWizardChild(players, selectedDependentId, typed);
-    const existing =
-      r.kind === "switch"
-        ? r.child
-        : r.kind === "keep"
-          ? players.find((p) => p._id === selectedDependentId)
-          : undefined;
-    return existing
-      ? `Saves to ${existing.name}'s profile.`
-      : `Creates a new profile for ${typed}.`;
+    if (r.kind === "switch") return r.child;
+    if (r.kind === "keep") return players.find((p) => p._id === selectedDependentId);
+    return undefined;
   })();
+
+  /** Tells a logged-in parent which profile the typed name will save to, before they continue. */
+  const nameTarget: string | null =
+    !nameInput.trim() || !token || players.length === 0
+      ? null
+      : nameTargetChild
+        ? `Saves to ${nameTargetChild.name}'s profile.`
+        : `Creates a new profile for ${nameInput.trim()}.`;
+
+  // Boy or girl is already on that child's profile: asking again is a wasted tap, and the
+  // answer arrives with the child's pre-fill when the name is confirmed.
+  const genderOnFile = !!nameTargetChild?.gender;
 
   const retake = () => {
     setRetaking(true);
@@ -508,6 +518,18 @@ export function useWizardShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex]);
 
+  // Each step starts at its heading. Steps change with `scroll: false`, so a parent who
+  // pressed a button at the bottom of a long screen (the welcome, the sports list, on a
+  // phone almost any step) landed partway down the next one, below its question.
+  const firstStepRender = useRef(true);
+  useEffect(() => {
+    if (firstStepRender.current) {
+      firstStepRender.current = false;
+      return;
+    }
+    window.scrollTo({ top: 0 });
+  }, [stepIndex]);
+
   // Focus name input when on name screen
   useEffect(() => {
     if (currentStep.kind === "name") nameRef.current?.focus();
@@ -524,6 +546,7 @@ export function useWizardShell() {
     setNameInput,
     confirmName,
     nameTarget,
+    genderOnFile,
     nameRef,
     chosenSport,
     choosingSport,

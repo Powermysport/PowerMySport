@@ -12,6 +12,7 @@ import type {
 } from "@powermysport/shared-types";
 import type { Dependent, DependentQuiz } from "@/types";
 import type { SportFitResult, SportResult, WizardAnswers } from "../types";
+import { getAgeFromDob } from "./sportKnownFlowUtils";
 
 /** Build and height category are worked out from the measurements, never stored. */
 export function deriveBodyCategories(
@@ -148,7 +149,11 @@ export interface WizardSourceProfile {
 export function prefillFromPlayer(player: WizardSourceProfile): Partial<WizardAnswers> {
   const out: Partial<WizardAnswers> = {};
   if (player.dob) out.dob = new Date(player.dob).toISOString().slice(0, 10);
-  if (player.age) out.age = player.age;
+  // The players list carries dob but not age. Age drives the height/weight starting
+  // points, the under-8 question skips and the scorer, and a known child now skips the
+  // date-of-birth screen that used to fill it in, so derive it here.
+  const age = player.age ?? (out.dob ? getAgeFromDob(out.dob) : null);
+  if (age) out.age = age;
   if (player.gender === "MALE") out.gender = "boy";
   else if (player.gender === "FEMALE") out.gender = "girl";
   else if (player.gender === "OTHER") out.gender = "prefer-not";

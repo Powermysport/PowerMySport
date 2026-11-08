@@ -25,7 +25,7 @@ export function SportFitCard({
   saving: boolean;
   onChoose: (sport: string) => void;
 }) {
-  const name = answers.childName || "Your child";
+  const name = answers.childName || "your child";
   const strengths = fit.strengths.slice(0, MAX_LINES);
   const gaps = fit.gaps.slice(0, MAX_LINES);
 

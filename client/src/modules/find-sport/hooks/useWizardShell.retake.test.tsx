@@ -30,7 +30,9 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.state.search),
 }));
 vi.mock("@/lib/api/axios", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
-vi.mock("@/modules/auth/store/authStore", () => ({ useAuthStore: () => ({ token: null }) }));
+vi.mock("@/modules/auth/store/authStore", () => ({
+  useAuthStore: () => ({ token: null, hydrated: true }),
+}));
 vi.mock("@/modules/auth/hooks/useProfile", () => ({ useRefreshProfile: () => vi.fn() }));
 vi.mock("@/modules/player/hooks/useSaveChild", () => ({
   useSaveChild: () => ({ addChild: vi.fn(), updateChild: vi.fn() }),
