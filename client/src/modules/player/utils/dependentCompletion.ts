@@ -107,12 +107,17 @@ export function hasAssessment(profile: DependentCompletionProfile | null | undef
   return !!profile?.wizardCompletedAt || !!profile?.currentStandingTier;
 }
 
-/** True when the quiz's physical, personality and comfort answers are not all there,
- * i.e. this profile never went through the Discover quiz. Gates the cross-flow
- * nudges that offer to take it (guidance, expert booking). */
+/** True when this child has never been through the Discover quiz and its physical,
+ * personality and comfort answers are not all there (from the edit modal either).
+ * Gates the cross-flow nudges that offer to add them (guidance, expert booking).
+ *
+ * A finished quiz counts on its own: the quiz may leave some answers blank on purpose
+ * (questions skipped by age, or removed later), and judging it answer by answer asked
+ * parents to take the quiz they had just finished (audit F15). */
 export function isMissingArchetypeTraits(
   profile: DependentCompletionProfile | null | undefined
 ): boolean {
+  if (profile?.wizardCompletedAt) return false;
   const q = profile?.quiz ?? {};
   const physical = !!q.heightCm && !!q.weightKg && !!q.energyType;
   const personality = q.teamIndividual !== undefined && !!q.focusStyle && !!q.decisionStyle;

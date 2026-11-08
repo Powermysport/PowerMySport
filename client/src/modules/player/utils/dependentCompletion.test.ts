@@ -101,4 +101,15 @@ describe("isMissingArchetypeTraits", () => {
       })
     ).toBe(false);
   });
+
+  it("is false once the quiz was finished, even with answers left blank", () => {
+    // 3 of 6 assessed children in production had no height (the screen's default was
+    // never saved), and the nudge kept asking their parents to take the quiz again.
+    expect(
+      isMissingArchetypeTraits({
+        wizardCompletedAt: "2026-10-31T10:00:00.000Z",
+        quiz: { energyType: "explosive", teamIndividual: 2 },
+      })
+    ).toBe(false);
+  });
 });
