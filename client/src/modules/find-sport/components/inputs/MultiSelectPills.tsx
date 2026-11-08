@@ -1,5 +1,7 @@
 "use client";
 
+import { chipClass } from "./optionStyles";
+
 export function MultiSelectPills({
   options,
   selected,
@@ -37,11 +39,8 @@ export function MultiSelectPills({
         <button
           type="button"
           onClick={() => toggle("__none__")}
-          className={`rounded-full border-2 px-4 py-2 text-sm font-medium transition-all duration-150 ${
-            noneSelected
-              ? "border-power-orange bg-power-orange/5 text-power-orange"
-              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-          }`}
+          aria-pressed={noneSelected}
+          className={chipClass(noneSelected)}
         >
           {noneLabel}
         </button>
@@ -56,13 +55,8 @@ export function MultiSelectPills({
               type="button"
               onClick={() => toggle(opt)}
               disabled={locked}
-              className={`rounded-full border-2 px-4 py-2 text-sm font-medium transition-all duration-150 ${
-                isSelected
-                  ? "border-power-orange bg-power-orange/5 text-power-orange"
-                  : locked
-                    ? "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-              }`}
+              aria-pressed={isSelected}
+              className={`${chipClass(isSelected)} disabled:cursor-not-allowed disabled:opacity-40`}
             >
               {opt}
             </button>
@@ -71,7 +65,7 @@ export function MultiSelectPills({
       </div>
 
       {max !== undefined && (
-        <p className="text-xs text-slate-400">
+        <p className="text-ink-muted text-sm">
           {selected.length} of {max} selected
           {atLimit && ", deselect one to swap"}
         </p>

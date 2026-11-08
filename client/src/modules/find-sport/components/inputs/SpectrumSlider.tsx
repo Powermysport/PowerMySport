@@ -1,5 +1,7 @@
 "use client";
 
+import { optionClass } from "./optionStyles";
+
 export function SpectrumSlider({
   value,
   onChange,
@@ -27,7 +29,7 @@ export function SpectrumSlider({
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-between text-xs font-semibold uppercase tracking-widest text-slate-500">
+      <div className="text-ink flex justify-between text-sm font-medium">
         <span>{leftLabel}</span>
         <span>{rightLabel}</span>
       </div>
@@ -40,24 +42,14 @@ export function SpectrumSlider({
               key={tick}
               type="button"
               onClick={() => onChange(tick)}
-              className={`flex flex-col items-center gap-2 rounded-2xl border-2 py-5 transition-all duration-150 active:scale-[0.97] ${
-                selected
-                  ? "border-power-orange-solid bg-power-orange-solid text-white shadow-sm"
-                  : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:bg-slate-50"
-              }`}
+              aria-pressed={selected}
+              aria-label={labels[tick]}
+              className={`${optionClass(selected)} flex flex-col items-center gap-2 py-5`}
             >
-              <span
-                className={`text-xl font-bold tabular-nums ${
-                  selected ? "text-white" : "text-slate-600"
-                }`}
-              >
+              <span className="font-editorial text-ink text-2xl font-light tabular-nums">
                 {tick}
               </span>
-              <span
-                className={`text-center text-[10px] font-medium leading-none ${
-                  selected ? "text-white/80" : "text-slate-400"
-                }`}
-              >
+              <span className="text-ink-body text-center text-xs leading-tight">
                 {labels[tick]}
               </span>
             </button>
@@ -65,7 +57,7 @@ export function SpectrumSlider({
         })}
       </div>
 
-      <div className="flex justify-between text-xs leading-snug text-slate-400">
+      <div className="text-ink-muted flex justify-between text-sm leading-snug">
         <span className="max-w-[140px]">{leftExamples}</span>
         <span className="max-w-[140px] text-right">{rightExamples}</span>
       </div>
