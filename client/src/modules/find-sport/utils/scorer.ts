@@ -22,14 +22,11 @@ function getChildDimensions(a: WizardAnswers) {
       a.pressureResponse === "thrives" ? 5 : a.pressureResponse === "manages" ? 3 : 1,
     repetitionNeed: a.repetitionTolerance === "high" ? 5 : a.repetitionTolerance === "low" ? 1 : 3,
     contactRequired: a.contactComfort === "loves" ? 5 : a.contactComfort === "neutral" ? 3 : 1,
+    // Glasses or lenses give normal vision; plenty of racket players compete in them.
+    // Scoring "corrected" below "sharp" docked children in glasses 25-50% of the
+    // eyesight weight on every racket sport (audit F5).
     eyesightValue:
-      a.eyesight === "sharp"
-        ? 5
-        : a.eyesight === "corrected"
-          ? 3
-          : a.eyesight === "limited"
-            ? 1
-            : 3,
+      a.eyesight === "sharp" || a.eyesight === "corrected" ? 5 : a.eyesight === "limited" ? 1 : 3,
     agilityValue:
       a.agility === "high" ? 5 : a.agility === "moderate" ? 3 : a.agility === "low" ? 1 : 3,
     // Physical traits — derived from numeric height/weight
@@ -407,7 +404,8 @@ function buildReasons(
     answers.visualTracking === "strong" &&
     sport.visualTracking >= 4 &&
     dimMatch(child.visualTracking, sport.visualTracking) >= 0.75;
-  const sharpEyes = answers.eyesight === "sharp" && sport.visionDemand >= 4;
+  const sharpEyes =
+    (answers.eyesight === "sharp" || answers.eyesight === "corrected") && sport.visionDemand >= 4;
 
   if (trackingFits && sharpEyes && child.visualTracking >= 4 && child.eyesightValue >= 4) {
     reasons.push({
@@ -422,7 +420,7 @@ function buildReasons(
   } else if (sharpEyes) {
     reasons.push({
       type: "eyesight",
-      text: `Clear, uncorrected vision, and ${sport.name} is read at speed.`,
+      text: `Clear vision, and ${sport.name} is read at speed.`,
     });
   }
 
