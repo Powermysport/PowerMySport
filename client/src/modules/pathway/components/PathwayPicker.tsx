@@ -16,13 +16,12 @@
 // So when the child's age is known, each tile points at the stage that is about
 // them rather than at stage one.
 //
-// It is not ASKED for here. There was an age field at the top of this page, and
-// it was the wrong place for it: a form field is a toll gate on the one screen
-// whose entire job is "pick a sport", and it charged that toll before the page
-// had shown a parent anything worth paying for. The reader asks instead, in the
-// middle of content that has already earned the question, and the answer is
-// remembered — so a parent coming back to the index gets the recommendations
-// without this page ever having asked.
+// It is OFFERED here, never required. There was once an age field at the top of
+// this page, and it was the wrong shape: a form field is a toll gate on the one
+// screen whose entire job is "pick a sport". It is now a row of age chips
+// (`AgeChips`) under the search: one optional tap, skippable at a glance. The
+// reader also asks, inside a guide, and either answer is remembered, so a
+// parent who answered there arrives here with the chips already set.
 //
 // ── Why it is built for fifty sports, not ten ──
 //
@@ -51,8 +50,9 @@
 //     there are enough sports to need it (`GROUP_FILTER_FROM`), so today's page
 //     is not cluttered by a control that answers a question nobody has yet.
 //
-//   · PROGRESSIVE stages. The tile shows the ONE stage that matters (the child's,
-//     once an age is known) and reveals the rest on request, one sport at a time.
+//   · ONE action per card. A card (`SportCard`) is the sport's photo, one
+//     sentence on what its guide covers, and the ages. Stage detail lives in
+//     the guide; once the child's age is known, the card opens it at their stage.
 //
 //   · NO reordering by age. It was sorted so age-matched sports came first,
 //     which reads well at three sports and does nothing at fifty — nearly every
@@ -67,25 +67,28 @@
 // a crawler reads still contains every published sport as a real link — capping
 // the TILES does not cap the LINKS.
 
-import { ChevronDown, MapPin, Search, Sparkles, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useId, useMemo, useState } from "react";
 
 import { findStageForAge } from "../utils/ageRange";
 import { useChildAge } from "../utils/childAge";
 import type { PathwayIndexEntry } from "../services/fetchGuide";
 import { filterSports, groupCounts, indexSports } from "../utils/pickerFilter";
-import { colorFor } from "../utils/stageColors";
 import type { SportGroup } from "../data/sports";
+import { stageHref } from "../utils/stageLabels";
+import { AgeChips } from "./AgeChips";
+import { SportCard } from "./SportCard";
+import { SportFinderCard } from "./SportFinderCard";
 
 /** Below this many sports, the group filter is noise. */
 const GROUP_FILTER_FROM = 12;
 
 /**
- * Where the tiles start packing tighter.
+ * Where the search bar starts sticking to the top while the list scrolls.
  *
- * Not a threshold for the search box. Search used to be hidden below this count,
+ * Not a threshold for the search box itself. Search used to be hidden below this count,
  * on the reasoning that two sports do not need finding — which is true and beside
  * the point: the box is how a visitor learns this page is a catalogue rather than
  * the two-sport list it currently looks like. It renders always.
@@ -113,117 +116,6 @@ const BROWSE_TILES = 8;
  */
 const RESULT_TILES = 12;
 
-/** `/roadmap/tennis?stage=compete` — the reader renders that stage server-side. */
-const stageHref = (slug: string, key?: string) =>
-  key ? `/roadmap/${slug}?stage=${encodeURIComponent(key)}` : `/roadmap/${slug}`;
-
-// ─── One sport ───────────────────────────────────────────────────────────────
-
-function SportTile({
-  entry,
-  age,
-  expanded,
-  onToggle,
-}: {
-  entry: PathwayIndexEntry;
-  age: number | null;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const panelId = `pathway-stages-${entry.sportSlug}`;
-  const matchIndex =
-    age === null || entry.stages.length === 0 ? -1 : findStageForAge(entry.stages, age);
-  const match = matchIndex >= 0 ? entry.stages[matchIndex] : undefined;
-
-  return (
-    // `isolate`, so the stretched link below covers this tile and stops at its
-    // edge rather than sitting over the neighbouring one.
-    <div className="hover:border-ink/40 relative isolate flex h-full flex-col rounded-lg border border-slate-200 bg-white p-4 transition">
-      {/* The whole tile is the target, but only one element is the link: an
-          anchor with a stretched `::after` rather than a card-wide anchor with
-          controls nested inside it. Nesting a button inside an anchor is invalid
-          HTML and unusable with a keyboard, and it is exactly what a card with a
-          secondary "show stages" toggle tempts you into. */}
-      <Link
-        href={stageHref(entry.sportSlug, match?.key)}
-        className="font-title focus-visible:outline-power-orange text-[17px] font-bold leading-tight text-slate-900 underline-offset-4 transition after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-      >
-        {entry.sportName}
-      </Link>
-
-      <p className="mt-0.5 text-[12.5px] font-semibold text-slate-500">
-        {entry.stageCount} stage{entry.stageCount === 1 ? "" : "s"}
-      </p>
-
-      {/* ── The one stage that matters ──
-          At fifty sports a tile cannot carry six stage chips, and it does not
-          need to: once the age is known there is exactly one stage this parent
-          should open, and the tile links straight to it. */}
-      {match && (
-        <p className="bg-paper-deep text-ink mt-2 inline-flex w-fit items-center gap-1 rounded-sm px-2 py-1 text-sm font-medium">
-          <MapPin aria-hidden className="h-3 w-3 shrink-0" />
-          Stage {matchIndex + 1} · {match.name}
-        </p>
-      )}
-
-      {/* Pushes the toggle to the bottom so tiles of different heights line up. */}
-      <div className="flex-1" />
-
-      {entry.stages.length > 0 && (
-        <>
-          {/* `relative z-10`, or the stretched link above would swallow it. */}
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={expanded}
-            aria-controls={panelId}
-            className="focus-visible:outline-power-orange relative z-10 mt-2.5 inline-flex w-fit items-center gap-1 rounded-sm px-1.5 py-1 text-[12px] font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            {expanded ? "Hide stages" : "All stages"}
-            <ChevronDown
-              aria-hidden
-              className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          {/* Rendered, not animated open. An expanding height is content that
-              only exists once a frame loop has run, and in a throttled tab it
-              stays at zero with the answer inside it. */}
-          <div id={panelId} hidden={!expanded} className="relative z-10">
-            <ul className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2.5">
-              {entry.stages.map((stage, i) => (
-                <li key={stage.key}>
-                  <Link
-                    href={stageHref(entry.sportSlug, stage.key)}
-                    className={`focus-visible:outline-power-orange inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[12px] font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                      i === matchIndex
-                        ? "border-amber-300 bg-amber-50 text-amber-900"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                    }`}
-                  >
-                    <span
-                      aria-hidden
-                      className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-black text-white"
-                      style={{ background: colorFor(i) }}
-                    >
-                      {i + 1}
-                    </span>
-                    {stage.name}
-                    <span className="font-semibold text-slate-500">{stage.ageRange}</span>
-                    {i === matchIndex && (
-                      <span className="sr-only">, where a {age}-year-old starts</span>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // ─── The picker ──────────────────────────────────────────────────────────────
 
 export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
@@ -234,10 +126,14 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
 
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<SportGroup | "All">("All");
-  // One sport's stages open at a time. Fifty tiles all expanded is the wall this
-  // component exists to avoid, and a parent comparing two sports opens the
-  // second one straight after the first anyway.
-  const [openSlug, setOpenSlug] = useState<string | null>(null);
+  // Cards stagger in on the first paint only. Cleared shortly after, so a card
+  // that appears later because of a search lands without moving: animating the
+  // list on every keystroke makes a fast filter feel slow.
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setIntro(false), 1200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const searchId = useId();
   const router = useRouter();
@@ -269,7 +165,7 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
 
   if (entries.length === 0) {
     return (
-      <p className="mx-auto mt-4 max-w-xl text-center text-sm text-slate-600 sm:text-base">
+      <p className="text-ink-body mx-auto mt-4 max-w-xl text-center text-sm sm:text-base">
         No pathways are published yet. We&apos;re building them with coaches and experienced
         parents, one sport at a time. Check back shortly.
       </p>
@@ -295,7 +191,7 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
       <div
         className={`z-20 mx-auto mt-9 max-w-2xl px-1 py-1 ${
           dense
-            ? "sticky top-16 rounded-lg border border-slate-200 bg-white/95 px-3 py-3 backdrop-blur-md"
+            ? "border-hairline bg-paper/90 sticky top-16 rounded-2xl border px-3 py-3 backdrop-blur-md"
             : ""
         }`}
       >
@@ -326,7 +222,8 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
           <div className="relative">
             <Search
               aria-hidden
-              className="h-4.5 w-4.5 pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              strokeWidth={1.5}
+              className="text-ink-muted pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2"
             />
             <input
               id={searchId}
@@ -334,13 +231,13 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={`Search ${entries.length} sport${entries.length === 1 ? "" : "s"}`}
-              className="focus:border-power-orange w-full rounded-md border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-[15px] font-semibold text-slate-800 shadow-sm placeholder:font-normal placeholder:text-slate-400 focus:outline-none"
+              className="border-hairline focus:border-ink/50 text-ink placeholder:text-ink-muted w-full rounded-xl border bg-white py-3.5 pl-12 pr-10 text-base transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus:outline-none"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="focus-visible:outline-power-orange absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="focus-visible:outline-ink text-ink-muted hover:bg-paper-deep hover:text-ink absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <X aria-hidden className="h-4 w-4" />
                 <span className="sr-only">Clear search</span>
@@ -348,9 +245,9 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
             )}
           </div>
           {needle && topMatch && (
-            <p className="mt-1.5 text-center text-[12px] text-slate-500">
+            <p className="text-ink-muted mt-2 text-center text-[13px]">
               Press Enter to open{" "}
-              <span className="font-bold text-slate-700">{topMatch.sportName}</span>
+              <span className="text-ink font-semibold">{topMatch.sportName}</span>
             </p>
           )}
         </form>
@@ -366,12 +263,12 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
                     aria-pressed={group === name}
                     className={`focus-visible:outline-power-orange rounded-md px-3 py-1.5 text-[12.5px] font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 ${
                       group === name
-                        ? "bg-slate-900 text-white"
-                        : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                        ? "bg-ink text-white"
+                        : "border-hairline text-ink-body hover:border-ink/30 hover:text-ink border bg-white"
                     }`}
                   >
                     {name}{" "}
-                    <span className={group === name ? "text-white/60" : "text-slate-500"}>
+                    <span className={group === name ? "text-white/60" : "text-ink-muted"}>
                       {count}
                     </span>
                   </button>
@@ -389,56 +286,52 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
         {visible.length} of {entries.length} sports match
       </p>
 
-      {/* Only when there is something to say. The age is no longer asked for
-          here, it is asked once inside a pathway and remembered, so this line
-          appears for a parent who has already answered it somewhere else, and
-          nothing is shown to one who has not. */}
-      {age !== null && (
-        <p className="mt-3 text-center text-[12.5px] text-slate-500">
-          Showing where a {age}-year-old starts in each sport.
-        </p>
-      )}
+      {/* One optional tap that makes every card open at this child's stage. */}
+      <AgeChips age={age} />
 
       {tiles.length > 0 ? (
-        // ── Density follows the catalogue ──
-        // One column on a phone is the comfortable read at three sports and a
-        // long scroll at fifty. Past the point where the search box appears, the
-        // tiles go two-up on mobile and four-up on a desktop: the same tile,
-        // packed tighter, because by then finding beats browsing.
-        <ul
-          className={`mt-4 grid gap-3 ${
-            dense
-              ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-          }`}
-        >
-          {tiles.map((entry) => (
-            <li key={entry.sportSlug}>
-              <SportTile
-                entry={entry}
-                age={age}
-                expanded={openSlug === entry.sportSlug}
-                onToggle={() => setOpenSlug(openSlug === entry.sportSlug ? null : entry.sportSlug)}
-              />
+        // ── One uniform grid ──
+        // Three across on a laptop, two on a tablet, one on a phone, every card
+        // the same width. A short last row stays short rather than stretching
+        // its cards out of step with the rest.
+        //
+        <ul className="mt-6 grid grid-cols-1 gap-4 text-left sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+          {tiles.map((entry, index) => (
+            <li
+              key={entry.sportSlug}
+              style={{ "--i": Math.min(index, 8) } as CSSProperties}
+              className={intro ? "tile-rise" : undefined}
+            >
+              <SportCard entry={entry} age={age} />
             </li>
           ))}
+          {/* For the parent who has not chosen a sport yet. Browse view only:
+              beside search results it is noise. */}
+          {!narrowed && (
+            <li
+              style={{ "--i": Math.min(tiles.length, 8) } as CSSProperties}
+              className={intro ? "tile-rise" : undefined}
+            >
+              <SportFinderCard />
+            </li>
+          )}
         </ul>
       ) : (
         // A search that finds nothing is the clearest signal this page ever gets
         // that a parent knows exactly what they want and we do not have it. It
         // ends in a route to a person, not an apology.
-        <div className="mx-auto mt-6 max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center">
-          <p className="text-[15px] font-bold text-slate-900">
+        <div className="border-hairline mx-auto mt-6 max-w-md rounded-2xl border bg-white p-7 text-center">
+          <p className="font-editorial text-ink text-xl">
             No pathway for {needle ? `"${query.trim()}"` : "that group"} yet
           </p>
-          <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-600">
+          <p className="text-ink-body mt-2 text-sm leading-relaxed">
             We write them with coaches and experienced parents, one sport at a time. Tell us about
             your child and we&apos;ll point you at the right people for their sport in the meantime.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Link
               href="/assessment"
-              className="bg-power-orange-solid inline-flex items-center rounded-md px-3.5 py-2 text-[13px] font-bold text-white transition hover:bg-orange-600"
+              className="bg-power-orange-solid inline-flex items-center rounded-md px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-800"
             >
               Get a plan for their sport
             </Link>
@@ -448,7 +341,7 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
                 setQuery("");
                 setGroup("All");
               }}
-              className="inline-flex items-center rounded-md border border-slate-300 px-3.5 py-2 text-[13px] font-bold text-slate-700 transition hover:border-slate-400"
+              className="border-ink/20 text-ink hover:border-ink/50 inline-flex items-center rounded-md border px-4 py-2.5 text-sm font-semibold transition-colors"
             >
               Show all sports
             </button>
@@ -461,7 +354,7 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
           the difference between a page that looks short and a page that looks
           incomplete. */}
       {beyondCap > 0 && (
-        <p className="mt-3 text-center text-[12.5px] text-slate-500">
+        <p className="text-ink-muted mt-4 text-center text-sm">
           {narrowed ? (
             <>
               {beyondCap} more match{beyondCap === 1 ? "" : "es"}. Keep typing to narrow it down.
@@ -485,20 +378,20 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
           not, so a crawler indexes every pathway and a parent without
           JavaScript can still open it. */}
       {entries.length > BROWSE_TILES && (
-        <details className="group mt-6 rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 text-[13px] font-bold text-slate-600 transition hover:text-slate-900 [&::-webkit-details-marker]:hidden">
+        <details className="border-hairline group mt-6 rounded-2xl border bg-white px-5 py-4 text-left">
+          <summary className="text-ink-body hover:text-ink flex cursor-pointer list-none items-center justify-center gap-1.5 text-sm font-medium transition-colors [&::-webkit-details-marker]:hidden">
             All {entries.length} sports, A–Z
             <ChevronDown
               aria-hidden
               className="h-4 w-4 transition-transform group-open:rotate-180"
             />
           </summary>
-          <ul className="mt-3 columns-2 gap-x-6 border-t border-slate-100 pt-3 sm:columns-3 lg:columns-4">
+          <ul className="border-hairline mt-3 columns-2 gap-x-6 border-t pt-3 sm:columns-3 lg:columns-4">
             {alphabetical.map((entry) => (
               <li key={entry.sportSlug} className="break-inside-avoid">
                 <Link
                   href={`/roadmap/${entry.sportSlug}`}
-                  className="block truncate py-1 text-[13.5px] font-semibold text-slate-600 underline-offset-4 transition hover:underline"
+                  className="text-ink-body hover:text-ink block truncate py-1 text-sm underline-offset-4 transition-colors hover:underline"
                 >
                   {entry.sportName}
                 </Link>
@@ -508,8 +401,7 @@ export function PathwayPicker({ entries }: { entries: PathwayIndexEntry[] }) {
         </details>
       )}
 
-      <p className="mt-5 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
-        <Sparkles aria-hidden className="h-3.5 w-3.5" />
+      <p className="text-ink-muted mt-6 text-center text-sm">
         More sports are being written with coaches and experienced parents, one at a time.
       </p>
     </>

@@ -527,3 +527,19 @@ html[data-ask-transition] [data-ask-panel] {
 html[data-ask-transition] [data-ai-bubble] {
   opacity: 0;
 }
+
+/* /roadmap sport cards: cards stagger in on first paint only (PathwayPicker
+   adds .tile-rise to its first render). Opacity and transform only; with
+   reduced motion the cards are simply there. */
+@keyframes tile-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tile-rise {
+    animation: tile-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+}
