@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
+import { SupportTicketReply } from "@/modules/admin/components/SupportTicketReply";
 import { SupportTicketRecord, adminApi } from "@/modules/admin/services/admin";
 import { btn, fieldClass } from "@/modules/shared/ui/buttonStyles";
 import { MetricStrip } from "@/modules/shared/ui/Panel";
@@ -64,6 +65,10 @@ export default function AdminSupportTicketsPage() {
       toast.error("Unable to update support ticket.");
     }
   };
+
+  // A reply returns the updated ticket (new note, maybe a new status): swap it in.
+  const replaceTicket = (updated: SupportTicketRecord) =>
+    setTickets((current) => current.map((t) => (t._id === updated._id ? updated : t)));
 
   const visibleTickets = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -244,6 +249,8 @@ export default function AdminSupportTicketsPage() {
                     <p>Created {formatDate(ticket.createdAt)}</p>
                   </div>
                 </div>
+
+                <SupportTicketReply ticket={ticket} onUpdated={replaceTicket} />
 
                 <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
                   <span className="mr-1 text-sm text-slate-500">Set status</span>

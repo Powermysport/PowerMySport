@@ -302,6 +302,108 @@ export const sendSupportTicketStatusEmail = async (
   });
 };
 
+interface SupportTicketReplyOptions {
+  name?: string | undefined;
+  email: string;
+  ticketId: string;
+  subject: string;
+  /** The admin's reply, as typed. Plain text: escaped, line breaks kept. */
+  message: string;
+  /** What the requester originally wrote, quoted under the reply for context. */
+  originalMessage: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+}
+
+/** Plain text into email HTML: escaped, with the writer's line breaks kept. */
+const textToHtml = (text: string) => escapeHtml(text).replace(/\r?\n/g, "<br/>");
+
+/**
+ * A support team member's written answer to a ticket.
+ *
+ * Sent `critical`, so a failed send reaches the admin as an error instead of a
+ * reply the panel says went out and the requester never got. It comes from the
+ * normal sender address, so the requester can answer by replying to it.
+ */
+export const sendSupportTicketReplyEmail = async (
+  options: SupportTicketReplyOptions
+): Promise<void> => {
+  const ref = `#${options.ticketId.slice(-8)}`;
+  const html = renderEmailShell({
+    heading: "A reply to your support request",
+    intro: `Hi ${escapeHtml(String(options.name || "there"))},`,
+    bodyHtml:
+      `<p style="margin:0 0 16px;">${textToHtml(options.message)}</p>` +
+      `<p style="margin:0 0 20px;">PowerMySport support team</p>` +
+      `<p style="margin:0 0 6px;color:#64748b;font-size:13px;">You wrote (ticket ${ref}, ${escapeHtml(options.subject)}):</p>` +
+      `<blockquote style="margin:0;padding:8px 12px;border-left:3px solid #e2e8f0;color:#475569;font-size:13px;">${textToHtml(options.originalMessage)}</blockquote>`,
+    footer: "Written by our support team. You can reply to this email if you have anything to add.",
+  });
+  await sendEmail({
+    to: options.email,
+    subject: `Re: ${options.subject} (${ref})`,
+    html,
+    critical: true,
+    ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+  });
+};
+
+export interface SupportTicketTeamAlertOptions {
+  ticketId: string;
+  subject: string;
+  description: string;
+  category: string;
+  priority: string;
+  requesterName?: string | undefined;
+  requesterEmail?: string | undefined;
+  requesterPhone?: string | undefined;
+  requesterType?: string | undefined;
+  signedIn: boolean;
+  adminUrl: string;
+}
+
+/**
+ * The email the support team gets for every new ticket. Built here and queued on
+ * the outbox by the caller, so a slow or failing mail server neither delays the
+ * requester's submit nor loses the alert (the outbox worker retries it).
+ *
+ * Reply-To is the requester, so answering the alert from the inbox reaches them.
+ */
+export const buildSupportTicketTeamAlert = (
+  options: SupportTicketTeamAlertOptions
+): { subject: string; html: string; replyTo?: string } => {
+  const ref = `#${options.ticketId.slice(-8)}`;
+  const who = options.requesterName || options.requesterEmail || "Someone";
+  const html = renderEmailShell({
+    heading: "New support ticket",
+    intro: `${escapeHtml(who)} raised a ticket${options.signedIn ? " while signed in" : " from the public form"}.`,
+    bodyHtml:
+      detailTable([
+        ["Ticket", ref],
+        ["Subject", escapeHtml(options.subject)],
+        ["Category", escapeHtml(options.category)],
+        ["Priority", escapeHtml(options.priority)],
+        ["Name", escapeHtml(options.requesterName || "Not given")],
+        ["Email", escapeHtml(options.requesterEmail || "Not given")],
+        ["Phone", escapeHtml(options.requesterPhone || "Not given")],
+        ...(options.requesterType
+          ? ([["Type", escapeHtml(options.requesterType.replace(/_/g, " "))]] as [string, string][])
+          : []),
+      ]) +
+      `<p style="margin:16px 0 6px;color:#64748b;font-size:13px;">Their message:</p>` +
+      `<blockquote style="margin:0;padding:8px 12px;border-left:3px solid #e2e8f0;color:#334155;">${escapeHtml(options.description).replace(/\r?\n/g, "<br/>")}</blockquote>`,
+    ctaLabel: "Open support tickets",
+    ctaUrl: `${options.adminUrl}/admin/support-tickets`,
+    footer: options.requesterEmail
+      ? "Replying to this email goes to the requester. Replying from the admin panel keeps a record on the ticket."
+      : "No email address was given, so this ticket can only be answered by phone.",
+  });
+  return {
+    subject: `New support ticket ${ref}: ${options.subject}`,
+    html,
+    ...(options.requesterEmail ? { replyTo: options.requesterEmail } : {}),
+  };
+};
+
 interface PayoutProcessedOptions {
   name?: string | undefined;
   email: string;

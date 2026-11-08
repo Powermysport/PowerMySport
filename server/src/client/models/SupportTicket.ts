@@ -21,6 +21,11 @@ export interface SupportTicketDocument extends Document {
     authorType: "USER" | "Admin";
     authorId: mongoose.Types.ObjectId;
     message: string;
+    /** Set only on an admin reply that was emailed to the requester. */
+    emailedTo?: string;
+    emailedAt?: Date;
+    /** What was attached to an emailed reply. The files themselves are not stored. */
+    attachments?: Array<{ filename: string; contentType: string; size: number }>;
     createdAt: Date;
   }>;
   createdAt: Date;
@@ -109,7 +114,26 @@ const supportTicketSchema = new Schema<SupportTicketDocument>(
           type: String,
           required: true,
           trim: true,
-          maxlength: 1000,
+          // An emailed reply is a full answer, not a one-line internal note.
+          maxlength: 5000,
+        },
+        emailedTo: {
+          type: String,
+          trim: true,
+        },
+        emailedAt: {
+          type: Date,
+        },
+        attachments: {
+          type: [
+            {
+              _id: false,
+              filename: { type: String, required: true },
+              contentType: { type: String, required: true },
+              size: { type: Number, required: true },
+            },
+          ],
+          default: undefined,
         },
         createdAt: {
           type: Date,

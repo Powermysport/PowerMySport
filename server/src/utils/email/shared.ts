@@ -33,6 +33,10 @@ export interface SendEmailOptions {
    * callers must pass `critical: true` so the caller can roll back.
    */
   critical?: boolean;
+  /** Where the recipient's "Reply" goes, when that is not the sender address. */
+  replyTo?: string;
+  /** Files sent with the message. */
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
 /** Everything useful an SMTP rejection carries, flattened for one log line. */
@@ -66,6 +70,8 @@ export const sendEmail = async (options: SendEmailOptions): Promise<void> => {
       subject: options.subject,
       html: options.html,
       text: options.text || options.html.replace(/<[^>]*>/g, ""), // Strip HTML for text version
+      ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+      ...(options.attachments?.length ? { attachments: options.attachments } : {}),
     };
 
     const info = await transporter.sendMail(mailOptions);
@@ -130,6 +136,8 @@ export const renderEmailShell = (opts: {
   ctaLabel?: string;
   ctaUrl?: string;
   accent?: string;
+  /** Replaces the "automated message" line, for mail a person wrote. */
+  footer?: string;
 }): string => {
   const accent = opts.accent || "#ff6b35";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
@@ -145,7 +153,7 @@ export const renderEmailShell = (opts: {
         ? `<p style="margin:24px 0;"><a href="${opts.ctaUrl}" style="display:inline-block;padding:12px 28px;background:${accent};color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">${opts.ctaLabel}</a></p>`
         : ""
     }
-    <p style="color:#666;font-size:13px;margin-top:28px;">This is an automated message from PowerMySport.</p>
+    <p style="color:#666;font-size:13px;margin-top:28px;">${opts.footer ?? "This is an automated message from PowerMySport."}</p>
   </div>
 </body></html>`;
 };

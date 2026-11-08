@@ -282,8 +282,21 @@ export interface SupportTicketRecord {
     email: string;
     role: string;
   } | null;
+  notes?: SupportTicketNote[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SupportTicketNote {
+  _id?: string;
+  authorType: "USER" | "Admin";
+  message: string;
+  /** Present only on an admin reply that was emailed to the requester. */
+  emailedTo?: string;
+  emailedAt?: string;
+  /** Files sent with an emailed reply. Only their details are kept, not the files. */
+  attachments?: Array<{ filename: string; contentType: string; size: number }>;
+  createdAt: string;
 }
 
 export interface AdminPhonePeRefundTransaction {
@@ -746,6 +759,32 @@ export const adminApi = {
     }
   ): Promise<ApiResponse<SupportTicketRecord>> => {
     const response = await axiosInstance.patch(`/support-tickets/admin/${ticketId}`, data);
+    return response.data;
+  },
+
+  /** Emails the requester and saves the reply on the ticket. Nothing is saved if the email fails. */
+  replyToSupportTicket: async (
+    ticketId: string,
+    data: {
+      message: string;
+      status?: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+      /** Base64 file contents, sent as email attachments. */
+      attachments?: Array<{ filename: string; content: string }>;
+    }
+  ): Promise<ApiResponse<SupportTicketRecord>> => {
+    const response = await axiosInstance.post(`/support-tickets/admin/${ticketId}/reply`, data);
+    return response.data;
+  },
+
+  /** An AI first draft for the reply box. Sends nothing and does not change the ticket. */
+  draftSupportTicketReply: async (
+    ticketId: string,
+    data: { instructions?: string }
+  ): Promise<ApiResponse<{ draft: string }>> => {
+    const response = await axiosInstance.post(
+      `/support-tickets/admin/${ticketId}/draft-reply`,
+      data
+    );
     return response.data;
   },
 

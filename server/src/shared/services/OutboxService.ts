@@ -130,13 +130,15 @@ export const startOutboxWorker = () => {
           }
         } else if (item.type === "send_email") {
           const payload = item.payload || {};
-          const { to, subject, html, text } = payload;
+          const { to, subject, html, text, replyTo } = payload;
 
           if (!to || !subject || !html) {
             throw new Error("Missing required email fields: to, subject, html");
           }
 
-          await sendEmail({ to, subject, html, text });
+          // `critical` so a failed send throws into the retry below. Without it sendEmail
+          // swallowed the error, the item was marked DONE, and the mail was never retried.
+          await sendEmail({ to, subject, html, text, replyTo, critical: true });
           log.info("[outbox][email] sent", { to, subject });
         }
 

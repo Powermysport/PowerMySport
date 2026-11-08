@@ -49,7 +49,7 @@ import payoutRoutes from "./client/routes/payoutRoutes";
 import refundMethodRoutes from "./client/routes/refundMethodRoutes";
 import reminderRoutes from "./client/routes/reminderRoutes";
 import reviewRoutes from "./client/routes/reviewRoutes";
-import supportTicketRoutes from "./client/routes/supportTicketRoutes";
+import supportTicketRoutes, { SUPPORT_REPLY_PATH } from "./client/routes/supportTicketRoutes";
 import venueInquiryRoutes from "./client/routes/venueInquiryRoutes";
 import venueOnboardingRoutes from "./client/routes/venueOnboardingRoutes";
 import venueRoutes from "./client/routes/venueRoutes";
@@ -187,12 +187,17 @@ app.use(
     },
   })
 );
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      (req as any).rawBody = buf.toString();
-    },
-  })
+// A support reply carries its attachments as base64 in JSON (10 MB of files is about
+// 13.4 MB encoded), too big for the global parser's 100 KB. Its route parses the body
+// itself, with a larger limit, only after the admin and permission checks pass, so an
+// unauthenticated caller cannot make the server read a large body.
+const globalJson = express.json({
+  verify: (req, _res, buf) => {
+    (req as any).rawBody = buf.toString();
+  },
+});
+app.use((req, res, next) =>
+  SUPPORT_REPLY_PATH.test(req.path) ? next() : globalJson(req, res, next)
 );
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
