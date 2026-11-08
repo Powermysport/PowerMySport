@@ -1,17 +1,11 @@
 "use client";
 
-import {
-  Activity,
-  ArrowRight,
-  CheckCircle,
-  CheckCircle2,
-  Send,
-  UserCheck,
-  Users,
-} from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
+import type React from "react";
 import { useEffect, useState } from "react";
 import api from "@/lib/api/axios";
 import { expertApi } from "@/modules/expert/services/expert";
+import { loginUrlFor } from "@/flow/policy";
 import { ScreeningRequestModal } from "../ScreeningRequestModal";
 
 // Real bookings only — an unpaid hold or a cancelled session was never a
@@ -44,22 +38,9 @@ function loadBooked(dependentId?: string): BookedState {
   }
 }
 
-function AddOnTag() {
-  return (
-    <span className="inline-flex items-center rounded-full bg-white/[0.07] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/50 ring-1 ring-white/10">
-      Optional add-on
-    </span>
-  );
-}
-
-function BookedTag({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-      <CheckCircle2 className="h-3.5 w-3.5" />
-      {label}
-    </span>
-  );
-}
+/** Secondary action on cream: ink text, 30% ink underline that goes solid on hover. */
+const TEXT_LINK =
+  "text-ink decoration-ink/30 hover:decoration-ink inline-flex items-center gap-1.5 text-sm font-semibold underline underline-offset-4 transition-colors duration-200";
 
 /**
  * The CTA section below the results. Physical screening and an expert session
@@ -73,11 +54,14 @@ export function WhatsNextPanel({
   city,
   dependentId,
   isLoggedIn,
+  saved = false,
 }: {
   childName: string;
   topSport?: string;
   city?: string;
   dependentId?: string;
+  /** True only once the results are actually on a child's profile. */
+  saved?: boolean;
   isLoggedIn: boolean;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -125,143 +109,115 @@ export function WhatsNextPanel({
     };
   }, [dependentId]);
 
-  return (
-    <div className="bg-ink relative mb-8 overflow-hidden rounded-3xl">
-      {/* Ambient glow accents */}
-      <div className="bg-power-orange/[0.07] pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -left-16 h-72 w-72 rounded-full bg-violet-500/[0.07] blur-3xl" />
-
-      {/* Panel header — title and qualifier share the row on desktop instead of
-          stacking into a third full-width line of centred-looking text. */}
-      <div className="relative flex flex-col gap-2 border-b border-white/[0.06] px-6 pb-5 pt-6 sm:px-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
-        <div className="min-w-0">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
-            Add-ons &amp; extras
-          </p>
-          <h3 className="font-title text-xl font-bold text-white">
-            Optional ways to go deeper on {name}
-          </h3>
-        </div>
-        <p className="max-w-md text-sm leading-relaxed text-slate-400 lg:text-right">
-          None of these are required before a trial class. Add them whenever they&apos;d be useful.
-        </p>
-      </div>
-
-      {/* ── Add-ons ── */}
-      <div className="relative grid grid-cols-1 divide-y divide-white/[0.06] border-b border-white/[0.06] md:grid-cols-2 md:divide-x md:divide-y-0">
-        {/* Physical screening */}
-        <div className="group flex flex-col p-6 transition-colors duration-300 hover:bg-white/[0.03] sm:p-7">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="bg-power-orange/15 ring-power-orange/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-105">
-              <Activity className="text-power-orange h-[18px] w-[18px]" />
-            </div>
-            {booked.screeningDone ? <BookedTag label="Booked" /> : <AddOnTag />}
-          </div>
-          <p className="mb-1.5 text-[15px] font-semibold text-white">Physical screening</p>
-          <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-400">
-            A six-test fitness battery at a partner venue (speed, power, endurance, agility) with a
-            printed report. Turns the trait answers you gave us into measured numbers.
-          </p>
-
-          {booked.screeningDone ? (
-            <p className="text-[13px] text-emerald-400/90">
-              Your screening request is in. Our team will call you to confirm the slot.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setModalOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white transition-all duration-200 hover:border-white hover:bg-white hover:text-slate-900"
-            >
-              <Send className="h-4 w-4" />
-              Request a slot
-            </button>
-          )}
-        </div>
-
-        {/* Expert session */}
-        <div className="group flex flex-col p-6 transition-colors duration-300 hover:bg-white/[0.03] sm:p-7">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 ring-1 ring-sky-400/20 transition-transform duration-300 group-hover:scale-105">
-              <UserCheck className="h-[18px] w-[18px] text-sky-400" />
-            </div>
-            {booked.expertDone ? <BookedTag label="Booked" /> : <AddOnTag />}
-          </div>
-          <p className="mb-1.5 text-[15px] font-semibold text-white">Expert session</p>
-          <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-400">
-            A paid one-on-one with a coach or sports professional who knows the pathway, useful when
-            the scores above are close, or when a gap needs a second opinion.
-          </p>
-
-          <a
-            href={booked.expertDone ? "/experts/sessions" : "/booking?tab=experts"}
-            className="group/cta flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white transition-all duration-200 hover:border-white hover:bg-white hover:text-slate-900"
-          >
-            {booked.expertDone ? "View your session" : "Connect with an Expert"}
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover/cta:translate-x-0.5" />
-          </a>
-        </div>
-      </div>
-
-      {/* ── Free extras ──
-          A slim row rather than two more full-height cards: these are free links,
-          not paid add-ons, and giving them the same weight as the two above made
-          the panel a wall of four near-identical boxes. */}
-      <div className="relative grid grid-cols-1 divide-y divide-white/[0.06] md:grid-cols-2 md:divide-x md:divide-y-0">
-        {/* Community */}
+  // One quiet, ruled list (DESIGN.md "Question list" pattern) instead of a dark panel of
+  // four boxes: these are optional, and the page's one action is booking the trial above.
+  const rows: Array<{
+    key: string;
+    title: string;
+    body: string;
+    action: React.ReactNode;
+  }> = [
+    {
+      key: "screening",
+      title: "Physical screening",
+      body: booked.screeningDone
+        ? "Your screening request is in. Our team will call you to confirm the slot."
+        : "A six-test fitness check at a partner venue (speed, power, endurance, agility), with a printed report.",
+      action: booked.screeningDone ? (
+        <span className="text-sm font-medium text-green-800">Requested</span>
+      ) : (
+        <button type="button" onClick={() => setModalOpen(true)} className={TEXT_LINK}>
+          Request a slot
+          <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      ),
+    },
+    {
+      key: "expert",
+      title: "Expert session",
+      body: "A paid one-on-one with a coach who knows the pathway. Useful when the scores are close or a gap needs a second opinion.",
+      action: (
         <a
-          href="/community"
-          className="group flex items-center gap-4 px-6 py-5 transition-colors duration-300 hover:bg-white/[0.03] sm:px-7"
+          href={booked.expertDone ? "/experts/sessions" : "/booking?tab=experts"}
+          className={TEXT_LINK}
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 ring-1 ring-violet-400/20 transition-transform duration-300 group-hover:scale-105">
-            <Users className="h-[18px] w-[18px] text-violet-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-semibold text-white">
-              Join the community{" "}
-              <span className="text-[11px] font-medium text-white/30">· Free</span>
-            </p>
-            <p className="mt-0.5 text-[13px] leading-relaxed text-slate-400">
-              Academy reviews, training tips, and real experiences from parents across India.
-            </p>
-          </div>
-          <ArrowRight className="h-4 w-4 shrink-0 text-white/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-white" />
+          {booked.expertDone ? "View your session" : "Find an expert"}
+          <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         </a>
+      ),
+    },
+    {
+      key: "community",
+      title: "Parent community",
+      body: "Academy reviews, training tips and real experiences from parents across India. Free.",
+      action: (
+        <a href="/community" className={TEXT_LINK}>
+          Join
+          <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+        </a>
+      ),
+    },
+  ];
 
-        {/* Save profile */}
-        {!isLoggedIn ? (
-          <a
-            href="/register"
-            className="group flex items-center gap-4 px-6 py-5 transition-colors duration-300 hover:bg-white/[0.03] sm:px-7"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-400/20 transition-transform duration-300 group-hover:scale-105">
-              <CheckCircle className="h-[18px] w-[18px] text-emerald-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold text-white">
-                Save {name}&apos;s profile{" "}
-                <span className="text-[11px] font-medium text-white/30">· Under a minute</span>
-              </p>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-slate-400">
-                Keep these fit scores, get a personalised roadmap, and track them as {name} grows.
-              </p>
-            </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-white/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-white" />
+  if (!isLoggedIn) {
+    rows.push({
+      key: "save",
+      title: `Save ${name}'s profile`,
+      body: "Keep these results, get a roadmap for the sport, and track progress as they grow. Under a minute.",
+      action: (
+        <span className="flex flex-col items-start gap-1 sm:items-end">
+          <a href="/register" className={TEXT_LINK}>
+            Create an account
+            <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
           </a>
-        ) : (
-          <div className="flex items-center gap-4 px-6 py-5 sm:px-7">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-400/20">
-              <CheckCircle className="h-[18px] w-[18px] text-emerald-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold text-white">Profile saved</p>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-slate-400">
-                {name}&apos;s sport profile is saved. Retake the assessment anytime as they grow.
+          <a
+            href={loginUrlFor("/assessment/discover")}
+            className="text-ink-body text-sm underline underline-offset-4"
+          >
+            or log in
+          </a>
+        </span>
+      ),
+    });
+  } else if (saved) {
+    rows.push({
+      key: "saved",
+      title: "Profile saved",
+      body: `${name}'s results are on their profile. Retake the assessment any time as they grow.`,
+      action: (
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-800">
+          <CheckCircle2 className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+          Saved
+        </span>
+      ),
+    });
+  }
+
+  return (
+    <section aria-labelledby="optional-extras-heading" className="mb-8">
+      <h2
+        id="optional-extras-heading"
+        className="font-editorial text-ink text-2xl font-light leading-tight"
+      >
+        Optional, whenever it helps
+      </h2>
+      <p className="text-ink-body mt-1 text-sm">None of these are needed before a trial class.</p>
+      <ul className="border-hairline mt-4 border-t">
+        {rows.map((row) => (
+          <li
+            key={row.key}
+            className="border-hairline flex flex-col gap-3 border-b py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8"
+          >
+            <div className="min-w-0">
+              <p className="text-ink text-base font-medium">{row.title}</p>
+              <p className="text-ink-body mt-0.5 max-w-[60ch] text-sm leading-relaxed">
+                {row.body}
               </p>
             </div>
-          </div>
-        )}
-      </div>
+            <div className="shrink-0">{row.action}</div>
+          </li>
+        ))}
+      </ul>
 
       {modalOpen && (
         <ScreeningRequestModal
@@ -273,6 +229,6 @@ export function WhatsNextPanel({
           onSuccess={() => setBooked((prev) => ({ ...prev, screeningDone: true }))}
         />
       )}
-    </div>
+    </section>
   );
 }

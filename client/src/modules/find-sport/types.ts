@@ -38,6 +38,12 @@ export type WizardAnswers = {
   weeklyHours: ChildWeeklyHours | null;
 };
 
+/**
+ * Where the results stand against the child's profile. `unsaved`: a logged-in parent with
+ * children brought back results from a logged-out session and has not said whose they are.
+ */
+export type SavedStatus = "idle" | "saving" | "saved" | "error" | "unsaved";
+
 /** Hard cap on how many sports a parent can put on their own shortlist. */
 export const MAX_CONSIDERED_SPORTS = 3;
 

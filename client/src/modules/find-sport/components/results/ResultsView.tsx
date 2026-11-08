@@ -1,20 +1,15 @@
 "use client";
 
+import { Check, CheckCircle, ChevronDown, Info, RotateCcw } from "lucide-react";
+import type { SavedStatus, SportFitResult, SportResult, WizardAnswers } from "../../types";
 import {
-  ArrowDown,
-  Check,
-  CheckCircle,
-  ClipboardList,
-  ListChecks,
-  RotateCcw,
-  Target,
-  TrendingUp,
-  Shuffle,
-  Sparkles,
-} from "lucide-react";
-import type { SportFitResult, SportResult, WizardAnswers } from "../../types";
-import { JourneyPipeline } from "../JourneyPipeline";
+  JourneyPipeline,
+  trialWhatsAppUrl,
+  WhatsAppIcon,
+  WHATSAPP_BUTTON,
+} from "../JourneyPipeline";
 import { ChooseSportButton } from "./ChooseSportButton";
+import { SaveResultsPrompt } from "./SaveResultsPrompt";
 import { SportFitCard } from "./SportFitCard";
 import { WhatsNextPanel } from "./WhatsNextPanel";
 
@@ -25,47 +20,23 @@ import { WhatsNextPanel } from "./WhatsNextPanel";
 
 type PortfolioRole = "bestFit" | "stretch" | "easyStart";
 
-const PORTFOLIO_META: Record<
-  PortfolioRole,
+const PORTFOLIO_META: Record<PortfolioRole, { label: string; watchFor: (name: string) => string }> =
   {
-    icon: typeof Target;
-    label: string;
-    watchFor: (name: string) => string;
-    accentBorder: string;
-    badgeBg: string;
-    iconBg: string;
-    shadow: string;
-  }
-> = {
-  bestFit: {
-    icon: Target,
-    label: "Best fit",
-    watchFor: (name) => `Try it first. Watch for ${name} asking to go back without being asked.`,
-    accentBorder: "border-t-power-orange",
-    badgeBg: "bg-power-orange/10 text-power-orange",
-    iconBg: "bg-power-orange/10 text-power-orange",
-    shadow: "shadow-md shadow-slate-200/60",
-  },
-  stretch: {
-    icon: TrendingUp,
-    label: "Stretch pick",
-    watchFor: (name) =>
-      `Asks more of ${name}. A good sign is wanting more even after the hard parts.`,
-    accentBorder: "border-t-indigo-400",
-    badgeBg: "bg-indigo-50 text-indigo-600",
-    iconBg: "bg-indigo-50 text-indigo-500",
-    shadow: "shadow-sm",
-  },
-  easyStart: {
-    icon: Shuffle,
-    label: "Easy start",
-    watchFor: () => "Cheapest, lowest-commitment way to test real interest before going further.",
-    accentBorder: "border-t-emerald-400",
-    badgeBg: "bg-emerald-50 text-emerald-600",
-    iconBg: "bg-emerald-50 text-emerald-500",
-    shadow: "shadow-sm",
-  },
-};
+    bestFit: {
+      label: "Best fit",
+      watchFor: (name) => `Try it first. Watch for ${name} asking to go back without being asked.`,
+    },
+    stretch: {
+      label: "Stretch pick",
+      watchFor: (name) =>
+        `Asks more of ${name}. A good sign is wanting more even after the hard parts.`,
+    },
+    easyStart: {
+      label: "Easy start",
+      watchFor: () =>
+        "The cheapest, lowest-commitment way to test real interest before going further.",
+    },
+  };
 
 // Rough demand ordering from data already on the sport profile — no scoring
 // changes, just deciding which of the two non-best-fit picks reads as the
@@ -228,26 +199,13 @@ function buildContextChips(answers: WizardAnswers): Array<{ label: string; value
 
 // ─── Section header ──────────────────────────────────────────────────────────
 
-function SectionHeader({
-  icon,
-  iconClass,
-  title,
-  sub,
-}: {
-  icon: React.ReactNode;
-  iconClass: string;
-  title: string;
-  sub: string;
-}) {
+function SectionHeader({ title, sub }: { title: string; sub: string }) {
   return (
-    <div className="mb-4 flex items-center gap-3">
-      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconClass}`}>
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <h2 className="font-title text-base font-bold leading-tight text-slate-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-slate-400">{sub}</p>
-      </div>
+    <div className="mb-5">
+      <h2 className="font-editorial text-ink text-balance text-3xl font-light leading-tight">
+        {title}
+      </h2>
+      <p className="text-ink-body mt-1.5 text-sm">{sub}</p>
     </div>
   );
 }
@@ -259,74 +217,61 @@ function SportCard({
   chosen,
   saving,
   onChoose,
+  compact = false,
 }: {
   result: SportResult;
   answers: WizardAnswers;
   role: PortfolioRole;
+  /** Secondary suggestions under a shortlist: one reason and the cost, nothing else (F7). */
+  compact?: boolean;
   chosen: boolean;
   saving: boolean;
   onChoose: (sport: string) => void;
 }) {
   const name = answers.childName || "Your child";
   const meta = PORTFOLIO_META[role];
-  const RoleIcon = meta.icon;
 
   return (
-    <div
-      className={`relative flex flex-col rounded-2xl border-2 border-t-4 bg-white ${
-        chosen
-          ? "border-turf-green shadow-turf-green/10 shadow-md"
-          : `border-slate-100 ${meta.accentBorder} ${meta.shadow}`
+    <article
+      className={`flex flex-col rounded-2xl border bg-white ${
+        chosen ? "border-green-700/40 ring-1 ring-green-700/30" : "border-hairline"
       }`}
     >
-      {/* Role badge */}
-      <div className="border-b border-slate-50 px-5 pb-4 pt-5">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.badgeBg}`}
-          >
-            <RoleIcon className="h-3 w-3" />
-            <span>{meta.label}</span>
-          </div>
-          <span className="text-xs font-medium text-slate-400">{result.fitLabel}</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${meta.iconBg}`}
-          >
-            <span className="text-xl font-bold">{result.sport.name[0]}</span>
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-title text-xl font-bold leading-tight text-slate-900">
-              {result.sport.name}
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-400">{result.sport.tagline}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Reasons — specific to this child's answers */}
-      <div className="flex-1 space-y-2.5 px-5 py-4">
-        {result.reasons.slice(0, 3).map((reason, i) => (
-          <div key={i} className="flex items-start gap-2.5">
-            <div className="bg-turf-green/10 mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full">
-              <Check className="text-turf-green h-2.5 w-2.5" />
-            </div>
-            <p className="text-xs leading-relaxed text-slate-600">{reason}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* What to watch for in a trial */}
-      <div className="mx-5 mb-4 rounded-xl bg-slate-50 px-3.5 py-3">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Cost to try: {result.sport.costRange}
+      <div className="px-5 pb-4 pt-5">
+        <p className="text-ink-muted flex items-center justify-between gap-2 text-sm font-medium">
+          <span>{meta.label}</span>
+          <span>{result.fitLabel}</span>
         </p>
-        <p className="text-xs leading-relaxed text-slate-600">{meta.watchFor(name)}</p>
+        <h3 className="font-editorial text-ink mt-2 text-3xl font-light leading-tight">
+          {result.sport.name}
+        </h3>
+        <p className="text-ink-body mt-1 text-sm">{result.sport.tagline}</p>
       </div>
 
-      {/* The decision — available on our picks too, not just their shortlist */}
+      {/* Reasons, specific to this child's answers */}
+      <ul className="border-hairline flex-1 space-y-2.5 border-t px-5 py-4">
+        {result.reasons.slice(0, compact ? 1 : 3).map((reason, i) => (
+          <li key={i} className="flex items-start gap-2.5">
+            <Check
+              className="text-ink mt-1 h-3.5 w-3.5 shrink-0"
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            <p className="text-ink-body text-sm leading-relaxed">{reason}</p>
+          </li>
+        ))}
+      </ul>
+
+      {/* What it costs, and what to watch for in a trial */}
+      {compact ? (
+        <p className="text-ink-body px-5 pb-4 text-sm">Cost to try: {result.sport.costRange}</p>
+      ) : (
+        <div className="bg-paper mx-5 mb-4 rounded-lg px-3.5 py-3">
+          <p className="text-ink text-sm font-medium">Cost to try: {result.sport.costRange}</p>
+          <p className="text-ink-body mt-1 text-sm leading-relaxed">{meta.watchFor(name)}</p>
+        </div>
+      )}
+
       <div className="px-5 pb-5">
         <ChooseSportButton
           sportName={result.sport.name}
@@ -336,7 +281,7 @@ function SportCard({
           tone="subtle"
         />
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -351,7 +296,7 @@ function shortlistSummary(fits: SportFitResult[], name: string): string {
 
   if (fits.length === 1) {
     return best.hasBlocker
-      ? `${best.sport.name} scores ${best.score}/100 for ${name}, but there's something to sort out first. It's in the right-hand column below.`
+      ? `${best.sport.name} scores ${best.score}/100 for ${name}, but there's something to sort out first. It's under "Where it'll be harder" below.`
       : `${best.sport.name} scores ${best.score}/100 for ${name}. Here's exactly what's behind that number.`;
   }
 
@@ -359,12 +304,8 @@ function shortlistSummary(fits: SportFitResult[], name: string): string {
   if (blocked.length === 0)
     return `${lead} Every one of them has something that fits and something that doesn't. Both are below.`;
   if (blocked.length === fits.length)
-    return `${lead} All of them have something to sort out first. See the right-hand column on each.`;
+    return `${lead} All of them have something to sort out first. See "Where it'll be harder" on each.`;
   return `${lead} ${blocked.length === 1 ? `${blocked[0].sport.name} has` : `${blocked.length} of them have`} something to sort out first.`;
-}
-
-function scrollToNextStep() {
-  document.getElementById("next-step")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 export function ResultsView({
@@ -379,13 +320,20 @@ export function ResultsView({
   chosenSport = null,
   choosingSport = false,
   onChooseSport,
+  childrenOptions = [],
+  suggestedChildId = null,
+  onSaveTo,
 }: {
   results: SportResult[];
   /** The parent's own shortlist, scored — leads the page when non-empty. */
   chosenFits?: SportFitResult[];
   answers: WizardAnswers;
   onRetake: () => void;
-  savedStatus?: "idle" | "saving" | "saved" | "error";
+  savedStatus?: SavedStatus;
+  /** The parent's children, offered when results are `unsaved`. */
+  childrenOptions?: { _id?: string; name: string }[];
+  suggestedChildId?: string | null;
+  onSaveTo?: (childId: string | null) => Promise<boolean>;
   isLoggedIn?: boolean;
   savedForName?: string;
   dependentId?: string;
@@ -430,164 +378,140 @@ export function ResultsView({
   });
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 pb-12 duration-300">
+    <div className="animate-in fade-in slide-in-from-bottom-4 pb-12 duration-300 motion-reduce:animate-none">
+      {savedStatus === "unsaved" && onSaveTo && (
+        <SaveResultsPrompt
+          childName={name}
+          childrenOptions={childrenOptions}
+          suggestedChildId={suggestedChildId}
+          onSave={onSaveTo}
+        />
+      )}
+
       {/* ── Report header ──
-          The verdict, the constraints it was measured against, and the way
-          forward all land above the fold instead of the parent having to read
-          three long cards before finding either. */}
-      <header className="mb-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-10">
+          The verdict, the constraints it was measured against, and the way forward land
+          above the fold. On the cream page itself, no card: DESIGN.md separates by tone and
+          hairline, not by boxes and shadows. */}
+      <header className="mb-10">
+        <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-12">
           <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                Assessment complete
-              </p>
+            <p className="text-ink-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium">
+              <span>Assessment complete</span>
               {savedStatus === "saving" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                  <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
-                  Saving to {savedForName ?? "profile"}…
+                <span className="text-ink-body inline-flex items-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className="border-ink/40 h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-t-transparent motion-reduce:animate-none"
+                  />
+                  Saving to {savedForName ?? "the profile"}
                 </span>
               )}
               {savedStatus === "saved" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700">
-                  <CheckCircle className="h-3 w-3 shrink-0" />
-                  Saved to {savedForName ?? "profile"}&apos;s profile
+                <span className="inline-flex items-center gap-1.5 text-green-800">
+                  <CheckCircle
+                    className="h-3.5 w-3.5 shrink-0"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  {savedForName ? `Saved to ${savedForName}'s profile` : "Saved to the profile"}
                 </span>
               )}
               {savedStatus === "error" && (
-                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700">
-                  Couldn&apos;t save automatically. Results are still shown below
+                <span className="text-amber-800">
+                  Couldn&apos;t save automatically. Your results are still below.
                 </span>
               )}
-            </div>
+            </p>
 
-            <h1 className="font-editorial text-3xl font-light leading-tight text-slate-900 sm:text-4xl">
+            <h1 className="font-editorial text-ink mt-3 text-balance text-4xl font-light leading-[1.08] sm:text-5xl">
               {hasShortlist
                 ? `How ${name} fits the sports you're considering`
-                : `${name}'s personalised sports roadmap`}
+                : `Sports that suit ${name}`}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
+            <p className="text-ink-body mt-4 max-w-[56ch] text-pretty text-lg leading-relaxed">
               {hasShortlist
                 ? shortlistSummary(chosenFits, name)
-                : "Three different picks, not a ranking: a safe best-fit, a stretch worth trying, and an economical way to start."}
+                : "Three options, each for a different reason: the strongest fit, a stretch worth trying, and the easiest way to start."}
             </p>
           </div>
 
-          {/* Headline verdict — the one number (or the one sport) plus the way
-              forward, so the CTA isn't only reachable after a long scroll. */}
+          {/* Headline verdict: the one sport (and its number) plus the way forward */}
           {headlineSport && (
-            <div className="w-full shrink-0 rounded-2xl bg-slate-900 p-5 lg:w-[268px]">
-              <p
-                className={`text-[10px] font-bold uppercase tracking-[0.18em] ${
-                  chosenSport ? "text-turf-green" : "text-power-orange"
-                }`}
-              >
+            <div className="border-hairline w-full shrink-0 rounded-2xl border bg-white p-5 lg:w-[290px]">
+              <p className="text-ink-muted text-sm font-medium">
                 {chosenSport ? "You're starting with" : topFit ? "Strongest fit" : "Best fit"}
               </p>
-              <p className="font-title mt-1 text-2xl font-bold leading-tight text-white">
+              <p className="font-editorial text-ink mt-1 text-3xl font-light leading-tight">
                 {headlineSport}
               </p>
 
-              {/* The score belongs to our verdict — once the parent has made
-                  their own call, leading with our number undercuts it. */}
+              {/* The score belongs to our verdict; once the parent has made their own
+                  call, leading with our number undercuts it. */}
               {topFit && !chosenSport && (
                 <div className="mt-3">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="font-title text-3xl font-bold tabular-nums leading-none text-white">
+                    <span className="font-editorial text-ink text-3xl font-light tabular-nums leading-none">
                       {topFit.score}
                     </span>
-                    <span className="text-xs font-medium text-slate-500">/ 100</span>
-                    <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <span className="text-ink-muted text-sm">/ 100</span>
+                    <span
+                      className={`ml-auto text-sm font-medium ${topFit.hasBlocker ? "text-amber-800" : "text-ink-body"}`}
+                    >
                       {topFit.hasBlocker ? "Needs a fix" : topFit.fitLabel}
                     </span>
                   </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="bg-power-orange h-full rounded-full transition-all duration-700"
-                      style={{ width: `${topFit.score}%` }}
-                    />
+                  <div className="bg-hairline mt-2 h-1 overflow-hidden rounded-full">
+                    <div className="bg-ink h-full" style={{ width: `${topFit.score}%` }} />
                   </div>
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={scrollToNextStep}
-                className="bg-power-orange-solid mt-4 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-colors duration-200 hover:bg-orange-600"
+              <a
+                href={trialWhatsAppUrl(name, primarySportName)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${WHATSAPP_BUTTON} mt-5 w-full`}
               >
+                <WhatsAppIcon className="h-4 w-4" />
                 Book a trial class
-                <ArrowDown className="h-3.5 w-3.5" />
-              </button>
+              </a>
             </div>
           )}
         </div>
 
         {/* Constraints every score was measured against */}
         {contextChips.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 bg-slate-50/60 px-6 py-3 sm:px-8">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Scored against
-            </span>
+          <dl className="border-hairline mt-8 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-y py-3 text-sm">
+            <span className="text-ink-muted font-medium">Scored against</span>
             {contextChips.map((chip) => (
-              <span key={chip.label} className="flex items-baseline gap-1.5 text-xs">
-                <span className="text-slate-400">{chip.label}</span>
-                <span className="font-semibold text-slate-700">{chip.value}</span>
-              </span>
+              <div key={chip.label} className="flex items-baseline gap-1.5">
+                <dt className="text-ink-muted">{chip.label}</dt>
+                <dd className="text-ink font-medium">{chip.value}</dd>
+              </div>
             ))}
-          </div>
+          </dl>
         )}
       </header>
 
-      {/* Under-10 multi-sport framing — don't push specialisation this young */}
+      {/* Under-10 multi-sport framing: don't push specialisation this young */}
       {isUnderTen && (
-        <div className="mb-8 flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3.5">
-          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
-          <p className="text-sm leading-relaxed text-indigo-900">
-            At {answers.age}, we wouldn&apos;t pick just one yet. Playing 2-3 of these together
+        <div className="bg-wash mb-10 flex items-start gap-3 rounded-xl px-4 py-3.5">
+          <Info className="text-ink mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+          <p className="text-ink text-sm leading-relaxed">
+            At {answers.age}, we wouldn&apos;t pick just one yet. Playing 2 or 3 of these together
             builds broader athleticism than specialising early. Treat the ones below as sports to
             rotate between, not a single choice to commit to.
           </p>
         </div>
       )}
 
-      {/* Key findings from the assessment */}
-      {keyFindings.length > 0 && (
-        <section className="mb-10 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
-          <SectionHeader
-            icon={<ListChecks className="h-4 w-4 text-indigo-500" />}
-            iconClass="bg-indigo-50"
-            title="Key findings from the assessment"
-            sub={
-              hasShortlist
-                ? "What every score below is measured against"
-                : `What shaped ${name}'s recommendations below`
-            }
-          />
-          {/* Two tracks on desktop — as a single column this list ran the full
-              page width at ~90 characters a line and pushed the cards down. */}
-          <ul className="grid gap-x-8 gap-y-2.5 md:grid-cols-2">
-            {keyFindings.map((finding, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-indigo-50">
-                  <Check className="h-2.5 w-2.5 text-indigo-500" />
-                </div>
-                <p className="text-sm leading-relaxed text-slate-600">{finding}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {/* ── The parent's own shortlist, scored ── */}
       {hasShortlist && (
-        <section className="mb-10">
+        <section className="mb-12">
           <SectionHeader
-            icon={<ClipboardList className="text-power-orange h-4 w-4" />}
-            iconClass="bg-power-orange/10"
             title="Sports you're considering"
-            sub="Scored on the same engine we use for our own recommendations, best fit first"
+            sub="Scored the same way as our own suggestions, best fit first."
           />
-
           <div className="space-y-5">
             {orderedFits.map((fit, i) => (
               <SportFitCard
@@ -604,18 +528,15 @@ export function ResultsView({
         </section>
       )}
 
-      {/* ── Our own recommendations ── */}
+      {/* ── Our own suggestions ── */}
       {portfolio.length > 0 && (
-        <section className="mb-10">
+        <section className="mb-12">
           {hasShortlist && (
             <SectionHeader
-              icon={<Sparkles className="h-4 w-4 text-slate-500" />}
-              iconClass="bg-slate-100"
               title="Also worth a look"
-              sub={`Sports you didn't pick that ${name}'s answers point toward`}
+              sub={`Sports you didn't pick that ${name}'s answers point toward.`}
             />
           )}
-
           <div
             className={`grid grid-cols-1 items-stretch gap-5 ${PORTFOLIO_GRID[portfolio.length] ?? "sm:grid-cols-2 lg:grid-cols-3"}`}
           >
@@ -625,6 +546,7 @@ export function ResultsView({
                 result={result}
                 answers={answers}
                 role={role}
+                compact={hasShortlist}
                 {...chooseProps(result.sport.name)}
               />
             ))}
@@ -632,29 +554,54 @@ export function ResultsView({
         </section>
       )}
 
-      {/* Next step — book a trial class */}
-      {/* scroll-mt clears the fixed 65px site nav — without it the card's own
-          header lands underneath the bar when the hero CTA jumps here. */}
+      {/* What the scores were based on. It mostly restates the parent's own answers, so
+          it sits below the sports and starts closed instead of leading the page (audit F7). */}
+      {keyFindings.length > 0 && (
+        <details className="border-hairline group mb-12 border-y py-4">
+          <summary className="text-ink flex cursor-pointer list-none items-center gap-2 text-base font-medium">
+            What we based this on
+            <ChevronDown
+              className="text-ink ml-auto h-4 w-4 transition-transform duration-200 group-open:rotate-180"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          </summary>
+          <ul className="mt-4 grid gap-x-8 gap-y-2.5 md:grid-cols-2">
+            {keyFindings.map((finding, i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <Check
+                  className="text-ink mt-1 h-3.5 w-3.5 shrink-0"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+                <p className="text-ink-body text-sm leading-relaxed">{finding}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {/* scroll-mt clears the fixed site nav */}
       <div id="next-step" className="scroll-mt-20">
-        <JourneyPipeline childName={name} topSport={primarySportName} onRetake={onRetake} />
+        <JourneyPipeline childName={name} topSport={primarySportName} />
       </div>
 
-      {/* CTA section — screening and expert session as optional add-ons */}
+      {/* Optional extras: screening, expert session, community, saving the profile */}
       <WhatsNextPanel
         childName={name}
         topSport={primarySportName}
         dependentId={dependentId}
         isLoggedIn={isLoggedIn}
+        saved={savedStatus === "saved"}
       />
 
-      {/* Retake */}
       <div className="flex justify-center">
         <button
           type="button"
           onClick={onRetake}
-          className="flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-slate-600"
+          className="text-ink-body hover:text-ink focus-visible:ring-ink focus-visible:ring-offset-paper flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
         >
-          <RotateCcw className="h-3.5 w-3.5" />
+          <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
           Retake the assessment
         </button>
       </div>

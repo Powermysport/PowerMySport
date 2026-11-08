@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarCheck, CheckCircle2 } from "lucide-react";
+import { Check } from "lucide-react";
 
 const WA_NUMBER = "918968582443";
 
@@ -12,9 +12,10 @@ const WA_NUMBER = "918968582443";
 // optional add-ons in the CTA section below, and booking a trial is the
 // immediate next step.
 
-function WhatsAppIcon({ className }: { className?: string }) {
+export function WhatsAppIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       viewBox="0 0 24 24"
       fill="currentColor"
       xmlns="http://www.w3.org/2000/svg"
@@ -25,84 +26,64 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
+/** The WhatsApp link that books a trial, used by this box and the results header. */
+export function trialWhatsAppUrl(childName: string, topSport?: string): string {
+  const name = childName || "your child";
+  const message = topSport
+    ? `Hi! I just completed the sport assessment for ${name} on PowerMySport. I'd like to book a trial class in ${topSport}. Please help me get started.`
+    : `Hi! I just completed the sport assessment for ${name} on PowerMySport and I'd like to book a trial class. Please help me get started.`;
+  return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+/** WhatsApp green from client/DESIGN.md (#15803D): white text on it passes AA. */
+export const WHATSAPP_BUTTON =
+  "btn-motion inline-flex items-center justify-center gap-2 rounded-md bg-green-700 px-5 py-3 text-base font-semibold text-white transition-colors duration-200 hover:bg-green-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
+
 export function JourneyPipeline({
   childName,
   topSport,
-  onRetake,
 }: {
   childName: string;
   /** The sport the family is most likely to try — their own first pick when they made one. */
   topSport?: string;
-  onRetake?: () => void;
 }) {
-  const name = childName || "your child";
-
-  const trialWaMessage = topSport
-    ? `Hi! I just completed the sport assessment for ${name} on PowerMySport. I'd like to book a trial class in ${topSport}. Please help me get started.`
-    : `Hi! I just completed the sport assessment for ${name} on PowerMySport and I'd like to book a trial class. Please help me get started.`;
-
-  const trialWaUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(trialWaMessage)}`;
-
   return (
-    // One card, not a white shell wrapping a dark one. The old version spent a
-    // full row plus an arrow connector restating a step the parent had just
-    // finished; that now sits in the header strip.
-    <div className="bg-ink mb-6 overflow-hidden rounded-2xl shadow-sm">
-      {/* ── Step 1: done ── */}
-      <div className="flex items-center gap-2.5 border-b border-white/[0.07] px-5 py-3 sm:px-7">
-        <CheckCircle2 className="text-turf-green h-4 w-4 shrink-0" />
-        <p className="min-w-0 flex-1 text-xs font-semibold text-slate-400">
-          <span className="text-turf-green">Step 1 complete</span> · Assessment
-        </p>
-        {onRetake && (
-          <button
-            type="button"
-            onClick={onRetake}
-            className="shrink-0 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-300"
+    // A deeper-cream band, not a dark card: DESIGN.md keeps dark surfaces to the homepage.
+    <section
+      aria-labelledby="next-step-heading"
+      className="bg-paper-deep mb-6 rounded-2xl px-5 py-6 sm:px-8 sm:py-8"
+    >
+      <p className="text-ink-body flex items-center gap-2 text-sm">
+        <Check className="text-ink h-4 w-4" strokeWidth={2} aria-hidden="true" />
+        Assessment done. Next step:
+      </p>
+      <div className="mt-4 grid items-center gap-6 lg:grid-cols-[1fr_auto] lg:gap-10">
+        <div className="min-w-0">
+          <h2
+            id="next-step-heading"
+            className="font-editorial text-ink text-balance text-3xl font-light leading-tight sm:text-4xl"
           >
-            Retake
-          </button>
-        )}
-      </div>
-
-      {/* ── Step 2: the actual next step ──
-          Copy and action sit side by side on desktop, stacked, the CTA button
-          stretched the full card width and read as a footer rather than a step. */}
-      <div className="grid items-center gap-5 px-5 py-6 sm:px-7 lg:grid-cols-[1fr_auto] lg:gap-10">
-        <div className="flex min-w-0 items-start gap-3.5">
-          <div className="bg-power-orange-solid shadow-power-orange/25 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-md">
-            <CalendarCheck className="h-[18px] w-[18px]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-power-orange text-[10px] font-semibold uppercase tracking-wider">
-              Step 2 · Next up
-            </p>
-            <p className="font-title text-xl font-bold leading-tight text-white">
-              Book a trial class{topSport ? ` in ${topSport}` : ""}
-            </p>
-            <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-400">
-              One session on an actual court tells you more than any score can. We&apos;ll find a
-              coach near you and set it up, no commitment beyond the one class.
-            </p>
-          </div>
+            Book a trial class{topSport ? ` in ${topSport}` : ""}
+          </h2>
+          <p className="text-ink-body mt-3 max-w-[56ch] text-pretty text-base leading-relaxed">
+            One session on an actual court tells you more than any score can. We&apos;ll find a
+            coach near you and set it up, with no commitment beyond the one class.
+          </p>
         </div>
 
         <div className="lg:w-[300px] lg:shrink-0">
           <a
-            href={trialWaUrl}
+            href={trialWhatsAppUrl(childName, topSport)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3.5 text-sm font-bold text-white transition-all duration-200 hover:bg-[#20bd5a] hover:shadow-lg hover:shadow-[#25D366]/25 active:scale-[0.99]"
+            className={`${WHATSAPP_BUTTON} w-full`}
           >
             <WhatsAppIcon className="h-4 w-4" />
-            Book a Trial Class on WhatsApp
+            Book a trial on WhatsApp
           </a>
-          <p className="mt-2.5 text-center text-[11px] leading-relaxed text-white/40">
-            Usually answered the same day. Screening and expert sessions are optional add-ons. See
-            below.
-          </p>
+          <p className="text-ink-body mt-2.5 text-center text-sm">Usually answered the same day.</p>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
