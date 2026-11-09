@@ -65,7 +65,12 @@ const stubSource = (html: () => string) => ({
   async fetchList() {
     this.fetches += 1;
     const body = html();
-    return { html: body, byteSize: Buffer.byteLength(body), sourceUrl: "https://example.test" };
+    return {
+      pages: [body],
+      html: body,
+      byteSize: Buffer.byteLength(body),
+      sourceUrl: "https://example.test",
+    };
   },
 });
 

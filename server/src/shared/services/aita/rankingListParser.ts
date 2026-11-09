@@ -108,6 +108,58 @@ export function parseRankingList(html: string, options: ParseListOptions = {}): 
 }
 
 /**
+ * Parses a list fetched as several pages (see `AitaRankingSource.fetchList`) into
+ * one result. Every page must describe the same week and list: a page from a
+ * different week mixed in would publish a list that never existed. A player who
+ * appears on two pages (the list shifted between requests) is kept once.
+ */
+export function parseRankingPages(pages: string[]): ParseResult {
+  if (pages.length === 0) {
+    throw new Error("No ranking pages to parse.");
+  }
+  const results = pages.map((page) => parseRankingList(page));
+  const first = results[0]!;
+  const seen = new Set<string>();
+  const rows: ParsedRankingRow[] = [];
+  let duplicates = 0;
+
+  results.forEach((result, index) => {
+    if (
+      result.sourceWeekof !== first.sourceWeekof ||
+      result.sourceCategory !== first.sourceCategory
+    ) {
+      throw new Error(
+        `Page ${index + 1} describes week ${result.sourceWeekof} / ${result.sourceCategory}, ` +
+          `page 1 describes ${first.sourceWeekof} / ${first.sourceCategory}. Refusing to merge.`
+      );
+    }
+    for (const row of result.rows) {
+      const key = row.playerKey || `${row.rank}|${row.fullName}`;
+      if (seen.has(key)) {
+        duplicates += 1;
+        continue;
+      }
+      seen.add(key);
+      rows.push(row);
+    }
+  });
+
+  const diagnostics: ParseResult["diagnostics"] = {
+    malformedRows: results.reduce((n, r) => n + r.diagnostics.malformedRows, 0),
+    missingDob: results.reduce((n, r) => n + r.diagnostics.missingDob, 0),
+    unknownStateCodes: [...new Set(results.flatMap((r) => r.diagnostics.unknownStateCodes))],
+    unknownStateRows: results.reduce((n, r) => n + r.diagnostics.unknownStateRows, 0),
+    unparsedLines: results.flatMap((r) => r.diagnostics.unparsedLines).slice(0, 25),
+    warnings: [
+      ...results.flatMap((r) => r.diagnostics.warnings),
+      ...(duplicates ? [`${duplicates} rows appeared on two pages and were kept once`] : []),
+    ],
+  };
+
+  return { ...first, rows, diagnostics };
+}
+
+/**
  * The list page prints one points figure per player, so this is the whole column
  * set. Point *composition* now lives behind a per-player endpoint — see
  * `parsePointBreakdown`.

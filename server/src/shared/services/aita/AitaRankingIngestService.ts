@@ -5,7 +5,7 @@ import { RankingSnapshot, RankingSnapshotDocument } from "../../models/RankingSn
 import { s3Service } from "../S3Service";
 import { gzipSync } from "node:zlib";
 import { AitaRankingSource, aitaRankingSource, isoDateToWid } from "./AitaRankingSource";
-import { parseRankingList } from "./rankingListParser";
+import { parseRankingPages } from "./rankingListParser";
 import { recomputeSnapshotInsights } from "./recomputeSnapshotInsights";
 import { sampleBandComposition } from "./sampleBandComposition";
 import { resolveStateCode, resolveZoneId } from "./stateCodes";
@@ -292,9 +292,7 @@ export class AitaRankingIngestService {
     // recording the failed snapshot and archiving inside the catch.
     let parsed: ParseResult;
     try {
-      parsed = parseRankingList(fetched.html, {
-        requestedPageSize: this.source.listPageSize,
-      });
+      parsed = parseRankingPages(fetched.pages);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       const failedSnapshot = await this.upsertSnapshot({

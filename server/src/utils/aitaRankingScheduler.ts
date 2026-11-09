@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from "node-cron";
 import { bootFact } from "./boot";
 import { AitaRankingIngestService } from "../shared/services/aita/AitaRankingIngestService";
 import { log as __rootLog } from "./logger";
+import { queueOpsAlert } from "./email/opsAlert";
 const log = __rootLog.child("aitaRanking");
 
 /**
@@ -96,6 +97,30 @@ let alertedAtFailureCount = 0;
  */
 let consecutiveBehindChecks = 0;
 
+/**
+ * Every alarm above used to be a log line and nothing else, and nobody reads the
+ * logs: from 8 October 2026 the import was blocked and stale for seven weeks
+ * while this file logged an error daily. Each alarm now also emails the team
+ * (see `queueOpsAlert`). Repeating conditions email at most once a week each, so
+ * a long outage is a weekly reminder, not a daily flood.
+ */
+const ALERT_REPEAT_MS = 7 * 24 * 60 * 60 * 1000;
+const lastEmailedAt = new Map<string, number>();
+const RANKING_PAGE = "https://www.aita.hitcourt.com/ranking";
+
+function emailAlert(kind: string, subject: string, paragraphs: string[]): void {
+  const last = lastEmailedAt.get(kind);
+  if (last !== undefined && Date.now() - last < ALERT_REPEAT_MS) return;
+  lastEmailedAt.set(kind, Date.now());
+  void queueOpsAlert({
+    subject,
+    heading: subject,
+    paragraphs,
+    ctaLabel: "Open AITA's ranking page",
+    ctaUrl: RANKING_PAGE,
+  });
+}
+
 const service = new AitaRankingIngestService();
 
 export function initializeAitaRankingScheduler(): {
@@ -143,6 +168,7 @@ export function initializeAitaRankingScheduler(): {
           log.warn(
             `[aita-rankings] ${report.quarantined} quarantined, ${report.failed} failed — review needed`
           );
+          emailReviewNeeded(report.quarantined, report.failed);
         }
       });
     },
@@ -159,6 +185,9 @@ export function initializeAitaRankingScheduler(): {
           `[aita-rankings] weekly sweep: ${report.published} published, ` +
             `${report.quarantined} quarantined, ${report.failed} failed`
         );
+        if (report.quarantined > 0 || report.failed > 0) {
+          emailReviewNeeded(report.quarantined, report.failed);
+        }
       });
     },
     { timezone: TIMEZONE }
@@ -184,8 +213,14 @@ export function initializeAitaRankingScheduler(): {
           // First sighting may simply be a week that landed minutes ago; the
           // hourly poll gets it within the hour. A second sighting means a full
           // day of polls went by without closing the gap.
-          if (consecutiveBehindChecks >= 2) log.error(message);
-          else log.warn(`${message} (first daily check — will escalate if it persists)`);
+          if (consecutiveBehindChecks >= 2) {
+            log.error(message);
+            emailAlert("behind", "AITA rankings are behind the source", [
+              `${health.staleReason ?? "AITA has a newer ranking week than we hold"}.`,
+              "The hourly import has had a full day to fetch it and has not. Check AITA's " +
+                "ranking page, then the server logs for [aita-rankings].",
+            ]);
+          } else log.warn(`${message} (first daily check — will escalate if it persists)`);
         } else {
           if (consecutiveBehindChecks > 0) {
             log.info(`[aita-rankings] caught up with the source at ${health.latestAsOnDate}`);
@@ -195,6 +230,11 @@ export function initializeAitaRankingScheduler(): {
           // know we match it, the age of the newest list is AITA's lag, not ours.
           if (health.stale) {
             log.error(`[aita-rankings] STALE — ${health.staleReason ?? "reason unrecorded"}.`);
+            emailAlert("stale", "AITA rankings have stopped updating", [
+              `${health.staleReason ?? "The newest list we hold is old"}.`,
+              "Parents are seeing an out-of-date ranking. The usual causes are AITA's site " +
+                "refusing our importer, or a change to how its pages are served.",
+            ]);
           }
         }
         if (health.quarantinedCount > 0) {
@@ -231,6 +271,7 @@ export function stopAitaRankingScheduler(): void {
   alertedAtFailureCount = 0;
   consecutiveBehindChecks = 0;
   suppressPollUntil = null;
+  lastEmailedAt.clear();
 }
 
 async function runGuarded(label: string, fn: () => Promise<void>): Promise<void> {
@@ -267,12 +308,36 @@ function noteSourceFailure(error: unknown): void {
   if (!shouldAlert) return;
 
   alertedAtFailureCount = consecutiveSourceFailures;
+  const lastError = error instanceof Error ? error.message : String(error);
   log.error(
     `[aita-rankings] SOURCE UNREACHABLE — ${consecutiveSourceFailures} consecutive ` +
       `failed tripwires. AITA's routes may have moved or started requiring a ` +
       `session; check https://www.aita.hitcourt.com/ranking before assuming an ` +
-      `outage. Last error: ${error instanceof Error ? error.message : String(error)}`
+      `outage. Last error: ${lastError}`
   );
+  // Already rate-limited by the doubling above (3, 6, 12, ... failed hours), so
+  // this one is not put through the weekly limit.
+  void queueOpsAlert({
+    subject: "AITA rankings: the importer cannot reach AITA",
+    heading: "The ranking importer cannot reach AITA",
+    paragraphs: [
+      `${consecutiveSourceFailures} hourly checks in a row have failed.`,
+      `Last error: ${lastError}`,
+      "A 403 usually means AITA's site (Cloudflare) is refusing our importer, which " +
+        "needs AITA to allowlist it. A 404 or a parse error usually means their pages changed.",
+    ],
+    ctaLabel: "Open AITA's ranking page",
+    ctaUrl: RANKING_PAGE,
+  });
+}
+
+/** Lists that were held back rather than published: someone needs to look. */
+function emailReviewNeeded(quarantined: number, failed: number): void {
+  emailAlert("review", "AITA rankings: lists held back for review", [
+    `The last import held back ${quarantined} list(s) and failed on ${failed}.`,
+    "Held-back lists are not shown to parents. Each records its reason (for example " +
+      "a row count far from the week before). Review them before re-running the import.",
+  ]);
 }
 
 /** Clears the failure run. A boring "nothing new" still counts as reachable. */

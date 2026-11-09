@@ -8,10 +8,15 @@ import {
 import {
   parsePointBreakdown,
   parseRankingList,
+  parseRankingPages,
   regNoFromPlayerKey,
   toFloat,
 } from "../shared/services/aita/rankingListParser";
-import { isoDateToWid, widToIsoDate } from "../shared/services/aita/AitaRankingSource";
+import {
+  AitaRankingSource,
+  isoDateToWid,
+  widToIsoDate,
+} from "../shared/services/aita/AitaRankingSource";
 import { AITA_LISTS, listByCode, listForCombo } from "../shared/services/aita/types";
 import {
   ROLLED_DOWN_PREFIX,
@@ -1165,4 +1170,69 @@ test("on a doubles list the raw doubles column is the score", () => {
     .filter((s) => !s.isInformational && !s.isDeduction)
     .reduce((sum, s) => sum + s.average, 0);
   assert.equal(scoring, band!.compositionTotal);
+});
+
+// ── Paging (AITA enforced its 100-row page cap in October 2026) ──────────────
+
+const keyFor = (n: number) => Buffer.from(`PLAYER${String(n).padStart(6, "0")}`).toString("base64");
+const pageOf = (from: number, count: number, opts?: { weekof?: string; category?: string }) =>
+  page(
+    Array.from({ length: count }, (_, i) =>
+      card({ rank: from + i, playerKey: keyFor(from + i), name: `P ${from + i}` })
+    ),
+    opts
+  );
+
+/** A source whose HTTP layer serves `pages` by the `page=` query value (1-based). */
+const sourceServing = (pages: string[]) => {
+  const source = new AitaRankingSource();
+  const asked: number[] = [];
+  (source as unknown as { request: (url: string) => Promise<unknown> }).request = async (url) => {
+    const n = Number(/[?&]page=(\d+)/.exec(url)?.[1]);
+    asked.push(n);
+    return { status: 200, data: pages[n - 1] ?? page([]) };
+  };
+  return { source, asked };
+};
+const BS12 = listByCode("BS12")!;
+
+test("a list is fetched page by page until a page comes back empty", async () => {
+  const { source, asked } = sourceServing([pageOf(1, 100), pageOf(101, 100), pageOf(201, 33)]);
+  const fetched = await source.fetchList(BS12, 1748802600);
+  assert.equal(fetched.pages.length, 3);
+  // A short page is not taken as the end: a lower cap would look exactly like it.
+  assert.deepEqual(asked, [1, 2, 3, 4]);
+  assert.equal(parseRankingPages(fetched.pages).rows.length, 233);
+});
+
+test("a server that ignores the page parameter is refused, not stored sixty times", async () => {
+  const same = pageOf(1, 100);
+  const { source } = sourceServing([same, same, same]);
+  await assert.rejects(source.fetchList(BS12, 1748802600), /ignoring the page parameter/);
+});
+
+test("an empty first page is still a layout failure, not an empty list", async () => {
+  const { source } = sourceServing([]);
+  await assert.rejects(source.fetchList(BS12, 1748802600), /contains no ranking rows/);
+});
+
+test("pages merge into one list, keeping a player who appears twice only once", () => {
+  // The list can shift between two page requests, pushing a row onto both pages.
+  const merged = parseRankingPages([pageOf(1, 3), pageOf(3, 3)]);
+  assert.deepEqual(
+    merged.rows.map((r) => r.rank),
+    [1, 2, 3, 4, 5]
+  );
+  assert.ok(merged.diagnostics.warnings.some((w) => /appeared on two pages/.test(w)));
+});
+
+test("pages from different weeks or lists are never merged", () => {
+  assert.throws(
+    () =>
+      parseRankingPages([
+        pageOf(1, 2, { weekof: "1748802600", category: "BS12" }),
+        pageOf(3, 2, { weekof: "1765132200", category: "BS12" }),
+      ]),
+    /Refusing to merge/
+  );
 });

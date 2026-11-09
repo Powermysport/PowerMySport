@@ -12,7 +12,7 @@ import { AitaList, AitaState, AitaWeek, DiscoveredSnapshot } from "./types";
  * simply published nothing. Two requests replace all four:
  *
  *   1. GET /ranking-weekof-by-year?year=2026   -> JSON week list
- *   2. GET /ranking-view?wid=&category=&record= -> the whole list as HTML
+ *   2. GET /ranking-view?wid=&category=&page=&record= -> one page of the list as HTML
  *
  * Three things about the new source are worth knowing before editing this file.
  *
@@ -25,13 +25,16 @@ import { AitaList, AitaState, AitaWeek, DiscoveredSnapshot } from "./types";
  * checks for that string explicitly: a 200 that is not JSON must be an error
  * here, not zero results.
  *
- * ── 2. `record` is not enforced server-side ───────────────────────────────────
- * The page's own dropdown offers 25/50/75/100, but the server ignores the cap.
- * Measured on the largest list (Boys U-14, 1,663 rows): `record=3000` returned
- * every row in one 3.9 MB response in 6.3 s. So a list is still one request,
- * as it was when it was a PDF — a faithful port of the pagination would have
- * cost 447 requests a sweep for nothing. `fetchList` asserts it did not come
- * back exactly full, because that is what truncation would look like.
+ * ── 2. A list is paged, 100 rows at a time ───────────────────────────────────
+ * Until October 2026 the server ignored the `record` cap and `record=3000`
+ * returned a whole list in one response. It now enforces it: anything above the
+ * dropdown's 100 silently falls back to 25 rows. The 2026-10-08 sweep fetched
+ * exactly 25 rows on all twelve lists and quarantined every one (correctly: the
+ * row-count check is what caught it). `fetchList` therefore walks the pages and
+ * stops at the first EMPTY one, not the first short one, so a future lower cap
+ * shows up as more pages rather than as a silently truncated list. Measured
+ * 2026-11-09: Boys U-12 for 02 Jun 2025 is 933 rows, page 10 holds 33 and page
+ * 11 is empty.
  *
  * ── 3. Do not use the PDF export as the data source ───────────────────────────
  * `/ranking-pdf` still exists and still returns a real PDF, but it is a freshly
@@ -59,12 +62,15 @@ const MIN_REQUEST_INTERVAL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
 
+/** Rows per list page: the largest value the server now honours (see note 2). */
+const LIST_PAGE_SIZE = 100;
 /**
- * Asked for on every list fetch. Comfortably above the largest list (1,663 rows
- * on Boys U-14) so one request is always enough, and low enough that a runaway
- * response is bounded.
+ * Stops a page walk that never reaches an empty page. The largest list is about
+ * 1,700 rows (17 pages), so 60 pages is far past any real list.
  */
-const LIST_PAGE_SIZE = 5000;
+const MAX_LIST_PAGES = 60;
+/** The PDF export still honours a large `record`, so it stays one request. */
+const PDF_RECORD = 5000;
 
 /** The body the JSON endpoints return when the AJAX header is missing. */
 const DIRECT_ACCESS_REFUSAL = "No direct script access allowed";
@@ -73,10 +79,23 @@ const DIRECT_ACCESS_REFUSAL = "No direct script access allowed";
 const IST_OFFSET_MS = 5.5 * 3600 * 1000;
 
 export interface FetchedList {
+  /** Every non-empty page, in order. Parse with `parseRankingPages`. */
+  pages: string[];
+  /** The pages joined, for hashing and the failure archive. */
   html: string;
   byteSize: number;
   sourceUrl: string;
 }
+
+/** `data-player` of each row on a page, read without a full parse. */
+const pagePlayerKeys = (html: string): string[] =>
+  [...html.matchAll(/class="[^"]*\brr-name\b[^"]*"[^>]*\bdata-player="([^"]*)"/g)].map(
+    (m) => m[1] ?? ""
+  );
+
+/** How many ranking rows a page holds. */
+const countRows = (html: string): number =>
+  (html.match(/<div[^>]*class="[^"]*\brankingCard\b/g) ?? []).length;
 
 /** Shape of the `{status, message, token, data}` envelope every endpoint uses. */
 interface AitaEnvelope<T> {
@@ -250,30 +269,59 @@ export class AitaRankingSource {
   }
 
   /**
-   * Fetches a whole ranking list as HTML — one request, every row.
+   * Fetches a whole ranking list as HTML pages, walking `page=1,2,...` until a
+   * page comes back empty (see note 2 at the top of this file).
    *
    * Deliberately does *not* send the AJAX header: this is a normal page, and
    * there is no reason to hint otherwise at a server we do not control.
    */
   async fetchList(list: AitaList, wid: number): Promise<FetchedList> {
     const sourceUrl = listUrl(list, wid);
-    const res = await this.request<string>(
-      `/ranking-view?wid=${wid}&category=${encodeURIComponent(list.code)}` +
-        `&page=1&record=${LIST_PAGE_SIZE}`
-    );
-    if (res.status !== 200 || typeof res.data !== "string") {
-      throw new Error(`Ranking list fetch failed (${res.status}): ${sourceUrl}`);
-    }
-    const html = res.data;
-    // The platform is three weeks old; a route rename would otherwise arrive as
-    // a confusing "0 rows parsed" from a perfectly successful 200.
-    if (!html.includes("rankingCard")) {
-      throw new Error(
-        `Ranking list at ${sourceUrl} contains no ranking rows — the page layout ` +
-          `or route has changed.`
+    const pages: string[] = [];
+    const seenFirstKeys = new Set<string>();
+
+    for (let page = 1; page <= MAX_LIST_PAGES; page += 1) {
+      const res = await this.request<string>(
+        `/ranking-view?wid=${wid}&category=${encodeURIComponent(list.code)}` +
+          `&page=${page}&record=${LIST_PAGE_SIZE}`
       );
+      if (res.status !== 200 || typeof res.data !== "string") {
+        throw new Error(`Ranking list fetch failed (${res.status}) on page ${page}: ${sourceUrl}`);
+      }
+      const html = res.data;
+      const rows = countRows(html);
+      if (rows === 0) {
+        if (page === 1) {
+          // A route rename would otherwise arrive as a confusing "0 rows parsed"
+          // from a perfectly successful 200.
+          throw new Error(
+            `Ranking list at ${sourceUrl} contains no ranking rows — the page layout ` +
+              `or route has changed.`
+          );
+        }
+        return this.toFetched(pages, sourceUrl);
+      }
+      // A server that ignores `page` hands back page 1 forever; without this the
+      // walk would store the first 100 rows sixty times over.
+      const firstKey = pagePlayerKeys(html)[0] ?? `#${rows}`;
+      if (seenFirstKeys.has(firstKey)) {
+        throw new Error(
+          `Ranking list at ${sourceUrl} repeated a page at page ${page} — the server ` +
+            `is ignoring the page parameter. Refusing to guess.`
+        );
+      }
+      seenFirstKeys.add(firstKey);
+      pages.push(html);
     }
-    return { html, byteSize: Buffer.byteLength(html, "utf8"), sourceUrl };
+    throw new Error(
+      `Ranking list at ${sourceUrl} did not end within ${MAX_LIST_PAGES} pages of ` +
+        `${LIST_PAGE_SIZE}. Refusing to publish an open-ended list.`
+    );
+  }
+
+  private toFetched(pages: string[], sourceUrl: string): FetchedList {
+    const html = pages.join("\n<!-- next page -->\n");
+    return { pages, html, byteSize: Buffer.byteLength(html, "utf8"), sourceUrl };
   }
 
   /** How many rows one request can hold, so the parser can spot truncation. */
@@ -342,7 +390,7 @@ export class AitaRankingSource {
   async fetchListPdf(list: AitaList, wid: number): Promise<Buffer> {
     const url =
       `/ranking-pdf?wid=${wid}&category=${list.categoryId}` +
-      `&player=&page=1&record=${LIST_PAGE_SIZE}`;
+      `&player=&page=1&record=${PDF_RECORD}`;
     const res = await this.request<ArrayBuffer>(url, "arraybuffer");
     if (res.status !== 200) {
       throw new Error(`PDF export failed (${res.status}): ${BASE_URL}${url}`);
