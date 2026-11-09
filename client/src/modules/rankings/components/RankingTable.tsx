@@ -37,6 +37,7 @@ export function RankingTable({
   benchmarks,
   stateFiltered,
   asOnLabel,
+  sinceLabel,
 }: {
   entries: RankingEntry[];
   sportSlug: string;
@@ -46,6 +47,8 @@ export function RankingTable({
   benchmarks: RankingBenchmark[];
   stateFiltered?: string | undefined;
   asOnLabel: string;
+  /** Movement is measured from this chosen week instead of the previous list. */
+  sinceLabel?: string | undefined;
 }) {
   // The list's number one is the yardstick. Falling back to the biggest total on
   // this page keeps the bars sane on a list too short to have a top-1 benchmark.
@@ -86,7 +89,11 @@ export function RankingTable({
               <td className="px-3 py-3 sm:px-4">
                 <span className="flex items-center gap-1.5">
                   <RankBadge rank={entry.rank} />
-                  <RankDelta delta={entry.rankDelta} hasBaseline={hasBaseline} />
+                  <RankDelta
+                    delta={entry.rankDelta}
+                    hasBaseline={hasBaseline}
+                    sinceLabel={sinceLabel}
+                  />
                 </span>
                 {showPercentile && (
                   <span className="text-muted-foreground mt-1 block text-xs">

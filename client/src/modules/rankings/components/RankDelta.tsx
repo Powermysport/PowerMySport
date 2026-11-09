@@ -15,10 +15,13 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 export function RankDelta({
   delta,
   hasBaseline,
+  sinceLabel,
   className = "",
 }: {
   delta: number | null | undefined;
   hasBaseline: boolean;
+  /** When movement is measured from a chosen week, e.g. "2 Jun 2025". */
+  sinceLabel?: string | undefined;
   className?: string;
 }) {
   if (!hasBaseline) return null;
@@ -29,7 +32,9 @@ export function RankDelta({
         className={`text-muted-foreground ring-border inline-flex items-center rounded px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide ring-1 ${className}`}
       >
         New
-        <span className="sr-only"> to this list</span>
+        <span className="sr-only">
+          {sinceLabel ? ` to this list since ${sinceLabel}` : " to this list"}
+        </span>
       </span>
     );
   }
@@ -40,7 +45,9 @@ export function RankDelta({
         className={`text-muted-foreground inline-flex items-center gap-0.5 text-xs ${className}`}
       >
         <Minus className="h-3 w-3" aria-hidden />
-        <span className="sr-only">Unchanged</span>
+        <span className="sr-only">
+          {sinceLabel ? `Unchanged since ${sinceLabel}` : "Unchanged"}
+        </span>
       </span>
     );
   }
@@ -56,8 +63,8 @@ export function RankDelta({
       <Icon className="h-3 w-3" aria-hidden />
       {Math.abs(delta)}
       <span className="sr-only">
-        {` ${Math.abs(delta) === 1 ? "place" : "places"} ${up ? "up" : "down"}`} since the previous
-        list
+        {` ${Math.abs(delta) === 1 ? "place" : "places"} ${up ? "up" : "down"}`} since{" "}
+        {sinceLabel ?? "the previous list"}
       </span>
     </span>
   );

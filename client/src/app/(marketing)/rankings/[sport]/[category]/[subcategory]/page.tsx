@@ -34,6 +34,8 @@ type Search = Promise<{
   state?: string;
   search?: string;
   date?: string;
+  since?: string;
+  sort?: string;
   page?: string;
 }>;
 
@@ -93,19 +95,25 @@ export default async function RankingListPage({
   const query = await searchParams;
   const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
 
-  const [result, meta, dates] = await Promise.all([
-    fetchRankings({
-      sport: sport.slug,
-      category: combo.category,
-      subcategory: combo.subcategory,
-      ...(query.state ? { state: query.state } : {}),
-      ...(query.search ? { search: query.search } : {}),
-      ...(query.date ? { date: query.date } : {}),
-      page,
-    }),
+  const listQuery = {
+    sport: sport.slug,
+    category: combo.category,
+    subcategory: combo.subcategory,
+    ...(query.state ? { state: query.state } : {}),
+    ...(query.search ? { search: query.search } : {}),
+    ...(query.date ? { date: query.date } : {}),
+    page,
+  };
+  const sort = query.sort === "climbers" ? ("climbers" as const) : ("rank" as const);
+  const [compared, meta, dates] = await Promise.all([
+    fetchRankings({ ...listQuery, ...(query.since ? { since: query.since, sort } : {}) }),
     fetchRankingMeta(sport.slug),
     fetchRankingDates(combo.category, combo.subcategory, sport.slug),
   ]);
+  // A hand-edited or stale `since` (a week we do not hold, or not earlier than
+  // the list) is refused by the API; show the plain list rather than nothing.
+  const result = compared ?? (query.since ? await fetchRankings(listQuery) : null);
+  const compareSince = result?.compare?.since;
 
   const label = comboLabel(combo);
   const entries = result?.entries ?? [];
@@ -116,7 +124,8 @@ export default async function RankingListPage({
   // Movement is only shown when there is a week to measure it against. On the
   // oldest list we hold, every player would otherwise read as "new", which is a
   // fact about our archive rather than about them.
-  const hasBaseline = Boolean(result?.snapshot?.comparedTo);
+  // A chosen comparison week is always a baseline: the API refuses one it does not hold.
+  const hasBaseline = Boolean(compareSince || result?.snapshot?.comparedTo);
   // A search that narrowed to a few people is someone looking for one child;
   // give them the answers instead of a row in a table.
   const spotlight = query.search && entries.length > 0 && entries.length <= 6 ? entries : [];
@@ -179,8 +188,12 @@ export default async function RankingListPage({
                   <CalendarDays className="h-3.5 w-3.5 text-slate-500" aria-hidden />
                   As on {formatAsOn(result.snapshot.asOnDate)}
                 </span>
-                {hasBaseline && (
-                  <span>movement against {formatAsOn(result.snapshot.comparedTo)}</span>
+                {compareSince ? (
+                  <span>movement since {formatAsOn(compareSince)}</span>
+                ) : (
+                  hasBaseline && (
+                    <span>movement against {formatAsOn(result.snapshot.comparedTo)}</span>
+                  )
                 )}
               </>
             ) : (
@@ -262,6 +275,7 @@ export default async function RankingListPage({
               benchmarks={benchmarks}
               stateFiltered={query.state}
               asOnLabel={formatAsOn(result?.snapshot?.asOnDate)}
+              sinceLabel={compareSince ? formatAsOn(compareSince) : undefined}
             />
 
             {pagination && pagination.pages > 1 && (
@@ -334,7 +348,7 @@ function Pagination({
   total,
 }: {
   basePath: string;
-  query: { state?: string; search?: string; date?: string };
+  query: { state?: string; search?: string; date?: string; since?: string; sort?: string };
   page: number;
   pages: number;
   total: number;
@@ -344,6 +358,8 @@ function Pagination({
     if (query.state) params.set("state", query.state);
     if (query.search) params.set("search", query.search);
     if (query.date) params.set("date", query.date);
+    if (query.since) params.set("since", query.since);
+    if (query.since && query.sort === "climbers") params.set("sort", "climbers");
     if (target > 1) params.set("page", String(target));
     const suffix = params.toString();
     return suffix ? `${basePath}?${suffix}` : basePath;

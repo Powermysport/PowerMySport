@@ -64,7 +64,22 @@ export function RankingFilters({
 
   const state = searchParams.get("state") ?? "";
   const date = searchParams.get("date") ?? "";
-  const hasFilters = Boolean(state || date || currentSearch);
+  const since = searchParams.get("since") ?? "";
+  const sort = searchParams.get("sort") === "climbers" ? "climbers" : "rank";
+  const hasFilters = Boolean(state || date || since || currentSearch);
+
+  // The list being shown is `date`, or the newest week when none is chosen. Only
+  // weeks before it can be compared with: comparing with a later week reads as
+  // movement backwards in time.
+  const shownWeek = date || dates[0]?.asOnDate.slice(0, 10) || "";
+  const earlierWeeks = dates.filter((entry) => entry.asOnDate.slice(0, 10) < shownWeek);
+
+  const changeWeek = (value: string) => {
+    // A comparison week that is no longer earlier than the list would be refused.
+    const target = value || dates[0]?.asOnDate.slice(0, 10) || "";
+    const keepSince = since && target && since < target;
+    apply({ date: value || null, ...(keepSince ? {} : { since: null, sort: null }) });
+  };
 
   const selectClass =
     "h-10 rounded-md border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-power-orange focus-visible:ring-offset-2";
@@ -143,7 +158,7 @@ export function RankingFilters({
             <select
               id="ranking-date"
               value={date}
-              onChange={(event) => apply({ date: event.target.value || null })}
+              onChange={(event) => changeWeek(event.target.value)}
               className={selectClass}
             >
               <option value="">Latest</option>
@@ -159,10 +174,66 @@ export function RankingFilters({
           </div>
         )}
 
+        {earlierWeeks.length > 0 && (
+          <div>
+            <label
+              htmlFor="ranking-since"
+              className="text-muted-foreground mb-1.5 block text-xs font-medium"
+            >
+              Compare with
+            </label>
+            <select
+              id="ranking-since"
+              value={since}
+              onChange={(event) =>
+                apply({
+                  since: event.target.value || null,
+                  ...(event.target.value ? {} : { sort: null }),
+                })
+              }
+              className={selectClass}
+            >
+              <option value="">Previous list</option>
+              {earlierWeeks.map((entry) => {
+                const iso = entry.asOnDate.slice(0, 10);
+                return (
+                  <option key={iso} value={iso}>
+                    {formatAsOn(entry.asOnDate)}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        )}
+
+        {since && (
+          <div>
+            <label
+              htmlFor="ranking-sort"
+              className="text-muted-foreground mb-1.5 block text-xs font-medium"
+            >
+              Order
+            </label>
+            <select
+              id="ranking-sort"
+              value={sort}
+              onChange={(event) =>
+                apply({ sort: event.target.value === "climbers" ? "climbers" : null })
+              }
+              className={selectClass}
+            >
+              <option value="rank">By rank</option>
+              <option value="climbers">Biggest climbers</option>
+            </select>
+          </div>
+        )}
+
         {hasFilters && (
           <button
             type="button"
-            onClick={() => apply({ state: null, date: null, search: null })}
+            onClick={() =>
+              apply({ state: null, date: null, since: null, sort: null, search: null })
+            }
             className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange inline-flex h-10 items-center gap-1.5 rounded-md border px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           >
             <X className="h-4 w-4" aria-hidden />

@@ -7,7 +7,8 @@ import {
 } from "@/modules/rankings/services/api";
 import { entryStatus, isJuniorBracket } from "@powermysport/shared-types";
 import { EntryRules } from "@/modules/rankings/components/HowToRead";
-import { RankTrajectory } from "@/modules/rankings/components/RankTrajectory";
+import { RankProgress } from "@/modules/rankings/components/RankProgress";
+import { readHistoryRange } from "@/modules/rankings/utils/historyRange";
 import { SeasonOutlook } from "@/modules/rankings/components/SeasonOutlook";
 import { comboHref, comboLabel, getRankingSport } from "@/modules/rankings/config/rankings";
 import {
@@ -60,10 +61,13 @@ export const metadata: Metadata = {
 
 export default async function PlayerRankingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sport: string; regNo: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const { sport: sportSlug, regNo } = await params;
+  const range = readHistoryRange(await searchParams);
   const sport = getRankingSport(sportSlug);
   if (!sport) notFound();
   if (!/^\d{4,8}$/.test(regNo)) notFound();
@@ -158,42 +162,7 @@ export default async function PlayerRankingPage({
           </section>
         )}
 
-        {charted.length > 0 && (
-          <section className="mt-10">
-            <SectionHeading
-              title="Progress week by week"
-              subtitle="Every list AITA has published since we started mirroring them."
-            />
-
-            {charted.slice(0, 2).map(([key, points]) => {
-              const [category, subcategory] = key.split("|");
-              const label = comboLabel({
-                category: category ?? "",
-                subcategory: subcategory ?? "",
-              });
-              if (points.length < 2) return null;
-              return (
-                <div
-                  key={key}
-                  className="border-border bg-card mt-4 rounded-lg border p-4 shadow-sm sm:p-5"
-                >
-                  <h3 className="text-sm font-semibold">{label}</h3>
-                  <RankTrajectory
-                    points={points.map((p) => ({
-                      asOnDate: p.asOnDate,
-                      rank: p.rank,
-                      // Lets the hover readout answer the follow-up question —
-                      // a jump of 80 places is a different story depending on
-                      // whether the points moved with it.
-                      totalPoints: p.totalPoints,
-                    }))}
-                    label={label}
-                  />
-                </div>
-              );
-            })}
-          </section>
-        )}
+        {charted.length > 0 && <RankProgress charted={charted} range={range} />}
 
         {/* Where the trend is heading, and what ageing results will cost if nothing
           replaces them. Sits after the chart because it answers the question the

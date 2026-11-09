@@ -54,13 +54,32 @@ const DEFAULT_PAGE_SIZE = 50;
 /** Mongo treats a raw string as a pattern; a name with "(" would 500 without this. */
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Rank of each player (by AITA registration number) on one published list. */
+async function ranksOnList(snapshotId: unknown, regNos?: string[]): Promise<Map<string, number>> {
+  const rows = await RankingEntry.find({
+    snapshot: snapshotId,
+    ...(regNos ? { regNo: { $in: regNos } } : {}),
+  })
+    .select("regNo rank")
+    .lean();
+  return new Map(rows.map((row) => [row.regNo, row.rank]));
+}
+
 /**
  * GET /api/rankings
  *   ?category=Boys&subcategory=U-14   (required pair)
  *   &state=Maharashtra&search=aarav&date=2026-07-27&page=1&limit=50
+ *   &since=2025-06-02&sort=climbers
  *
  * Defaults to the current list. `date` pins it to a historical snapshot, which
  * is the query the source itself can only answer by making you download a PDF.
+ *
+ * `since` compares the list with an earlier week: each row's `rankDelta` becomes
+ * the places moved since that week (null = not on that week's list) instead of
+ * since the previous list, and `compare` says which week it was. `sort=climbers`
+ * (only with `since`) orders the whole filtered list by places gained, then pages.
  */
 /**
  * Which sport's lists a request is about. Defaults to tennis so every existing
@@ -113,13 +132,23 @@ export const listRankings = asyncHandler(async (req: Request, res: Response): Pr
     ];
   }
 
-  const [entries, total, snapshot] = await Promise.all([
-    RankingEntry.find(filter)
-      .sort({ rank: 1, totalPoints: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .select(PUBLIC_ENTRY_FIELDS)
-      .lean(),
+  const since = String(req.query.since ?? "").trim();
+  if (since && !ISO_DATE.test(since)) {
+    throw new AppError("since must be YYYY-MM-DD.", 400);
+  }
+  const sortByClimb = since !== "" && String(req.query.sort ?? "") === "climbers";
+
+  const [pageEntries, total, snapshot] = await Promise.all([
+    // Ordering by places gained needs every filtered row before paging, so that
+    // case fetches them all (a list is under 2,000 rows) and pages below.
+    sortByClimb
+      ? Promise.resolve(null)
+      : RankingEntry.find(filter)
+          .sort({ rank: 1, totalPoints: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .select(PUBLIC_ENTRY_FIELDS)
+          .lean(),
     RankingEntry.countDocuments(filter),
     RankingSnapshot.findOne({
       sportSlug,
@@ -135,6 +164,59 @@ export const listRankings = asyncHandler(async (req: Request, res: Response): Pr
       .select(SNAPSHOT_INSIGHT_FIELDS)
       .lean(),
   ]);
+
+  // ── Comparing with an earlier week ────────────────────────────────────────
+  let compare: { since: string } | null = null;
+  let sinceRanks: Map<string, number> | null = null;
+  let entries = pageEntries ?? [];
+  if (since) {
+    const toDate = snapshot?.asOnDate ? new Date(snapshot.asOnDate) : null;
+    if (toDate && new Date(since) >= toDate) {
+      throw new AppError("since must be an earlier week than the list being shown.", 400);
+    }
+    const base = await RankingSnapshot.findOne({
+      sportSlug,
+      category,
+      subcategory,
+      status: "published",
+      asOnDate: new Date(since),
+    })
+      .sort({ version: -1 })
+      .select("_id")
+      .lean();
+    if (!base) {
+      throw new AppError(`No published ${category} ${subcategory} list for ${since}.`, 404);
+    }
+    compare = { since };
+
+    if (sortByClimb) {
+      const all = await RankingEntry.find(filter)
+        .sort({ rank: 1, totalPoints: -1 })
+        .select(PUBLIC_ENTRY_FIELDS)
+        .lean();
+      sinceRanks = await ranksOnList(base._id);
+      const gain = (entry: { regNo: string; rank: number }) => {
+        const then = sinceRanks!.get(entry.regNo);
+        return then === undefined ? null : then - entry.rank;
+      };
+      // Biggest climbers first; players new to the list after everyone with a
+      // baseline (their "gain" is unknown, not zero); rank breaks ties.
+      all.sort((a, b) => {
+        const ga = gain(a);
+        const gb = gain(b);
+        if (ga === null && gb === null) return a.rank - b.rank;
+        if (ga === null) return 1;
+        if (gb === null) return -1;
+        return gb - ga || a.rank - b.rank;
+      });
+      entries = all.slice((page - 1) * limit, page * limit);
+    } else {
+      sinceRanks = await ranksOnList(
+        base._id,
+        entries.map((entry) => entry.regNo)
+      );
+    }
+  }
 
   // How many ranked players share each row's state, so "#18 in Maharashtra"
   // can be read as "#18 of 214" rather than an unscaled number. Comes off the
@@ -154,6 +236,14 @@ export const listRankings = asyncHandler(async (req: Request, res: Response): Pr
     data: {
       entries: entries.map((entry) => ({
         ...withMovement(entry),
+        // With `since`, movement is measured from that week instead of the last.
+        ...(sinceRanks
+          ? {
+              rankDelta: sinceRanks.has(entry.regNo)
+                ? sinceRanks.get(entry.regNo)! - entry.rank
+                : null,
+            }
+          : {}),
         stateSize: entry.state ? (stateSizes.get(entry.state) ?? null) : null,
         // Computed here rather than in the browser so the rule for "which
         // rung is next" lives in exactly one place.
@@ -163,6 +253,7 @@ export const listRankings = asyncHandler(async (req: Request, res: Response): Pr
       // The source page this list came from, so a parent can check us against
       // AITA rather than taking our word for it.
       snapshot: snapshot ?? null,
+      compare,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     },
   });

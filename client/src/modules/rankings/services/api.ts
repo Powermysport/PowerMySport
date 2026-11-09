@@ -113,6 +113,8 @@ export interface RankingSnapshotMeta {
 export interface RankingListResult {
   entries: RankingEntry[];
   snapshot: RankingSnapshotMeta | null;
+  /** Set when movement is measured from an earlier week (`since`) instead of the last list. */
+  compare?: { since: string } | null;
   pagination: { page: number; limit: number; total: number; pages: number };
 }
 
@@ -269,6 +271,10 @@ export function fetchRankings(params: {
   state?: string;
   search?: string;
   date?: string;
+  /** Measure each row's movement from this earlier week (YYYY-MM-DD). */
+  since?: string;
+  /** "climbers" orders by places gained; only meaningful with `since`. */
+  sort?: "rank" | "climbers";
   page?: number;
 }): Promise<RankingListResult | null> {
   const query = new URLSearchParams({
@@ -281,9 +287,11 @@ export function fetchRankings(params: {
   if (params.state) query.set("state", params.state);
   if (params.search) query.set("search", params.search);
   if (params.date) query.set("date", params.date);
+  if (params.since) query.set("since", params.since);
+  if (params.since && params.sort === "climbers") query.set("sort", "climbers");
   // Filtered views churn far more than the base list, so they are cached for a
   // shorter window rather than pinned for an hour.
-  const revalidate = params.state || params.search || params.date ? 300 : 1800;
+  const revalidate = params.state || params.search || params.date || params.since ? 300 : 1800;
   return get<RankingListResult>(`/rankings?${query.toString()}`, revalidate);
 }
 
