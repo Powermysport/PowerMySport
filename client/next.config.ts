@@ -132,6 +132,15 @@ const nextConfig: NextConfig = {
         destination: "/booking?tab=experts",
         permanent: true,
       },
+      // The legacy /resources/[sport] guides are gone; the authored pathway at
+      // /roadmap/[sport] answers the same query. These were indexed, so they
+      // get a real 308 here (a page-level redirect() streams as a 200 with a
+      // meta refresh, which Search Console reports as a soft redirect).
+      {
+        source: "/resources/:sport",
+        destination: "/roadmap/:sport",
+        permanent: true,
+      },
       // Community shipped, so its "coming soon" waitlist page is gone. It was
       // indexed and sitemap-listed, so it redirects into the community app
       // rather than 404ing. `/community` is a rewrite (see below) — redirects
