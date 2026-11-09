@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from "axios";
 import { AitaList, AitaState, AitaWeek, DiscoveredSnapshot } from "./types";
+import { AITA_USER_AGENT, attachAitaIdentity } from "./aitaIdentity";
 
 /**
  * HTTP client for AITA's ranking pages on the hitcourt.com platform.
@@ -50,11 +51,11 @@ import { AitaList, AitaState, AitaWeek, DiscoveredSnapshot } from "./types";
 const BASE_URL = "https://www.aita.hitcourt.com";
 
 /**
- * Identifies us and gives AITA somewhere to complain to. This is a courtesy
- * that also makes us easy to allowlist if we end up with a data-sharing
- * arrangement — do not replace it with a browser string.
+ * Identifies us and gives AITA somewhere to complain to; shared by every AITA
+ * client and documented at https://powermysport.com/bot. Do not replace it with a
+ * browser string.
  */
-const USER_AGENT = "PowerMySportBot/1.0 (+https://powermysport.com; teams@powermysport.com)";
+const USER_AGENT = AITA_USER_AGENT;
 
 /** One request every 1.5s, serialised. Their robots.txt allows us; be polite anyway. */
 const MIN_REQUEST_INTERVAL_MS = 1500;
@@ -112,18 +113,20 @@ export class AitaRankingSource {
   private lastRequestAt = 0;
 
   constructor() {
-    this.http = axios.create({
-      baseURL: BASE_URL,
-      timeout: REQUEST_TIMEOUT_MS,
-      headers: { "User-Agent": USER_AGENT, Accept: "*/*" },
-      // 404s and 500s are handled as data, not thrown, so a single dead list
-      // does not abort a sweep.
-      validateStatus: () => true,
-      maxRedirects: 5,
-      // A 4 MB list would otherwise trip axios' default body ceiling.
-      maxContentLength: 64 * 1024 * 1024,
-      maxBodyLength: 64 * 1024 * 1024,
-    });
+    this.http = attachAitaIdentity(
+      axios.create({
+        baseURL: BASE_URL,
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: { "User-Agent": USER_AGENT, Accept: "*/*" },
+        // 404s and 500s are handled as data, not thrown, so a single dead list
+        // does not abort a sweep.
+        validateStatus: () => true,
+        maxRedirects: 5,
+        // A 4 MB list would otherwise trip axios' default body ceiling.
+        maxContentLength: 64 * 1024 * 1024,
+        maxBodyLength: 64 * 1024 * 1024,
+      })
+    );
   }
 
   private async throttle(): Promise<void> {

@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
+import { AITA_USER_AGENT, attachAitaIdentity } from "./aitaIdentity";
 import { parseFactSheet, parseMonthPage, type FactSheet, type MonthRow } from "./calendarParser";
 
 /**
@@ -25,7 +26,7 @@ import { parseFactSheet, parseMonthPage, type FactSheet, type MonthRow } from ".
 
 const BASE_URL = "https://www.aita.hitcourt.com";
 
-const USER_AGENT = "PowerMySportBot/1.0 (+https://powermysport.com; teams@powermysport.com)";
+const USER_AGENT = AITA_USER_AGENT;
 
 const MIN_REQUEST_INTERVAL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -64,14 +65,16 @@ export class AitaCalendarSource {
       this.fetchHtml = options.fetchHtml;
       return;
     }
-    const http = axios.create({
-      timeout: REQUEST_TIMEOUT_MS,
-      headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
-      // Handled as data: one dead page must not abort a sweep.
-      validateStatus: () => true,
-      maxRedirects: 5,
-      maxContentLength: 16 * 1024 * 1024,
-    });
+    const http = attachAitaIdentity(
+      axios.create({
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
+        // Handled as data: one dead page must not abort a sweep.
+        validateStatus: () => true,
+        maxRedirects: 5,
+        maxContentLength: 16 * 1024 * 1024,
+      })
+    );
     this.http = http;
     this.fetchHtml = async (url) => {
       const response = await http.get<string>(url, { responseType: "text" });

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { AITA_USER_AGENT, attachAitaIdentity } from "./aitaIdentity";
 import {
   parseAcceptanceCategory,
   parseCategories,
@@ -29,7 +30,7 @@ import {
  */
 
 const BASE_URL = "https://www.aita.hitcourt.com";
-const USER_AGENT = "PowerMySportBot/1.0 (+https://powermysport.com; teams@powermysport.com)";
+const USER_AGENT = AITA_USER_AGENT;
 const MIN_REQUEST_INTERVAL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_RETRIES = 3;
@@ -59,8 +60,11 @@ export interface FetchedEvent {
   categories: FetchedCategory[];
 }
 
+/** Carries our identity, robots.txt check, pacing and signature (see aitaIdentity). */
+const acceptanceHttp = attachAitaIdentity(axios.create());
+
 const defaultFetch: FetchAcceptance = async (url, { ajax, cookie }) => {
-  const response = await axios.get<string>(url, {
+  const response = await acceptanceHttp.get<string>(url, {
     timeout: REQUEST_TIMEOUT_MS,
     responseType: "text",
     validateStatus: () => true,
