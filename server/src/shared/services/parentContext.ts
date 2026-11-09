@@ -1,3 +1,4 @@
+import { primarySport } from "@powermysport/shared-types";
 import { ExpertSession } from "../../client/models/ExpertBooking";
 import { Player } from "../../client/models/Player";
 import { SeasonPlan } from "../../client/models/SeasonPlan";
@@ -93,9 +94,8 @@ export async function getParentContext(
   if (!user) return null;
 
   const children: ChildContext[] = players.slice(0, MAX_CHILDREN).map((player) => {
-    const sports = [
-      ...new Set([player.chosenSport, ...(player.sportsFocus ?? [])].filter(Boolean) as string[]),
-    ];
+    const own = primarySport(player);
+    const sports = own ? [own] : [];
     // The list the child ranks highest in, for the sport that ranking is for.
     const claim = claims.find((c) => c.dependentId === String(player._id) && c.standings.length);
     const standing = claim?.standings[0];

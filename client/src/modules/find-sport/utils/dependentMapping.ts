@@ -4,6 +4,7 @@
 // height category, budget tier, objective and weekly hours are not stored; they are
 // derived from the fields kept (see the helpers below).
 
+import { primarySport } from "@powermysport/shared-types";
 import type {
   ChildAmbition,
   ChildBudgetRange,
@@ -101,7 +102,6 @@ export function buildDependentPayload(
     age: answers.age ?? undefined,
     gender: genderMap,
     location: answers.state ?? undefined,
-    sportsFocus: answers.priorSports.length ? answers.priorSports : undefined,
     consideringSports: answers.consideringSports.length ? answers.consideringSports : undefined,
     sportMatches: mergeSportMatches(scored, chosen),
     wizardCompletedAt: new Date().toISOString(),
@@ -139,6 +139,7 @@ export interface WizardSourceProfile {
   gender?: ChildGender;
   location?: string;
   sportsFocus?: string[];
+  chosenSport?: string;
   consideringSports?: string[];
   budgetRange?: ChildBudgetRange;
   ambition?: ChildAmbition;
@@ -160,7 +161,10 @@ export function prefillFromPlayer(player: WizardSourceProfile): Partial<WizardAn
 
   if (player.location) out.state = player.location;
 
-  if (player.sportsFocus?.length) out.priorSports = player.sportsFocus;
+  // A retake starts from the sport the child plays now. Past sports are asked in the
+  // wizard each time and are not kept on the profile.
+  const current = primarySport(player);
+  if (current) out.priorSports = [current];
   if (player.consideringSports?.length) out.consideringSports = player.consideringSports;
 
   // The quiz's own answers

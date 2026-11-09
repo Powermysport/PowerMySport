@@ -6,6 +6,7 @@ import type {
   ChildTrainingType,
   ChildWeeklyHours,
 } from "@powermysport/shared-types";
+import { primarySport } from "@powermysport/shared-types";
 import mongoose from "mongoose";
 import { Booking } from "../../../client/models/Booking";
 import { Player, QuizAnswers } from "../../../client/models/Player";
@@ -276,8 +277,15 @@ export const updateDependent = async (
   };
   assign("gender", payload.gender);
   assign("relation", payload.relation);
-  if (payload.sportsFocus) dependent.sportsFocus = payload.sportsFocus;
-  if (payload.sports) dependent.sportsFocus = payload.sports;
+  // `sportsFocus` is no longer written by anyone; it mirrors `chosenSport` (see the Player
+  // model). An older client that still sends a list is honoured only for a child with no sport
+  // yet, taking its first entry. For a child who has one it is ignored: the assessment sends
+  // the sports a child used to play in that list, and letting it through would turn a
+  // committed sport into a past one.
+  const legacyList = payload.sportsFocus ?? payload.sports;
+  if (legacyList?.length && !primarySport(dependent) && payload.chosenSport === undefined) {
+    dependent.chosenSport = legacyList[0]!;
+  }
   if (payload.yearsPlaying !== undefined) dependent.yearsPlaying = payload.yearsPlaying;
   if (payload.personalityTags) dependent.personalityTags = payload.personalityTags;
   if (payload.location !== undefined) dependent.location = payload.location;
@@ -308,10 +316,20 @@ export const updateDependent = async (
     const d = new Date(payload.wizardCompletedAt);
     if (!isNaN(d.getTime())) (dependent as any).wizardCompletedAt = d;
   }
-  if (payload.chosenSport !== undefined) (dependent as any).chosenSport = payload.chosenSport;
-  if (payload.chosenSportAt !== undefined) {
+  if (payload.chosenSport !== undefined) {
+    // An empty value clears the sport ("not sure yet"). A different sport is a new decision,
+    // so it is dated now unless the client sent a date of its own.
+    const next = payload.chosenSport?.trim() || undefined;
+    if (next !== dependent.chosenSport) {
+      dependent.chosenSport = next as string;
+      dependent.chosenSportAt = (
+        next && payload.chosenSportAt === undefined ? new Date() : undefined
+      ) as Date;
+    }
+  }
+  if (payload.chosenSportAt !== undefined && dependent.chosenSport) {
     const d = new Date(payload.chosenSportAt);
-    if (!isNaN(d.getTime())) (dependent as any).chosenSportAt = d;
+    if (!isNaN(d.getTime())) dependent.chosenSportAt = d;
   }
 
   await dependent.save();

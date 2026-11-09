@@ -69,6 +69,7 @@
     "migrate:merge-dupe-editions": "ts-node src/migrations/41_merge_duplicate_tournament_editions.ts",
     "migrate:tournament-category": "ts-node src/migrations/42_rename_match_day_category_to_tournament.ts",
     "migrate:sports-focus": "ts-node src/migrations/43_backfill_sports_focus_from_chosen_sport.ts",
+    "migrate:one-sport": "ts-node src/migrations/73_one_sport_per_child.ts",
     "migrate:ranking-link-indexes": "ts-node src/migrations/44_add_player_ranking_link_indexes.ts",
     "test:ranking-claim": "npm run build && node --test --test-force-exit dist/tests/rankingClaim.integration.test.js",
     "test:google-client-ids": "npm run build && node --test --test-force-exit dist/tests/googleAuthClientIds.unit.test.js",

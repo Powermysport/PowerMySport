@@ -7,3 +7,4 @@ export * from "./planner";
 export * from "./child";
 export * from "./childHistory";
 export * from "./whatsapp";
+export * from "./childSport";

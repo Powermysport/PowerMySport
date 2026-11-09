@@ -8,7 +8,9 @@ export interface Child {
   age?: number;
   gender?: ChildGender;
   relation?: string;
+  /** A mirror of `[chosenSport]` kept by the server. Read the sport with `primarySport`, never this. */
   sportsFocus?: string[];
+  /** The one sport the child plays. */
   chosenSport?: string;
 }
 

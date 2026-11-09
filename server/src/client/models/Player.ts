@@ -4,6 +4,8 @@ import {
   CHILD_EXPERIENCE_LEVELS,
   CHILD_TRAINING_TYPES,
   CHILD_WEEKLY_HOURS,
+  primarySport,
+  sportsFocusFor,
 } from "@powermysport/shared-types";
 import type {
   ChildAmbition,
@@ -160,5 +162,31 @@ const playerSchema = new Schema<PlayerDocument>(
   },
   { timestamps: true }
 );
+
+/**
+ * One sport per child, and the legacy list can never disagree with it.
+ *
+ * `chosenSport` is the child's sport. `sportsFocus` is kept only as the mirror `[chosenSport]`
+ * for readers that still look at it (the mobile app, admin stats), and is rewritten here on
+ * every save, so no write path can leave the two apart. That is the whole point: the edit form
+ * used to write only the list, the assessment only the choice, and a child ended up as
+ * Badminton on one screen and Tennis on another.
+ *
+ * A row from before this rule has a list and no choice: its first entry becomes the choice
+ * the next time it is saved. A parent who clears the sport (`chosenSport` changed to empty)
+ * clears the mirror too, and is not brought back to the old list.
+ *
+ * Writes that skip `save()` (`updateOne`, `findOneAndUpdate`) skip this, so they must set
+ * both fields themselves; see `recordFindSportChoice`.
+ */
+playerSchema.pre("validate", function () {
+  // A new document counts as "modified" for every path it was built with, including a
+  // `chosenSport: undefined`, so the clearing case below is only meaningful for an existing row.
+  if (!this.chosenSport && (this.isNew || !this.isModified("chosenSport"))) {
+    const inherited = primarySport(this);
+    if (inherited) this.chosenSport = inherited;
+  }
+  this.sportsFocus = sportsFocusFor(this.chosenSport);
+});
 
 export const Player = mongoose.model<PlayerDocument>("Player", playerSchema);

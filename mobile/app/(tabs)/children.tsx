@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from "react";
+import { primarySport } from "@powermysport/shared-types";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -82,7 +83,7 @@ export default function ChildrenScreen() {
             const age = child.age ?? ageFromDob(child.dob);
             const detail = [
               age !== null && age !== undefined ? `${age} years` : null,
-              child.sportsFocus?.[0],
+              primarySport(child),
             ]
               .filter(Boolean)
               .join(" · ");

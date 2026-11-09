@@ -314,7 +314,8 @@ export async function claimForUser(
         parentalConsent,
         ...(item.gender ? { gender: item.gender } : {}),
         ...(item.relation ? { relation: item.relation } : {}),
-        sportsFocus: child.sports,
+        // A child has one sport: the first one the parent named. Any others are not kept.
+        ...(child.sports[0] ? { chosenSport: child.sports[0] } : {}),
         ...(child.state ? { location: child.state } : {}),
         ...(item.ambition ? { ambition: item.ambition } : {}),
         ...(item.experienceLevel ? { experienceLevel: item.experienceLevel } : {}),

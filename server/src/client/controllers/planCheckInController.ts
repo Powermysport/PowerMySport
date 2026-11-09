@@ -1,3 +1,4 @@
+import { sportsFocusFor } from "@powermysport/shared-types";
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { PlanCheckIn } from "../../shared/models/PlanCheckIn";
@@ -85,24 +86,20 @@ export const recordFindSportChoice = asyncHandler(
       const updated = await Player.findOneAndUpdate(
         { _id: dependentId, userId: req.user.id },
         {
-          $set: { chosenSport: sportName, chosenSportAt: new Date() },
-          // ── Why the choice also lands in `sportsFocus` ──
+          // ── Why `sportsFocus` is set here by hand ──
           //
-          // `sportsFocus` is the field the rest of the product reads as "what
-          // does this child play": the profile modal's Sports selector binds to
-          // it, and the completion scorer counts it. The wizard only ever filled
-          // it from `answers.priorSports` — the sports the child ALREADY played —
-          // which is empty for exactly the beginners this flow is built for.
+          // A child has one sport, `chosenSport`, and `sportsFocus` mirrors it as `[sport]`
+          // (see the Player model's validate hook). `findOneAndUpdate` skips that hook, so
+          // the mirror is written in the same update: the two can never be apart.
           //
-          // The result was a dashboard that named the sport, ticked "Sport
-          // chosen" and linked a badminton roadmap while sitting at 90% under an
-          // "Add their sport" button, and a profile modal whose Sports field was
-          // blank. A decision is the strongest possible statement of interest, so
-          // it belongs in both.
-          //
-          // `$addToSet`, so retaking the assessment and picking a second sport
-          // adds to the list rather than replacing what the parent told us.
-          $addToSet: { sportsFocus: sportName },
+          // This used to `$addToSet` the choice into the list instead, which left a child
+          // with the choice AND every earlier sport, and was the source of the profile
+          // showing one sport while the edit form showed another.
+          $set: {
+            chosenSport: sportName,
+            chosenSportAt: new Date(),
+            sportsFocus: sportsFocusFor(sportName),
+          },
         }
       ).lean();
       if (updated) validDependentId = dependentId;

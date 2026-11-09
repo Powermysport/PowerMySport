@@ -77,7 +77,8 @@ describe("getParentContext", () => {
     assert.equal(ctx.children[0].firstName, "Aarav");
     // Born 1 Dec 2012: still 13 on 22 Oct 2026.
     assert.equal(ctx.children[0].age, 13);
-    assert.deepEqual(ctx.children[0].sports, ["Badminton", "Tennis"]);
+    // A child has one sport: the committed one. The list written beside it is replaced by it.
+    assert.deepEqual(ctx.children[0].sports, ["Badminton"]);
     assert.equal(ctx.children[0].yearsPlaying, 3);
     assert.equal(ctx.children[0].state, "Maharashtra");
   });

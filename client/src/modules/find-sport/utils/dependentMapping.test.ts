@@ -45,7 +45,6 @@ describe("buildDependentPayload", () => {
       age: 11,
       gender: "FEMALE",
       location: "Delhi",
-      sportsFocus: ["Tennis"],
       consideringSports: ["Badminton", "Chess"],
       budgetRange: "3k-7k",
       ambition: "competitive",
@@ -59,6 +58,14 @@ describe("buildDependentPayload", () => {
       teamIndividual: 2,
       waterComfort: "comfortable",
     });
+  });
+
+  it("does not send the sports a child used to play as their sport", () => {
+    // The wizard asks about past sports, but the profile holds one sport. Sending them as a
+    // list would make the first past sport the child's sport on a new profile.
+    const payload = buildDependentPayload(answers, scored, "Riya") as Record<string, unknown>;
+    expect(payload.sportsFocus).toBeUndefined();
+    expect(payload.priorSports).toBeUndefined();
   });
 
   it("keeps the quiz traits out of the top level, where they used to be", () => {
@@ -119,6 +126,15 @@ describe("prefillFromPlayer", () => {
     expect(prefillFromPlayer({}).age).toBeUndefined();
   });
 
+  it("starts a retake from the sport the child plays now, and nothing else", () => {
+    expect(prefillFromPlayer({ chosenSport: "Badminton" }).priorSports).toEqual(["Badminton"]);
+    // An older row that only has the list: its first entry is the sport.
+    expect(prefillFromPlayer({ sportsFocus: ["Squash", "Tennis"] }).priorSports).toEqual([
+      "Squash",
+    ]);
+    expect(prefillFromPlayer({}).priorSports).toBeUndefined();
+  });
+
   it("keeps a team-or-solo answer of 0 distinct from no answer", () => {
     expect(prefillFromPlayer({ quiz: { teamIndividual: 0 } }).teamIndividual).toBe(0);
     expect(prefillFromPlayer({ quiz: {} }).teamIndividual).toBeUndefined();
@@ -148,7 +164,6 @@ describe("prefillFromPlayer", () => {
       "budget",
       "ambition",
       "weeklyHours",
-      "priorSports",
       "consideringSports",
       "state",
       "gender",

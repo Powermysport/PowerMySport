@@ -2,6 +2,7 @@ import {
   CHILD_HISTORY_LIMITS,
   type ChildEventDatePrecision,
   type ChildHistoryView,
+  primarySport,
 } from "@powermysport/shared-types";
 import mongoose from "mongoose";
 import { AppError } from "../../../utils/AppError";
@@ -142,7 +143,7 @@ export const ChildHistoryService = {
     };
 
     const currentYear = new Date().getUTCFullYear();
-    const sport = child.chosenSport ?? child.sportsFocus?.[0] ?? null;
+    const sport = primarySport(child);
 
     return {
       child: {

@@ -1,4 +1,5 @@
 "use client";
+import { primarySport } from "@powermysport/shared-types";
 
 import { Button } from "@/modules/shared/ui/Button";
 import { ProfileCompletionRing } from "@/modules/player/components/ProfileCompletionRing";
@@ -65,7 +66,7 @@ export function DependentsCard({
         <ul className="divide-hairline border-hairline mt-8 divide-y border-y">
           {dependents.map((dependent) => {
             const age = getDependentAge(dependent.dob) ?? dependent.age ?? null;
-            const sport = dependent.chosenSport || dependent.sportsFocus?.[0];
+            const sport = primarySport(dependent);
             const completion = calculateDependentCompletion(dependent);
             const meta = [
               dependent.relation ? formatDependentRelation(dependent.relation) : null,

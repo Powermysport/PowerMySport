@@ -1,4 +1,5 @@
 "use client";
+import { primarySport } from "@powermysport/shared-types";
 
 import { toast } from "@/lib/toast";
 import { useRefreshProfile } from "@/modules/auth/hooks/useProfile";
@@ -119,7 +120,7 @@ export default function DependentDetailPage() {
 
   const age = getDependentAge(dependent.dob) ?? dependent.age ?? null;
   const completion = calculateDependentCompletion(dependent);
-  const effectiveSport = dependent.chosenSport || dependent.sportsFocus?.[0];
+  const effectiveSport = primarySport(dependent) ?? undefined;
   const openEdit = () => setShowEditModal(true);
 
   const discoverHref = `/assessment/discover?dependentId=${encodeURIComponent(dependent._id ?? "")}`;
@@ -180,7 +181,7 @@ export default function DependentDetailPage() {
         <ChildRankingAndPlanner
           dependentId={dependent._id}
           dependentName={dependent.name}
-          sports={[dependent.chosenSport, ...(dependent.sportsFocus ?? [])]}
+          sports={[primarySport(dependent)]}
         />
       )}
 

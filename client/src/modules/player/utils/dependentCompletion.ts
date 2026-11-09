@@ -1,3 +1,4 @@
+import { primarySport } from "@powermysport/shared-types";
 // ─── Dependent Profile Completion Scoring ───────────────────────────────────
 //
 // "Complete" means the profile has what the planner, tournaments and booking
@@ -44,12 +45,9 @@ export const DEPENDENT_COMPLETION_FIELDS: Array<{
     field: "sportsFocus",
     label: "Sports interest",
     weight: 20,
-    // `chosenSport` is the STRONGER signal, not a lesser one: `sportsFocus` is
-    // what a parent listed as interesting, `chosenSport` is what they committed
-    // to on the assessment results page. Checking only the weaker field left a
-    // parent who finished the assessment and picked badminton staring at an
-    // "Add their sport" button.
-    isFilled: (p) => !!p.chosenSport || (p.sportsFocus?.length ?? 0) > 0,
+    // A child has one sport; `primarySport` is the single place that decides it, so the
+    // dashboard, the edit form and this score can never disagree about whether it is set.
+    isFilled: (p) => primarySport(p) !== null,
   },
   {
     field: "location",

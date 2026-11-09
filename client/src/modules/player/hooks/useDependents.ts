@@ -1,4 +1,5 @@
 "use client";
+import { primarySport } from "@powermysport/shared-types";
 
 import { nextStepHref } from "@/modules/player/config/dependentNextStep";
 import { useProfile } from "@/modules/auth/hooks/useProfile";
@@ -62,7 +63,7 @@ const summarize = (dependent: Dependent): DependentSummary | null => {
     id,
     name: dependent.name || "Child",
     age: getDependentAge(dependent.dob) ?? dependent.age ?? null,
-    sport: dependent.chosenSport || dependent.sportsFocus?.[0] || null,
+    sport: primarySport(dependent),
     completionPercent: percent,
     topGap: top ? { ...top, href: nextStepHref(id, top.field) } : null,
     hasAssessment: hasAssessment(dependent),

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { primarySport } from "@powermysport/shared-types";
 import {
   View,
   Text,
@@ -38,7 +39,7 @@ import { COLORS } from "@lib/constants";
 import { PressableScale, Reveal } from "@lib/motion";
 import { RANKINGS_HOME, ROADMAP_HOME } from "@lib/routes";
 
-const sportOf = (c: Child): string => c.chosenSport || c.sportsFocus?.[0] || "";
+const sportOf = (c: Child): string => primarySport(c) ?? "";
 /** The planner and the ranking lists are tennis only for now; a child with no sport yet is offered them. */
 const isTennisChild = (c: Child): boolean => !sportOf(c) || sportOf(c).toLowerCase() === "tennis";
 

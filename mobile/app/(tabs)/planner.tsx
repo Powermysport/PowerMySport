@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { primarySport } from "@powermysport/shared-types";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +20,7 @@ import { Reveal } from "@lib/motion";
 
 type Tab = "plan" | "suggested" | "find";
 
-const sportOf = (c: Child) => c.chosenSport || c.sportsFocus?.[0] || null;
+const sportOf = (c: Child) => primarySport(c);
 
 /** "Boys U-12, ranked 212 on the list of 7 Sep 2026." and the sentence about how events are matched. */
 function standingSentence(overview: PlannerOverview): string {

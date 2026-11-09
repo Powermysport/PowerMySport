@@ -1,3 +1,4 @@
+import { primarySport } from "@powermysport/shared-types";
 import mongoose from "mongoose";
 import { Player } from "../../client/models/Player";
 import { SeasonPlan } from "../../client/models/SeasonPlan";
@@ -199,9 +200,8 @@ export async function prepareSeasonEntry(
   // The plan's sport is fixed by its first event, so search that sport; before there is a plan,
   // the child's own sport narrows it when it is one we cover.
   const plan = await SeasonPlanService.get(userId, dependentId);
-  const ownSport = [child.chosenSport, ...(child.sportsFocus ?? [])].find(
-    (sport): sport is string => Boolean(sport) && isSupportedSport(String(sport))
-  );
+  const own = primarySport(child);
+  const ownSport = own && isSupportedSport(own) ? own : undefined;
   const sportSlug =
     plan.entries.length > 0 ? plan.sportSlug : ownSport && toSupportedSlug(ownSport);
 

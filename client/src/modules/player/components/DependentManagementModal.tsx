@@ -1,4 +1,5 @@
 "use client";
+import { primarySport } from "@powermysport/shared-types";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Input } from "../../shared/ui/Input";
@@ -45,7 +46,6 @@ const EMPTY_FORM: DependentFormData = {
   dob: "",
   gender: "MALE",
   relation: DEFAULT_DEPENDENT_RELATION,
-  sportsFocus: [],
   location: "",
 };
 
@@ -110,6 +110,8 @@ export default function DependentManagementModal({
       // "Jammu & Kashmir" spelling matches no option in the canonical list, so
       // the field would render blank and lose the state on the next save.
       location: normalizeStoredState(profile.location),
+      // One sport. An older row that only has the list shows its first entry.
+      chosenSport: primarySport(profile) ?? "",
     });
   }, [isOpen, initialDependent, initialStepId]);
 
@@ -174,7 +176,11 @@ export default function DependentManagementModal({
     }
 
     try {
-      await onSubmit(formData);
+      // The list is derived on the server from the sport; sending it back would only
+      // restate what the server already holds.
+      const { sportsFocus: _derived, ...data } = formData;
+      void _derived;
+      await onSubmit(data);
       setFormData(EMPTY_FORM);
       setStepIndex(0);
       onClose();
@@ -330,10 +336,14 @@ export default function DependentManagementModal({
             {/* ── Step 1: Sport & Setup ─────────────────────────────────────────── */}
             {stepIndex === 1 && (
               <>
-                <ProfileEditField label="Sports">
+                <ProfileEditField
+                  label="Sport"
+                  hint="The one sport they play now. The assessment's suggestions are separate."
+                >
                   <SportsMultiSelect
-                    value={formData.sportsFocus || []}
-                    onChange={(sports) => handleChange("sportsFocus", sports)}
+                    single
+                    value={formData.chosenSport ? [formData.chosenSport] : []}
+                    onChange={(sports) => handleChange("chosenSport", sports[0] ?? "")}
                   />
                 </ProfileEditField>
 

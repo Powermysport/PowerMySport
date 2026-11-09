@@ -13,6 +13,12 @@ interface SportsMultiSelectProps {
   required?: boolean;
   /** When provided, only these sport names (case-insensitive) are selectable. */
   allowedSports?: string[];
+  /**
+   * One sport, not a list: picking replaces the current choice and closes the list. For
+   * a field that holds exactly one sport (a child's sport), so "sports they play" can
+   * never have two answers.
+   */
+  single?: boolean;
 }
 
 export default function SportsMultiSelect({
@@ -21,6 +27,7 @@ export default function SportsMultiSelect({
   disabled = false,
   required = false,
   allowedSports,
+  single = false,
 }: SportsMultiSelectProps) {
   const [allSports, setAllSports] = useState<Sport[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,6 +121,12 @@ export default function SportsMultiSelect({
 
   // Handle sport selection
   const handleSelectSport = (sport: string) => {
+    if (single) {
+      onChange([sport]);
+      setSearchQuery("");
+      setIsOpen(false);
+      return;
+    }
     if (!isChosen(sport)) {
       onChange([...value, sport]);
     }
@@ -186,7 +199,7 @@ export default function SportsMultiSelect({
             aria-controls="sports-multiselect-listbox"
             aria-autocomplete="list"
             aria-label="Search or add sports"
-            placeholder="Search for a sport"
+            placeholder={single && chips.length > 0 ? "Change sport" : "Search for a sport"}
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             onFocus={() => setIsOpen(true)}

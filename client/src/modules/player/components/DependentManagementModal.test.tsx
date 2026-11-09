@@ -6,16 +6,24 @@ import type { Dependent } from "@/types";
 import DependentManagementModal from "./DependentManagementModal";
 
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/modules/sports/services/sports", () => ({
+  sportsApi: {
+    getAllSports: async () => [{ name: "Tennis" }, { name: "Badminton" }, { name: "Squash" }],
+  },
+}));
 
 const child = { _id: "c1", name: "Riya", dob: "2016-06-01", gender: "FEMALE" } as Dependent;
 
-const open = (onSubmit = vi.fn().mockResolvedValue(undefined)) => {
+const open = (
+  onSubmit = vi.fn().mockResolvedValue(undefined),
+  initialDependent: Dependent = child
+) => {
   render(
     <DependentManagementModal
       isOpen
       onClose={() => undefined}
       onSubmit={onSubmit}
-      initialDependent={child}
+      initialDependent={initialDependent}
     />
   );
   return onSubmit;
@@ -62,5 +70,62 @@ describe("the edit-profile dialog", () => {
 
     expect(saveButton).not.toBe(continueButton);
     expect(continueButton.isConnected).toBe(false);
+  });
+
+  describe("the sport", () => {
+    const toSportStep = () => fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    it("is one field, showing the sport the child plays and not a stale list", async () => {
+      // Jatin's old shape: committed to Badminton, list says Tennis.
+      open(vi.fn(), { ...child, chosenSport: "Badminton", sportsFocus: ["Tennis"] });
+      toSportStep();
+
+      const chosen = await screen.findByRole("list", { name: /selected sports/i });
+      expect(chosen.textContent).toContain("Badminton");
+      expect(chosen.textContent).not.toContain("Tennis");
+    });
+
+    it("shows the first entry of an old list for a child with no chosen sport", async () => {
+      open(vi.fn(), { ...child, sportsFocus: ["Squash", "Tennis"] });
+      toSportStep();
+
+      expect((await screen.findByRole("list", { name: /selected sports/i })).textContent).toBe(
+        "Squash"
+      );
+    });
+
+    it("replaces the sport when another is picked, and saves it without the old list", async () => {
+      const onSubmit = open(vi.fn().mockResolvedValue(undefined), {
+        ...child,
+        chosenSport: "Badminton",
+        sportsFocus: ["Badminton"],
+      });
+      toSportStep();
+
+      fireEvent.focus(await screen.findByRole("combobox", { name: /search or add sports/i }));
+      fireEvent.click(await screen.findByRole("button", { name: "Tennis" }));
+      expect(screen.getByRole("list", { name: /selected sports/i }).textContent).toBe("Tennis");
+
+      toSportStep();
+      fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+      await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      const sent = onSubmit.mock.calls[0]![0];
+      expect(sent.chosenSport).toBe("Tennis");
+      expect("sportsFocus" in sent).toBe(false);
+    });
+
+    it("clears the sport when it is removed", async () => {
+      const onSubmit = open(vi.fn().mockResolvedValue(undefined), {
+        ...child,
+        chosenSport: "Tennis",
+      });
+      toSportStep();
+      fireEvent.click(await screen.findByRole("button", { name: "Remove Tennis" }));
+      toSportStep();
+      fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0]![0].chosenSport).toBe("");
+    });
   });
 });

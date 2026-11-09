@@ -1,4 +1,4 @@
-import type { ChildGender } from "@powermysport/shared-types";
+import { primarySport, type ChildGender } from "@powermysport/shared-types";
 import { Player } from "../../client/models/Player";
 import { resolveChildAge } from "../../utils/childAge";
 
@@ -143,10 +143,7 @@ const genderLabel = (gender: DependentRow["gender"]): "Boy" | "Girl" | null =>
   gender === "MALE" ? "Boy" : gender === "FEMALE" ? "Girl" : null;
 
 const toSummary = (row: DependentRow, fallbackCity: string | null): DependentSummary => {
-  // `chosenSport` is the sport the parent committed to on the assessment
-  // results page; `sportsFocus` is everything they were considering. The
-  // decision beats the shortlist.
-  const sport = clean(row.chosenSport) || clean(row.sportsFocus?.[0]);
+  const sport = primarySport(row);
 
   return {
     sport,
