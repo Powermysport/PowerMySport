@@ -127,6 +127,8 @@ export function useSeasonPlan(dependentId: string) {
     /** The parent's goal and blocked dates. Defaults until a plan has been saved. */
     preferences: query.data?.preferences,
     isLoading: query.isPending && hydrated && Boolean(token),
+    /** The plan could not be read, so whether a season exists is unknown. */
+    isError: query.isError,
     /** Slugs already on the plan, so a list can mark what is already chosen. */
     plannedSlugs: new Set(entries.map((entry) => entry.editionSlug)),
     /** Suggested events the parent marked "not for us". */

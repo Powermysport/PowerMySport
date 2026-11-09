@@ -68,7 +68,6 @@ export function SeasonWorkspace({
   onSelect,
   reach,
   finder,
-  afterPlan,
 }: {
   dependentId: string;
   yearlyLimit: { cap: number | null; ageGroup: string };
@@ -95,8 +94,6 @@ export function SeasonWorkspace({
     open: boolean;
     onOpenChange: (open: boolean) => void;
   };
-  /** Sits under the plan in the same column: the season setup. */
-  afterPlan?: React.ReactNode;
 }) {
   const isWide = useIsWide();
   // What can still be entered. The suggestions list and its count draw from this, so
@@ -229,11 +226,6 @@ export function SeasonWorkspace({
             </TabsContent>
           </Tabs>
         </motion.section>
-        {afterPlan && (
-          <motion.div variants={BLOCK} className="order-4 min-w-0 lg:order-none">
-            {afterPlan}
-          </motion.div>
-        )}
       </div>
 
       <div className="order-5 min-w-0 lg:order-none">

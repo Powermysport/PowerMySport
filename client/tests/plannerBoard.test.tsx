@@ -448,7 +448,10 @@ import { PlannerApp } from "@/modules/planner/components/PlannerApp";
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
 
-function renderPlanner(session: "parent" | "anonymous" | "coach" = "parent") {
+function renderPlanner(
+  session: "parent" | "anonymous" | "coach" = "parent",
+  options: { intake?: boolean } = {}
+) {
   useAuthStore.setState({
     hydrated: true,
     token: session === "anonymous" ? null : "token",
@@ -458,11 +461,21 @@ function renderPlanner(session: "parent" | "anonymous" | "coach" = "parent") {
         : ({ ...profileUser, id: "u1", role: session === "coach" ? "Coach" : "Parent" } as never),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <PlannerApp />
     </QueryClientProvider>
   );
+  // A child with no season starts on the questions. Most of these tests are about the board
+  // itself, so they step past the questions the way a parent who skips them would. The
+  // intake tests ask to stay on them.
+  if (session === "parent" && !options.intake) {
+    void screen
+      .findByRole("button", { name: /Skip and browse tournaments/ })
+      .then((skip) => fireEvent.click(skip))
+      .catch(() => {});
+  }
+  return view;
 }
 
 /**
@@ -497,13 +510,6 @@ const section = (title: string): HTMLElement => {
 
 /** The summary tile that says what the season may cost. It exists once something is planned. */
 const cost = (): HTMLElement => section("What it may cost");
-
-/** The season setup at the top of the page, opened if it is shut. */
-const openSetup = async (): Promise<HTMLElement> => {
-  const toggle = await screen.findByRole("button", { name: /Your season setup/ });
-  if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
-  return toggle.closest("[data-tour='setup']") as HTMLElement;
-};
 
 const originalMatchMedia = window.matchMedia;
 /** A wide screen: the details sit beside the calendar and the season is drawn as a grid. */
@@ -791,16 +797,15 @@ describe("asking again with nothing changed", () => {
 });
 
 describe("offering events in an older age group", () => {
-  it("is off to begin with, and saved with the rest of the setup when switched on", async () => {
-    renderPlanner();
-    const setup = await openSetup();
-    const box = within(setup).getByRole("checkbox", {
+  it("is off to begin with, and saved with the rest of the answers when switched on", async () => {
+    renderPlanner("parent", { intake: true });
+    const box = await screen.findByRole("checkbox", {
       name: /Also show events in an older age group/,
     });
     expect((box as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(box);
-    fireEvent.click(within(setup).getByRole("button", { name: "Save setup" }));
+    fireEvent.click(screen.getByRole("button", { name: /Build Aarav's season/ }));
 
     await waitFor(() => expect(savedPrefs.length).toBe(1));
     expect(savedPrefs[0]).toMatchObject({ includeOlderGroup: true });
@@ -1010,12 +1015,24 @@ describe("the suggested season", () => {
 // ─── Preferences ──────────────────────────────────────────────────────────────
 
 describe("planning preferences", () => {
-  // The setup sits at the top of the page. It starts open for a parent who has set
-  // nothing and planned nothing, and closed for anyone else, so open it only if shut.
-  const open = openSetup;
+  // The questions are the first screen for a child with no season.
+  const open = async () => {
+    renderPlanner("parent", { intake: true });
+    return (await screen.findByRole("heading", { name: /Tell us about Aarav/ })).closest(
+      "section"
+    ) as HTMLElement;
+  };
+  const build = (el: HTMLElement) =>
+    within(el).getByRole("button", { name: /Build Aarav's season/ });
 
-  it("saves the goal, a blocked range and a budget together", async () => {
-    renderPlanner();
+  it("asks before it suggests anything, and makes nothing until the parent builds", async () => {
+    const el = await open();
+    expect(suggestCalls).toEqual([]);
+    expect(within(el).queryByText(/Three events across the weeks ahead/)).toBeNull();
+    expect(within(el).getByLabelText(/Which city do you travel from/)).toBeTruthy();
+  });
+
+  it("saves the answers, then builds the season and shows it", async () => {
     const el = await open();
 
     fireEvent.click(within(el).getByRole("radio", { name: /Match experience/ }));
@@ -1023,7 +1040,8 @@ describe("planning preferences", () => {
     fireEvent.change(within(el).getByLabelText("From"), { target: { value: "2026-11-20" } });
     fireEvent.change(within(el).getByLabelText("To"), { target: { value: "2026-11-25" } });
     fireEvent.change(within(el).getByLabelText(/Season budget/), { target: { value: "60000" } });
-    fireEvent.click(within(el).getByRole("button", { name: "Save setup" }));
+    fireEvent.change(within(el).getByLabelText(/Which city/), { target: { value: "Pune" } });
+    fireEvent.click(build(el));
 
     await waitFor(() => expect(savedPrefs.length).toBe(1));
     expect(savedPrefs[0]).toEqual({
@@ -1032,10 +1050,14 @@ describe("planning preferences", () => {
       blockedRanges: [{ from: "2026-11-20", to: "2026-11-25" }],
       includeOlderGroup: false,
     });
+    expect(savedCities).toEqual(["Pune"]);
+    // The season replaces the questions, on the suggestions.
+    expect(await screen.findByText(/Three events across the weeks ahead/)).toBeTruthy();
+    expect(suggestCalls).toEqual([false]);
+    expect(screen.queryByRole("heading", { name: /Tell us about Aarav/ })).toBeNull();
   });
 
-  it("will not save a budget that is not an amount, or dates that run backwards", async () => {
-    renderPlanner();
+  it("will not build from a budget that is not an amount, or dates that run backwards", async () => {
     const el = await open();
 
     fireEvent.change(within(el).getByLabelText(/Season budget/), { target: { value: "lots" } });
@@ -1046,9 +1068,16 @@ describe("planning preferences", () => {
     fireEvent.change(within(el).getByLabelText("To"), { target: { value: "2026-11-20" } });
 
     expect(within(el).getByText(/end date is before the start date/)).toBeTruthy();
-    expect(
-      (within(el).getByRole("button", { name: "Save setup" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    expect((build(el) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("lets a parent change their answers after the season is built", async () => {
+    world.recs = { savedKey: inputKey(), value: suggestionFor() };
+    renderPlanner();
+    fireEvent.click(await screen.findByRole("button", { name: "Change answers" }));
+    expect(await screen.findByRole("heading", { name: /Tell us about Aarav/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Keep my season as it is/ }));
+    expect(await screen.findByRole("button", { name: "Change answers" })).toBeTruthy();
   });
 
   it("says what is saved in the closed panel, budget included", async () => {
@@ -1292,8 +1321,6 @@ describe("accessibility", () => {
     const plan = await waitFor(() => within(section("Their plan")).getByText("AITA cs5-pune"));
     expect(plan).toBeTruthy();
 
-    await openSetup();
-    fireEvent.click(screen.getByRole("button", { name: "Add dates" }));
     fireEvent.click(
       await within(section("Their plan")).findByRole("button", { name: /Add or edit my figures/ })
     );
@@ -1301,6 +1328,15 @@ describe("accessibility", () => {
 
     expect(await scan(container)).toEqual([]);
   }, 30_000);
+
+  it("has no violations on the questions a new season starts with", async () => {
+    const { container } = renderPlanner("parent", { intake: true });
+    const el = (await screen.findByRole("heading", { name: /Tell us about Aarav/ })).closest(
+      "section"
+    ) as HTMLElement;
+    fireEvent.click(within(el).getByRole("button", { name: "Add dates" }));
+    expect(await scan(container)).toEqual([]);
+  });
 
   it("has no violations on the signed-out landing page", async () => {
     const { container } = renderPlanner("anonymous");

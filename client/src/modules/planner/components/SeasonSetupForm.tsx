@@ -1,8 +1,5 @@
 "use client";
 
-import { PANEL } from "@/modules/planner/utils/motion";
-import { AnimatePresence, motion } from "framer-motion";
-import { useSeasonPlan } from "@/modules/planner/hooks/useSeasonPlan";
 import {
   MAX_BLOCKED_RANGES,
   type BlockedRange,
@@ -11,13 +8,21 @@ import {
 } from "@/modules/planner/services/seasonPlan";
 import { formatInr, parseRupees } from "@/modules/planner/utils/money";
 import { Button } from "@/modules/shared/ui/Button";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useState } from "react";
 
 /**
- * What the parent wants the season to be for, and the dates their child cannot
- * play. Everything the suggestions are built around that the calendar cannot
- * tell us.
+ * The questions a season is built from: what it is for, where the family travels
+ * from, the dates their child cannot play, and a budget. Everything the suggestions
+ * are built around that the calendar cannot tell us.
+ *
+ * ── Why this comes BEFORE the suggestions ───────────────────────────────────
+ * A parent pays for the convenience of not doing the work, so the planner asks a few
+ * quick questions once and then does the rest. The suggestions used to sit behind a
+ * "Suggest my season" button with this form folded away underneath, so a parent got
+ * generic answers first and had to find the questions themselves. Now the form is the
+ * first screen, its one button builds the season, and answers are changed later from a
+ * one-line summary.
  *
  * ── Why a short list and not a free-text box ────────────────────────────────
  * The recommender serves exactly these three goals. A text box would promise
@@ -72,17 +77,28 @@ const rowProblem = (row: BlockedRange): string | null => {
   return null;
 };
 
-function PreferencesForm({
+export function SeasonSetupForm({
   saved,
   homeState,
-  saving,
-  onSave,
+  savedCity,
+  busy,
+  submitLabel,
+  busyLabel,
+  onSubmit,
+  footer,
 }: {
   saved: PlanPreferences;
   homeState: string | null;
-  saving: boolean;
-  onSave: (preferences: PlanPreferences) => void;
+  /** The city on the parent's profile, if there is one. */
+  savedCity: string | null;
+  busy: boolean;
+  submitLabel: string;
+  busyLabel: string;
+  /** `city` is null when it is blank or unchanged, so nothing is saved for it. */
+  onSubmit: (preferences: PlanPreferences, city: string | null) => void;
+  footer?: React.ReactNode;
 }) {
+  const [city, setCity] = useState<string>(savedCity ?? "");
   const [goal, setGoal] = useState<SeasonGoal>(saved.goal);
   const [rows, setRows] = useState<BlockedRange[]>(saved.blockedRanges);
   const [budgetText, setBudgetText] = useState<string>(
@@ -100,12 +116,13 @@ function PreferencesForm({
 
   const problems = rows.map(rowProblem);
   const usable = rows.filter((row) => row.from && row.to);
-  const changed =
-    goal !== saved.goal ||
-    budget !== saved.budget ||
-    includeOlder !== saved.includeOlderGroup ||
-    JSON.stringify(usable) !== JSON.stringify(saved.blockedRanges);
-  const canSave = changed && !budgetProblem && problems.every((problem) => problem === null);
+  const cityText = city.trim();
+  const cityProblem =
+    cityText.length === 1 ? "Enter the name of your city, for example Pune." : null;
+  // The button builds the season, so it is always available once the answers are valid:
+  // asking again with nothing changed is free, and a parent who is happy with the defaults
+  // should not have to alter something to move on.
+  const canSave = !budgetProblem && !cityProblem && problems.every((problem) => problem === null);
 
   const update = (index: number, patch: Partial<BlockedRange>) =>
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -114,17 +131,20 @@ function PreferencesForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (canSave) {
-          onSave({
-            goal,
-            budget,
-            includeOlderGroup: includeOlder,
-            blockedRanges: usable.map(({ from, to, label }) => ({
-              from,
-              to,
-              ...(label?.trim() ? { label: label.trim() } : {}),
-            })),
-          });
+        if (canSave && !busy) {
+          onSubmit(
+            {
+              goal,
+              budget,
+              includeOlderGroup: includeOlder,
+              blockedRanges: usable.map(({ from, to, label }) => ({
+                from,
+                to,
+                ...(label?.trim() ? { label: label.trim() } : {}),
+              })),
+            },
+            cityText.length >= 2 && cityText !== (savedCity ?? "") ? cityText : null
+          );
         }
       }}
       className="space-y-6"
@@ -191,6 +211,32 @@ function PreferencesForm({
           </label>
         </div>
         <div className="space-y-6">
+          <div>
+            <label htmlFor="season-city" className="text-sm font-semibold text-slate-900">
+              Which city do you travel from?
+            </label>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              So we can estimate travel and stay for each tournament. Saved to your profile; only
+              the city is used, never an address.
+            </p>
+            <input
+              id="season-city"
+              type="text"
+              value={city}
+              maxLength={60}
+              autoComplete="address-level2"
+              placeholder="Pune"
+              onChange={(event) => setCity(event.target.value)}
+              className={`${INPUT} mt-2 w-full max-w-56`}
+              aria-describedby={cityProblem ? "season-city-problem" : undefined}
+            />
+            {cityProblem && (
+              <p id="season-city-problem" role="alert" className="mt-1 text-xs text-red-700">
+                {cityProblem}
+              </p>
+            )}
+          </div>
+
           <fieldset>
             <legend className="text-sm font-semibold text-slate-900">Dates they cannot play</legend>
             <p className="mt-1 text-xs leading-relaxed text-slate-600">
@@ -301,76 +347,25 @@ function PreferencesForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" disabled={!canSave || saving}>
-          {saving ? "Saving..." : "Save setup"}
+        <Button type="submit" disabled={!canSave || busy}>
+          {busy ? busyLabel : submitLabel}
         </Button>
-        {!changed && <span className="text-xs text-slate-500">Nothing changed yet.</span>}
+        {footer}
       </div>
     </form>
   );
 }
 
-export function PreferencesPanel({
-  dependentId,
-  homeState,
-  defaultOpen = false,
-}: {
-  dependentId: string;
-  homeState: string | null;
-  /** Open on arrival, for a parent who has not set anything yet. */
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const { preferences, savePreferences } = useSeasonPlan(dependentId);
-  const saved = preferences ?? DEFAULT_PREFERENCES;
-
+/** One line saying what the season was built around, for the page that shows the result. */
+export function setupSummary(saved: PlanPreferences, city: string | null): string {
   const blocked = saved.blockedRanges.length;
-  const summary = `${GOAL_LABEL[saved.goal]}${
-    blocked > 0 ? `, ${blocked} set${blocked === 1 ? "" : "s"} of dates off` : ""
-  }${saved.budget !== null ? `, budget ${formatInr(saved.budget)}` : ""}${
-    saved.includeOlderGroup ? ", older age groups on" : ""
-  }`;
-
-  return (
-    <div
-      data-tour="setup"
-      className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="hover:bg-paper-deep/60 focus-visible:ring-ink flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
-      >
-        <span className="text-sm">
-          <span className="font-semibold text-slate-900">Your season setup</span>
-          <span className="ml-2 text-slate-600">{summary}</span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
-          aria-hidden
-        />
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div {...PANEL} className="overflow-hidden">
-            <div className="border-t border-slate-200 bg-white p-4 sm:p-6">
-              <div>
-                {/* Keyed by what is saved: after a save the form restarts from it. */}
-                <PreferencesForm
-                  key={JSON.stringify(saved)}
-                  saved={saved}
-                  homeState={homeState}
-                  saving={savePreferences.isPending}
-                  onSave={(next) =>
-                    savePreferences.mutate(next, { onSuccess: () => setOpen(false) })
-                  }
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+  return [
+    GOAL_LABEL[saved.goal],
+    city ? `from ${city}` : null,
+    blocked > 0 ? `${blocked} set${blocked === 1 ? "" : "s"} of dates off` : null,
+    saved.budget !== null ? `budget ${formatInr(saved.budget)}` : null,
+    saved.includeOlderGroup ? "older age groups on" : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }

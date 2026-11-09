@@ -4,10 +4,8 @@ import { Collapsible } from "@/modules/planner/components/Collapsible";
 import { LinkRankingPrompt } from "@/modules/planner/components/LinkRankingPrompt";
 import { ExpectedLater } from "@/modules/planner/components/ExpectedLater";
 import { PlannerTour } from "@/modules/planner/components/PlannerTour";
-import {
-  DEFAULT_PREFERENCES,
-  PreferencesPanel,
-} from "@/modules/planner/components/PreferencesPanel";
+import { SeasonIntake } from "@/modules/planner/components/SeasonIntake";
+import { DEFAULT_PREFERENCES, setupSummary } from "@/modules/planner/components/SeasonSetupForm";
 import { SeasonSummary } from "@/modules/planner/components/SeasonSummary";
 import { SeasonWorkspace, type WorkspaceTab } from "@/modules/planner/components/SeasonWorkspace";
 import { useCosts } from "@/modules/planner/hooks/useCosts";
@@ -24,6 +22,7 @@ import { Button } from "@/modules/shared/ui/Button";
 import { Skeleton } from "@/modules/shared/ui/Skeleton";
 import { MotionConfig, motion } from "framer-motion";
 import { useRef, useState } from "react";
+import type { PlanPreferences } from "@/modules/planner/services/seasonPlan";
 import type { PlannerEdition } from "@powermysport/shared-types";
 import { ArrowRight, CircleHelp } from "lucide-react";
 import Link from "next/link";
@@ -58,12 +57,17 @@ export function PlannerBoard({
     remove,
     savePreferences,
     isLoading: planLoading,
+    isError: planFailed,
   } = useSeasonPlan(dependentId);
   const tour = usePlannerTour();
   // The panel on show. A plan to look at if there is one; otherwise the suggestions,
   // which are what a parent with an empty plan has come for.
   const [tab, setTab] = useState<WorkspaceTab | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
+  // The questions are the first screen until a season exists. A parent who skips them,
+  // or who comes back to change their answers, is tracked here.
+  const [skippedSetup, setSkippedSetup] = useState(false);
+  const [changingSetup, setChangingSetup] = useState(false);
   const browseRef = useRef<HTMLDivElement>(null);
   // The event open on the calendar. It lives here because opening one asks for its
   // estimate, and the estimates are fetched here.
@@ -71,7 +75,11 @@ export function PlannerBoard({
 
   // The suggestions on screen are priced alongside the plan. These hooks sit above
   // the early returns below so they run on every render.
-  const { recommendations, suggest } = useRecommendations(dependentId);
+  const {
+    recommendations,
+    suggest,
+    isLoading: recommendationsLoading,
+  } = useRecommendations(dependentId);
   const suggestedSlugs = recommendations?.items.map((item) => item.slug) ?? [];
   const pricedSlugs = selectedSlug ? [...suggestedSlugs, selectedSlug] : suggestedSlugs;
   const {
@@ -81,7 +89,35 @@ export function PlannerBoard({
     saveHomeCity,
   } = useCosts(dependentId, pricedSlugs);
 
-  if (isPending) {
+  // Saving the answers and building the season are one action to the parent: the button
+  // stays locked from the first request to the last, and a failure of either leaves them on
+  // the questions with the server's message already toasted by the mutation.
+  const [building, setBuilding] = useState(false);
+  const build = async (next: PlanPreferences, city: string | null) => {
+    setBuilding(true);
+    try {
+      await savePreferences.mutateAsync(next);
+      if (city) await saveHomeCity.mutateAsync(city);
+      await suggest.mutateAsync(false);
+      setTab("suggested");
+      setChangingSetup(false);
+    } catch {
+      // Each mutation reports its own error.
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  // Whether a season exists is only known once the plan and the saved suggestions have
+  // each answered once. Wait for that, but only once: a plan that failed goes back to
+  // "loading" every time something re-reads it, and gating on that would unmount the page
+  // that re-reads it, over and over.
+  const [planEverFailed, setPlanEverFailed] = useState(false);
+  if (planFailed && !planEverFailed) setPlanEverFailed(true);
+  const [answered, setAnswered] = useState(false);
+  if (!answered && !planLoading && !recommendationsLoading) setAnswered(true);
+
+  if (isPending || !answered) {
     return (
       <div className="space-y-4" aria-busy="true">
         <Skeleton className="h-24 w-full" />
@@ -101,29 +137,30 @@ export function PlannerBoard({
     );
   }
 
+  // A child whose chosen sport has no mirrored ranking list cannot be helped, whether
+  // or not a ranking is linked: a linked tennis ranking on a badminton player is stale or
+  // test data, and planning tennis events for them would contradict their own profile.
+  if (sport && !rankedSportFor([sport])) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-6">
+        <h2 className="font-editorial text-lg font-normal text-slate-900">
+          The planner covers tennis for now
+        </h2>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
+          {dependentName} plays {sport}, and we do not yet hold a ranking list or entry rules for
+          it. You can still browse its calendar on the tournaments page.
+        </p>
+        <Link
+          href="/tournaments"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-orange-700 hover:underline"
+        >
+          See tournaments
+          <ArrowRight className="h-4 w-4" aria-hidden />
+        </Link>
+      </div>
+    );
+  }
   if (data.linkState === "not-linked") {
-    // A child whose chosen sport has no mirrored ranking list cannot be helped
-    // by linking one, so offering it would be a dead end.
-    if (sport && !rankedSportFor([sport])) {
-      return (
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <h2 className="font-editorial text-lg font-normal text-slate-900">
-            The planner covers tennis for now
-          </h2>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
-            {dependentName} plays {sport}, and we do not yet hold a ranking list or entry rules for
-            it. You can still browse its calendar on the tournaments page.
-          </p>
-          <Link
-            href="/tournaments"
-            className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-orange-700 hover:underline"
-          >
-            See tournaments
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          </Link>
-        </div>
-      );
-    }
     return <LinkRankingPrompt dependentId={dependentId} dependentName={dependentName} />;
   }
 
@@ -145,6 +182,39 @@ export function PlannerBoard({
 
   const { standing, shortlist } = data;
 
+  const savedCity = costs?.origin.kind === "city" ? (costs.origin.city ?? null) : null;
+  // A season exists once there are suggestions or a plan. Until then, or when the parent
+  // asks to change their answers, the questions come first. Wait for the estimates to
+  // report the saved city so the field starts filled in rather than blank.
+  // If the plan could not be read we cannot tell, so the questions are not forced on them.
+  const hasSeason = entries.length > 0 || recommendations !== null || planEverFailed;
+  const showIntake = changingSetup || (!hasSeason && !skippedSetup);
+  if (showIntake && !costs && costsLoading) {
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+  if (showIntake) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <SeasonIntake
+          childName={dependentName}
+          saved={preferences ?? DEFAULT_PREFERENCES}
+          homeState={standing.state ?? null}
+          savedCity={savedCity}
+          building={building}
+          onBuild={(next, city) => void build(next, city)}
+          onSkip={hasSeason ? undefined : () => setSkippedSetup(true)}
+          onCancel={changingSetup ? () => setChangingSetup(false) : undefined}
+        />
+        {tour.open && <PlannerTour onFinish={tour.finish} />}
+      </MotionConfig>
+    );
+  }
+
   // Every event the page knows about, so a plan entry can borrow its end date
   // and venue from the live calendar.
   const calendar = new Map<string, PlannerEdition>();
@@ -160,15 +230,6 @@ export function PlannerBoard({
   const openCount = splitByEntryState(shortlist.ownGroup).open.length;
   const activeTab: WorkspaceTab = tab ?? (entries.length > 0 ? "plan" : "suggested");
 
-  // A parent who has set nothing and planned nothing has not started: open the setup
-  // for them. Anyone else finds it closed, summarised in one line.
-  const untouched =
-    entries.length === 0 &&
-    (!preferences ||
-      (preferences.goal === "points" &&
-        preferences.blockedRanges.length === 0 &&
-        preferences.budget === null));
-
   return (
     <MotionConfig reducedMotion="user">
       <div className="space-y-6">
@@ -179,6 +240,16 @@ export function PlannerBoard({
             </h2>
             <p className="mt-0.5 text-sm text-slate-600">
               {standingSentence(standing, formatLongDate(standing.asOnDate))}
+            </p>
+            <p data-tour="setup" className="mt-1 text-sm text-slate-600">
+              Built around: {setupSummary(preferences ?? DEFAULT_PREFERENCES, savedCity)}.
+              <button
+                type="button"
+                onClick={() => setChangingSetup(true)}
+                className="ml-2 font-semibold text-orange-700 hover:underline"
+              >
+                Change answers
+              </button>
             </p>
           </div>
           <button
@@ -251,15 +322,6 @@ export function PlannerBoard({
             selectedSlug={selectedSlug}
             onSelect={setSelectedSlug}
             reach={data.reach ?? {}}
-            afterPlan={
-              planLoading ? null : (
-                <PreferencesPanel
-                  dependentId={dependentId}
-                  homeState={standing.state ?? null}
-                  defaultOpen={untouched}
-                />
-              )
-            }
             finder={{
               containerRef: browseRef,
               description: `Everything ${standing.category} ${standing.subcategory} (${rankClause(standing)}) can enter, and what is closed to them and why.`,

@@ -29,12 +29,12 @@ export const TOUR_STEPS = [
   {
     target: "setup",
     title: "Tell us what matters this season",
-    body: "Choose a goal, add dates your child can't play, and set a budget if you have one. We use these to choose tournaments for you. You can skip this and change it any time.",
+    body: "Choose a goal, add dates your child can't play, and set a budget if you have one. We build the season from your answers. Everything is optional, and you can change it any time.",
   },
   {
     target: "pick",
     title: "Pick tournaments",
-    body: "Press Suggest my season for a short list, or look through everything open to your child. Add the ones you like to your plan.",
+    body: "Your suggested season is ready once you have answered. Add the ones you like to your plan, or look through everything open to your child.",
   },
   {
     target: "next",
