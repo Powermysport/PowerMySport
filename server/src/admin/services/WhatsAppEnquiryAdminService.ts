@@ -300,6 +300,12 @@ export async function sendTeamMessage(
   if (!sent) throw new AppError("WhatsApp did not accept the message. Try again shortly.", 502);
 
   doc.teamMessages.push({ at: now, text, via, ...(by ? { by: by.slice(0, 120) } : {}) });
+  // A person has taken over: any coach questions still waiting would swallow the parent's answer.
+  doc.set("intake", undefined);
+  await WhatsAppEnquiry.updateMany(
+    { phoneHash: doc.phoneHash, _id: { $ne: doc._id }, intake: { $exists: true } },
+    { $unset: { intake: 1 } }
+  );
   doc.lastTeamMessageAt = now;
   if (doc.followUpStatus === "none" || doc.followUpStatus === "new") {
     doc.followUpStatus = "contacted";

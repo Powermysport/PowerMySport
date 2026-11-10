@@ -98,6 +98,24 @@ export async function currentEnquiry(
   });
 }
 
+/**
+ * Opens a new enquiry for this number, whatever topic it was on. For a request that must not be
+ * folded into an older one, such as a coach search after the team already handled a request.
+ */
+export async function newEnquiry(
+  phoneHash: string,
+  question: string,
+  now: Date = new Date()
+): Promise<WhatsAppEnquiryDocument> {
+  return WhatsAppEnquiry.create({
+    phoneHash,
+    parentRef: parentRefFor(phoneHash),
+    reference: newReference(),
+    question: plain(question, MAX_QUESTION) ?? "(no text)",
+    lastMessageAt: now,
+  });
+}
+
 export interface EnquiryFields {
   childAge?: unknown;
   sport?: unknown;
@@ -234,10 +252,19 @@ export interface FollowUpResult {
 export async function requestFollowUp(
   phoneHash: string,
   question: string,
-  details: { kind: AssistanceKind; summary?: unknown }
+  details: {
+    kind: AssistanceKind;
+    summary?: unknown;
+    /** New details for a request already waiting: update it and tell the team again. */
+    refresh?: boolean;
+  }
 ): Promise<FollowUpResult> {
   const enquiry = await currentEnquiry(phoneHash, question);
-  if (enquiry.followUpStatus === "new" && enquiry.assistance.includes(details.kind)) {
+  if (
+    !details.refresh &&
+    enquiry.followUpStatus === "new" &&
+    enquiry.assistance.includes(details.kind)
+  ) {
     return { reference: enquiry.reference, alreadyRequested: true };
   }
 

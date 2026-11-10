@@ -440,14 +440,6 @@ export async function answerWhatsAppMessage(
     return { reply: OPT_OUT_REPLY, firstContact: false };
   }
 
-  // A message after the team wrote to them is (likely) an answer to the team. The assistant still
-  // replies, but the team is told and the enquiry goes back to waiting, or the answer is lost.
-  if (intent?.kind !== "done" && intent?.kind !== "feedback") {
-    await noteParentReply(phoneHash, text ?? userMessage).catch((err) =>
-      log.error("could not note the reply to the team", err)
-    );
-  }
-
   // Finishing and feedback cost no model call, so they do not use up the parent's daily messages
   // and still work when the daily limit has been reached.
   if (intent?.kind === "done") {
@@ -486,6 +478,15 @@ export async function answerWhatsAppMessage(
         return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
       }
     }
+  }
+
+  // A message typed after the team wrote to them is (likely) an answer to the team. The assistant
+  // still replies, but the team is told and the enquiry goes back to waiting, or the answer is
+  // lost. A tap, or an answer to the coach questions above, is not a reply to the team.
+  if (!message.replyId && !intent) {
+    await noteParentReply(phoneHash, text ?? userMessage).catch((err) =>
+      log.error("could not note the reply to the team", err)
+    );
   }
 
   if (intent?.kind === "followup" && intent.assistance === "coach") {

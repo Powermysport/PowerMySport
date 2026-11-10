@@ -4,7 +4,7 @@ import {
   type IntakeStep,
   type WhatsAppEnquiryDocument,
 } from "../../client/models/WhatsAppEnquiry";
-import { currentEnquiry, plain, requestFollowUp } from "./whatsappEnquiries";
+import { currentEnquiry, newEnquiry, plain, requestFollowUp } from "./whatsappEnquiries";
 import { followUpReply, type ReplyButton } from "./whatsappInteractive";
 
 /**
@@ -51,6 +51,7 @@ const QUESTION: Record<IntakeStep, string> = {
     "Anything else the team should know? For example preferred timings, budget, or a coach for a tournament. Or tap Nothing more.",
 };
 const RETRY: Partial<Record<IntakeStep, string>> = {
+  city: "Got it, I've noted that for the team. Which city and area do you live in? For example: Chandigarh, Sector 22. Or type skip.",
   age: "Sorry, I didn't catch the age. Please send just the number of years, for example 11, or type skip.",
 };
 
@@ -124,7 +125,13 @@ async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<Intak
   e.set("intake", undefined);
   e.lastMessageAt = new Date();
   await e.save();
-  const result = await requestFollowUp(e.phoneHash, e.question, { kind: "coach", summary });
+  // The parent just gave these details, so the team hears about them even if this enquiry
+  // already had a request waiting.
+  const result = await requestFollowUp(e.phoneHash, e.question, {
+    kind: "coach",
+    summary,
+    refresh: true,
+  });
   return {
     reply: followUpReply("coach", result.reference, result.alreadyRequested),
     forwarded: true,
@@ -140,7 +147,13 @@ export async function startIntake(
   question: string,
   now = new Date()
 ): Promise<IntakeReply> {
-  const enquiry = await currentEnquiry(phoneHash, question, now);
+  const current = await currentEnquiry(phoneHash, question, now);
+  // Only details given on this same, fresh topic are reused. A topic the team already handled, or
+  // one from an earlier day, may be about another child: start a clean enquiry and ask again.
+  const reusable =
+    current.followUpStatus === "none" &&
+    now.getTime() - current.createdAt.getTime() < 24 * 60 * 60 * 1000;
+  const enquiry = reusable ? current : await newEnquiry(phoneHash, question, now);
   const step = nextStep(enquiry);
   if (!step) return finish(enquiry);
   enquiry.intake = { step, startedAt: now, retries: 0 };
@@ -154,6 +167,25 @@ const CANCEL = /^(cancel|stop it|exit|quit|band karo|rehne do)\.?$/i;
 
 export function isCancel(text: string): boolean {
   return CANCEL.test(text.trim());
+}
+
+const NOT_A_PLACE =
+  /\b(think|want|wants|should|would|need|needs|academy|academies|coach|coaching|book|help|looking|maybe|please)\b/i;
+const PLACE_LEAD = /^(i|we)\s+(live|stay|am|are)\s+(in|at|near)\s+|^(in|at|near)\s+/i;
+
+/**
+ * The place in an answer to "Which city and area?", or undefined when the answer is about
+ * something else. "I live in Pune, Baner" gives "Pune, Baner".
+ */
+export function parseCity(text: string): string | undefined {
+  const cleaned = text
+    .trim()
+    .replace(PLACE_LEAD, "")
+    .replace(/[.!]+$/, "")
+    .trim();
+  if (!cleaned || NOT_A_PLACE.test(cleaned)) return undefined;
+  if (cleaned.split(/\s+/).length > 6) return undefined;
+  return plain(cleaned, 60);
 }
 
 /** The first whole number in the text, if it is a plausible age. */
@@ -197,8 +229,21 @@ export async function answerIntake(
       const sport = plain(answer, 40);
       if (sport) enquiry.sport = sport;
     } else if (step === "city") {
-      const city = plain(answer, 60);
-      if (city) enquiry.city = city;
+      const city = parseCity(answer);
+      if (!city) {
+        // Something else was said ("I think an academy for Jatin"): keep it for the team as a
+        // note, and ask for the place once more rather than storing a sentence as the city.
+        const note = plain(answer, 240);
+        if (note) intake.needs = [intake.needs, note].filter(Boolean).join(". ").slice(0, 240);
+        if (intake.retries < MAX_RETRIES) {
+          enquiry.intake = { ...intake, retries: intake.retries + 1 };
+          enquiry.lastMessageAt = now;
+          await enquiry.save();
+          return { reply: RETRY.city! };
+        }
+      } else {
+        enquiry.city = city;
+      }
     } else if (step === "level") {
       const level = plain((replyId && LEVEL_FOR_ID[replyId]) || answer, 60);
       if (level) enquiry.level = level;

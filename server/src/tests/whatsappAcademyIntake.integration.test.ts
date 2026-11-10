@@ -22,7 +22,11 @@ const {
 } = require("../shared/services/whatsappAssistantService");
 const { ASSISTANT_CHAT_TOOLS } = require("../shared/services/chatToolsService");
 const { PILOT_REPLY, PILOT_PASSED_ON_REPLY } = require("../shared/services/whatsappPilot");
-const { parseAge, INTAKE_CANCELLED } = require("../shared/services/whatsappAcademyIntake");
+const {
+  parseAge,
+  parseCity,
+  INTAKE_CANCELLED,
+} = require("../shared/services/whatsappAcademyIntake");
 const { decryptValue } = require("../shared/utils/encryption");
 const { sendTeamMessage } = require("../admin/services/WhatsAppEnquiryAdminService");
 const redis = require("../config/redis").default;
@@ -142,11 +146,67 @@ describe("the coach/academy intake", () => {
     assert.equal((await enquiry()).intake, undefined);
   });
 
+  it("a coach request after an older handled one starts a clean enquiry and asks everything again", async () => {
+    // 2026-11-10: the intake reused an Oct 25 enquiry, skipped age/sport/level from the old child
+    // and ended with "already with our team" without telling the team anything new.
+    await WhatsAppEnquiry.create({
+      phoneHash: hashPhone(PHONE),
+      parentRef: "old",
+      reference: "PMS-OLD01",
+      question: "older question",
+      childAge: 14,
+      sport: "tennis",
+      level: "intermediate",
+      assistance: ["coach"],
+      followUpStatus: "new",
+      lastMessageAt: new Date(),
+      lastTeamMessageAt: new Date(),
+    });
+    const start = await say("I want to book a coach", "next_coach");
+    assert.match(start.reply, /How old is your child/, "nothing reused from the older enquiry");
+    await say("11");
+    await say("Badminton");
+    await say("Chandigarh, Sector 22");
+    await say("Just starting", "intake_level_beginner");
+    const done = await say("Nothing more", "intake_skip");
+    assert.match(done.reply, /We have noted that you are looking for a coach or academy/);
+    assert.doesNotMatch(done.reply, /PMS-OLD01/);
+
+    const fresh = await WhatsAppEnquiry.findOne({ reference: { $ne: "PMS-OLD01" } }).lean();
+    assert.equal(fresh.childAge, 11);
+    assert.equal(fresh.city, "Chandigarh, Sector 22");
+    assert.equal(fresh.followUpStatus, "new");
+    assert.equal(await OutboxMessage.countDocuments({}), 1, "the team is emailed about it");
+  });
+
+  it("a sentence is not taken as the city: it is kept as a note and the place asked again", async () => {
+    await say("Find a coach or academy", "next_coach");
+    await say("12");
+    await say("Tennis");
+    const again = await say("I think i should go for academy for Jatin");
+    assert.match(again.reply, /noted that for the team/);
+    assert.match(again.reply, /Which city and area/);
+    assert.equal((await enquiry()).city, undefined);
+    assert.match((await say("I live in Pune, Baner")).reply, /Where is your child at/);
+    assert.equal((await enquiry()).city, "Pune, Baner");
+    await say("Competes", "intake_level_competes");
+    await say("Nothing more", "intake_skip");
+    assert.match((await enquiry()).followUpSummary, /academy for Jatin/);
+  });
+
   it("reads an age out of a sentence", () => {
     assert.equal(parseAge("my son is 12 years old"), 12);
     assert.equal(parseAge("2"), undefined);
     assert.equal(parseAge("45"), undefined);
     assert.equal(parseAge("twelve"), undefined);
+  });
+
+  it("reads a place, and refuses what is not one", () => {
+    assert.equal(parseCity("Pune, Baner"), "Pune, Baner");
+    assert.equal(parseCity("I live in Mohali"), "Mohali");
+    assert.equal(parseCity("in Sector 22, Chandigarh."), "Sector 22, Chandigarh");
+    assert.equal(parseCity("I think i should go for academy for Jatin"), undefined);
+    assert.equal(parseCity("we want a coach near home"), undefined);
   });
 });
 
