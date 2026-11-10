@@ -1171,7 +1171,12 @@ const requestWhatsappFollowupTool: ChatToolDefinition = {
       // The team matches coaches and academies by hand, so it first needs the child's details.
       // The intake asks for them one at a time, in code, from the parent's next message on.
       try {
-        const step = await startIntake(context.phoneHash, context.userMessage ?? "");
+        const step = await startIntake(
+          context.phoneHash,
+          context.userMessage ?? "",
+          new Date(),
+          context.userId
+        );
         if (step.forwarded) {
           return {
             sent: true,

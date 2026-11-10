@@ -399,3 +399,152 @@ describe("a number outside the pilot", () => {
     assert.equal((await stored()).length, 0);
   });
 });
+
+describe("the coach questions for a parent with an account", () => {
+  const { User } = require("../client/models/User");
+  const { Player } = require("../client/models/Player");
+  const years = (n: number) => {
+    const d = new Date();
+    d.setUTCFullYear(d.getUTCFullYear() - n);
+    d.setUTCMonth(0, 1);
+    return d;
+  };
+  const seedFamily = async (kids: Array<Record<string, unknown>>) => {
+    const userId = new mongoose.Types.ObjectId();
+    await User.collection.insertOne({
+      _id: userId,
+      name: "Aarav Sharma",
+      email: `aarav-${userId}@test.com`,
+      phone: `+91 ${PHONE.slice(-10)}`,
+      city: "Chandigarh",
+      role: "Parent",
+      password: "x",
+    });
+    for (const kid of kids) {
+      await Player.collection.insertOne({ userId, createdAt: new Date(), ...kid });
+    }
+    return userId;
+  };
+  beforeEach(async () => {
+    await Promise.all([User.collection.deleteMany({}), Player.collection.deleteMany({})]);
+  });
+
+  it("uses the named child's profile and the parent's city instead of asking for them", async () => {
+    // 2026-11-10: "I want to find an academy for ansh" was asked Ansh's age although the
+    // account already held it.
+    await seedFamily([
+      {
+        name: "Jatin Sharma",
+        dob: years(14),
+        chosenSport: "Tennis",
+        experienceLevel: "intermediate",
+      },
+      { name: "Ansh Sharma", dob: years(9), chosenSport: "Badminton", experienceLevel: "beginner" },
+    ]);
+    const start = await answerWhatsAppMessage(
+      msg("I want to find an academy for ansh"),
+      async function* () {
+        yield* (async function* () {})();
+        // The model hands a coach request to the intake, as request_whatsapp_followup does.
+        const tool = ASSISTANT_CHAT_TOOLS.find(
+          (t: { name: string }) => t.name === "request_whatsapp_followup"
+        );
+        const { findUserIdByPhone } = require("../shared/services/whatsappIdentity");
+        const out = await tool.execute(
+          { kind: "coach", summary: "academy for Ansh", parentAgreed: false },
+          {
+            phoneHash: hashPhone(PHONE),
+            userMessage: "I want to find an academy for ansh",
+            userId: await findUserIdByPhone(PHONE),
+          }
+        );
+        yield out.instruction.split("\n").slice(1).join("\n");
+      }
+    );
+    assert.match(
+      start.reply,
+      /From Ansh's profile: 9 years old, Badminton, beginner\. Area: Chandigarh/
+    );
+    assert.match(
+      start.reply,
+      /Anything else the team should know/,
+      "nothing left to ask but the extras"
+    );
+    assert.doesNotMatch(start.reply, /How old is your child/);
+
+    await say("Nothing more", "intake_skip");
+    const e = await WhatsAppEnquiry.findOne({ followUpStatus: "new" }).lean();
+    assert.equal(e.childAge, 9);
+    assert.equal(e.sport, "Badminton");
+    assert.equal(e.city, "Chandigarh");
+    assert.match(e.followUpSummary, /Child: Ansh, 9 years old, Badminton, beginner/);
+  });
+
+  it("with several children and none named, asks which one, and a tap fills in the rest", async () => {
+    await seedFamily([
+      {
+        name: "Jatin Sharma",
+        dob: years(14),
+        chosenSport: "Tennis",
+        experienceLevel: "competitive",
+      },
+      { name: "Ansh Sharma", dob: years(9), chosenSport: "Badminton" },
+    ]);
+    const start = await say("Find a coach or academy", "next_coach");
+    assert.match(start.reply, /Which child is this for: Jatin, Ansh\?/);
+    assert.deepEqual(
+      start.buttons.map((b: { title: string }) => b.title),
+      ["Jatin", "Ansh"]
+    );
+
+    const jatinButton = start.buttons[0].id;
+    const next = await say("Jatin", jatinButton);
+    assert.match(next.reply, /From Jatin's profile: 14 years old, Tennis, competes in tournaments/);
+    assert.match(next.reply, /Anything else/);
+  });
+
+  it("asks only what the profile does not hold", async () => {
+    await seedFamily([{ name: "Ansh Sharma", dob: years(9) }]);
+    const start = await say("Find a coach or academy", "next_coach");
+    assert.match(start.reply, /From Ansh's profile: 9 years old/);
+    assert.match(start.reply, /Which sport is it for/);
+  });
+});
+
+describe("the coach questions follow what the parent asked for", () => {
+  const { wantsFrom } = require("../shared/services/whatsappAcademyIntake");
+  const { findUserIdByPhone } = require("../shared/services/whatsappIdentity");
+  const coachTool = () =>
+    ASSISTANT_CHAT_TOOLS.find((t: { name: string }) => t.name === "request_whatsapp_followup");
+  // No account for this number here: every question is asked, so the answers below line up.
+  beforeEach(async () => {
+    const { User } = require("../client/models/User");
+    const { Player } = require("../client/models/Player");
+    await Promise.all([User.collection.deleteMany({}), Player.collection.deleteMany({})]);
+  });
+
+  it("tells an academy from a coach", () => {
+    assert.equal(wantsFrom("I want to find an academy for ansh"), "academy");
+    assert.equal(wantsFrom("need a tennis coach twice a week"), "coach");
+    assert.equal(wantsFrom("I'd like help finding a coach or academy for my child."), "either");
+    assert.equal(wantsFrom("help with training"), "either");
+  });
+
+  it("an academy request talks about academies, and the team reads 'an academy'", async () => {
+    const text = "I want to find an academy for my daughter";
+    const out = await coachTool().execute(
+      { kind: "coach", summary: "academy", parentAgreed: false },
+      { phoneHash: hashPhone(PHONE), userMessage: text, userId: await findUserIdByPhone(PHONE) }
+    );
+    assert.match(out.instruction, /We don't list academies on PowerMySport yet/);
+    assert.doesNotMatch(out.instruction, /coaches/);
+
+    await say("10");
+    await say("Football");
+    await say("Mohali, Phase 7");
+    await say("Just starting", "intake_level_beginner");
+    const done = await say("Nothing more", "intake_skip");
+    assert.match(done.reply, /We have noted that you are looking for an academy\./);
+    assert.match((await enquiry()).followUpSummary, /^Looking for an academy\./);
+  });
+});

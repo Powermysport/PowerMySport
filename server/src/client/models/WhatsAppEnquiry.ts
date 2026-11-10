@@ -57,7 +57,8 @@ export interface TeamMessage {
 }
 
 /** The steps of the coach/academy intake, asked in this order. */
-export const INTAKE_STEPS = ["age", "sport", "city", "level", "needs"] as const;
+/** "child" is asked only when the account has several children and the parent named none. */
+export const INTAKE_STEPS = ["child", "age", "sport", "city", "level", "needs"] as const;
 export type IntakeStep = (typeof INTAKE_STEPS)[number];
 
 export interface EnquiryIntake {
@@ -67,6 +68,12 @@ export interface EnquiryIntake {
   retries: number;
   /** What the parent added at the last step (timings, budget...). */
   needs?: string;
+  /** The child on the account this is for, by first name, once known. */
+  childName?: string;
+  /** What the parent asked for, in their words: an academy, a coach, or either. */
+  wants?: "academy" | "coach" | "either";
+  /** The account's children to choose from, by id, while the "child" step is open. */
+  childOptions?: string[];
 }
 export type EnquiryFeedback = (typeof ENQUIRY_FEEDBACK)[number];
 
@@ -167,6 +174,9 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
           startedAt: { type: Date, required: true },
           retries: { type: Number, default: 0 },
           needs: { type: String, maxlength: 240 },
+          childName: { type: String, maxlength: 60 },
+          wants: { type: String, enum: ["academy", "coach", "either"] },
+          childOptions: { type: [String], default: undefined },
         },
         { _id: false }
       ),

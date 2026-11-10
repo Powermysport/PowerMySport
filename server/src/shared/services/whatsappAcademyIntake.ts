@@ -6,6 +6,10 @@ import {
 } from "../../client/models/WhatsAppEnquiry";
 import { currentEnquiry, newEnquiry, plain, requestFollowUp } from "./whatsappEnquiries";
 import { followUpReply, type ReplyButton } from "./whatsappInteractive";
+import { primarySport } from "@powermysport/shared-types";
+import { Player } from "../../client/models/Player";
+import { User } from "../../client/models/User";
+import { ageOf, firstName } from "./parentContext";
 
 /**
  * Finding a coach or academy for a parent, while none are listed on PowerMySport yet.
@@ -15,7 +19,8 @@ import { followUpReply, type ReplyButton } from "./whatsappInteractive";
  * for them one at a time, in code and without the model, so it is quick, free and always lands:
  * a parent who taps "Find a coach or academy" ends with their details with the team and a reference,
  * not with "we noted it" and nothing the team can act on. Details the parent already gave on this
- * topic are not asked again.
+ * topic are not asked again, and for a number on an account, what the child's profile holds
+ * (age, sport, level, and the parent's city) is used instead of asked.
  *
  * Each step's answer is the parent's next message. Typing "cancel" or tapping another option
  * leaves the intake; an intake left alone for two hours is forgotten.
@@ -37,12 +42,33 @@ const LEVEL_FOR_ID: Record<string, string> = {
 };
 const SKIP_BUTTON: ReplyButton[] = [{ id: INTAKE_SKIP_ID, title: "Nothing more" }];
 
-export const INTAKE_INTRO =
-  "We don't list coaches or academies on PowerMySport yet, but our team can find good options near you. A few quick questions so they know what to look for (type cancel to stop).";
+export type Wants = "academy" | "coach" | "either";
+
+/** What the parent asked for: an academy, a coach, or either. A parent who said academy is not
+ * offered a coach in every sentence after. */
+export function wantsFrom(text: string): Wants {
+  const academy = /academ/i.test(text);
+  const coach = /\b(coach|coaches|coaching|trainer|tutor)\b/i.test(text);
+  if (academy && !coach) return "academy";
+  if (coach && !academy) return "coach";
+  return "either";
+}
+
+const WANT_WORDS: Record<Wants, { one: string; many: string }> = {
+  academy: { one: "an academy", many: "academies" },
+  coach: { one: "a coach", many: "coaches" },
+  either: { one: "a coach or academy", many: "coaches or academies" },
+};
+
+export const introFor = (wants: Wants): string =>
+  `We don't list ${WANT_WORDS[wants].many} on PowerMySport yet, but our team can find good options near you. A few quick questions so they know what to look for (type cancel to stop).`;
+
+export const INTAKE_INTRO = introFor("either");
 export const INTAKE_CANCELLED =
   "No problem, I've stopped there. Ask me anything else, or tap Find a coach or academy again any time.";
 
 const QUESTION: Record<IntakeStep, string> = {
+  child: "Which child is this for?",
   age: "How old is your child? Just the age in years, for example 11.",
   sport: "Which sport is it for?",
   city: "Which city and area do you live in? For example: Pune, Baner.",
@@ -51,6 +77,7 @@ const QUESTION: Record<IntakeStep, string> = {
     "Anything else the team should know? For example preferred timings, budget, or a coach for a tournament. Or tap Nothing more.",
 };
 const RETRY: Partial<Record<IntakeStep, string>> = {
+  child: "Sorry, I didn't catch which child. Tap their name, or type it.",
   city: "Got it, I've noted that for the team. Which city and area do you live in? For example: Chandigarh, Sector 22. Or type skip.",
   age: "Sorry, I didn't catch the age. Please send just the number of years, for example 11, or type skip.",
 };
@@ -73,7 +100,11 @@ const has = (e: WhatsAppEnquiryDocument, step: IntakeStep): boolean => {
 /** The first step after `from` (exclusive) whose answer is not known yet. */
 function nextStep(e: WhatsAppEnquiryDocument, from?: IntakeStep): IntakeStep | null {
   const start = from ? INTAKE_STEPS.indexOf(from) + 1 : 0;
-  for (const step of INTAKE_STEPS.slice(start)) if (!has(e, step)) return step;
+  for (const step of INTAKE_STEPS.slice(start)) {
+    // Which child is asked only when the intake opens on it, never as a missing detail.
+    if (step === "child") continue;
+    if (!has(e, step)) return step;
+  }
   return null;
 }
 
@@ -85,15 +116,22 @@ function ask(step: IntakeStep, prefix?: string): IntakeReply {
 }
 
 /** The summary the team reads, in one line per thing. */
-export function intakeSummary(e: WhatsAppEnquiryDocument, needs?: string): string {
+export function intakeSummary(
+  e: WhatsAppEnquiryDocument,
+  needs?: string,
+  childName?: string,
+  wants: Wants = "either"
+): string {
   const child = [
     e.childAge !== undefined ? `${e.childAge} years old` : null,
     e.sport,
     e.level,
   ].filter(Boolean);
   return [
-    "Looking for a coach or academy.",
-    child.length ? `Child: ${child.join(", ")}.` : null,
+    `Looking for ${WANT_WORDS[wants].one}.`,
+    child.length || childName
+      ? `Child: ${[childName, ...child].filter(Boolean).join(", ")}.`
+      : null,
     e.city ? `Area: ${e.city}.` : null,
     needs ? `Also: ${needs}` : null,
   ]
@@ -120,7 +158,8 @@ export async function cancelIntake(phoneHash: string): Promise<void> {
 }
 
 async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<IntakeReply> {
-  const summary = intakeSummary(e, needs);
+  const wants = e.intake?.wants ?? "either";
+  const summary = intakeSummary(e, needs, e.intake?.childName, wants);
   // Saved as the newest topic, so the follow-up below lands on this same enquiry.
   e.set("intake", undefined);
   e.lastMessageAt = new Date();
@@ -133,19 +172,97 @@ async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<Intak
     refresh: true,
   });
   return {
-    reply: followUpReply("coach", result.reference, result.alreadyRequested),
+    reply: followUpReply(
+      "coach",
+      result.reference,
+      result.alreadyRequested,
+      `that you are looking for ${WANT_WORDS[wants].one}`
+    ),
     forwarded: true,
   };
 }
 
+// ─── What the account already knows ─────────────────────────────────────────────
+
+interface AccountChild {
+  id: string;
+  name: string;
+  age?: number;
+  sport?: string;
+  level?: string;
+}
+
+const LEVEL_WORDS: Record<string, string> = {
+  beginner: "beginner",
+  intermediate: "plays regularly",
+  competitive: "competes in tournaments",
+};
+
+/** The account's children as the intake needs them, and the parent's city. */
+export async function accountChildren(
+  userId: string,
+  now: Date = new Date()
+): Promise<{ children: AccountChild[]; city?: string }> {
+  const [players, user] = await Promise.all([
+    Player.find({ userId })
+      .select("name dob age chosenSport sportsFocus experienceLevel")
+      .sort({ createdAt: 1 })
+      .lean(),
+    User.findById(userId).select("city").lean(),
+  ]);
+  const children = players.map((p) => {
+    const sport = primarySport(p as never);
+    const age = ageOf(p as { dob?: Date; age?: number }, now);
+    const level = p.experienceLevel ? LEVEL_WORDS[p.experienceLevel] : undefined;
+    return {
+      id: String(p._id),
+      name: firstName(p.name, "your child"),
+      ...(age !== undefined && age >= 3 && age <= 21 ? { age } : {}),
+      ...(sport ? { sport } : {}),
+      ...(level ? { level } : {}),
+    };
+  });
+  const city = plain((user as { city?: string } | null)?.city, 60);
+  return { children, ...(city ? { city } : {}) };
+}
+
+/** The child named in what the parent said ("an academy for Ansh"), when exactly one is. */
+function namedIn(text: string, children: AccountChild[]): AccountChild | undefined {
+  const words = new Set(text.toLowerCase().match(/[a-z]+/g) ?? []);
+  const hits = children.filter((c) => words.has(c.name.toLowerCase()));
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
+/** Writes the profile's details on the enquiry and says, in a line, what was taken from it. */
+function useChild(e: WhatsAppEnquiryDocument, child: AccountChild, city?: string): string {
+  if (child.age !== undefined) e.childAge = child.age;
+  if (child.sport) e.sport = child.sport;
+  if (child.level) e.level = child.level;
+  if (city && !e.city) e.city = city;
+  const known = [
+    child.age !== undefined ? `${child.age} years old` : null,
+    child.sport,
+    child.level,
+  ].filter(Boolean);
+  const where = e.city ? ` Area: ${e.city}.` : "";
+  if (!known.length && !where) return "";
+  return `From ${child.name}'s profile: ${known.join(", ") || "no details yet"}.${where} I'll pass these on.`;
+}
+
+const CHILD_ID = "intake_child_";
+const childButtons = (children: AccountChild[]): ReplyButton[] =>
+  children.slice(0, 3).map((c) => ({ id: `${CHILD_ID}${c.id}`, title: c.name.slice(0, 20) }));
+
 /**
- * Starts the intake on the parent's current topic and returns the first question, or forwards
- * straight away when everything is already known.
+ * Starts the intake on the parent's current topic and returns the first question. `userId` is the
+ * account the number belongs to, when there is one: its children's profiles fill in what would
+ * otherwise be asked, and with several children and none named, the first question is which.
  */
 export async function startIntake(
   phoneHash: string,
   question: string,
-  now = new Date()
+  now = new Date(),
+  userId?: string
 ): Promise<IntakeReply> {
   const current = await currentEnquiry(phoneHash, question, now);
   // Only details given on this same, fresh topic are reused. A topic the team already handled, or
@@ -154,12 +271,46 @@ export async function startIntake(
     current.followUpStatus === "none" &&
     now.getTime() - current.createdAt.getTime() < 24 * 60 * 60 * 1000;
   const enquiry = reusable ? current : await newEnquiry(phoneHash, question, now);
-  const step = nextStep(enquiry);
-  if (!step) return finish(enquiry);
-  enquiry.intake = { step, startedAt: now, retries: 0 };
+
+  const wants = wantsFrom(question);
+  const intro = introFor(wants);
+  let from = "";
+  let childName: string | undefined;
+  if (userId) {
+    const account = await accountChildren(userId, now).catch(() => null);
+    const kids = account?.children ?? [];
+    const child = namedIn(question, kids) ?? (kids.length === 1 ? kids[0] : undefined);
+    if (child) {
+      from = useChild(enquiry, child, account?.city);
+      childName = child.name;
+    } else if (kids.length > 1) {
+      enquiry.intake = {
+        step: "child",
+        startedAt: now,
+        retries: 0,
+        childOptions: kids.map((k) => k.id),
+        wants,
+      };
+      enquiry.lastMessageAt = now;
+      await enquiry.save();
+      return {
+        reply: `${intro}\n\nWhich child is this for: ${kids.map((k) => k.name).join(", ")}?`,
+        buttons: childButtons(kids),
+      };
+    }
+  }
+
+  const step = nextStep(enquiry) ?? "needs";
+  enquiry.intake = {
+    step,
+    startedAt: now,
+    retries: 0,
+    wants,
+    ...(childName ? { childName } : {}),
+  };
   enquiry.lastMessageAt = now;
   await enquiry.save();
-  return ask(step, INTAKE_INTRO);
+  return ask(step, [intro, from].filter(Boolean).join("\n\n"));
 }
 
 const SKIP = /^(skip|no|nothing|nothing more|none|na|n\/a|nahi|nahin|no thanks)\.?$/i;
@@ -210,6 +361,38 @@ export async function answerIntake(
   const step = intake.step;
   const answer = text.trim();
   const skipped = replyId === INTAKE_SKIP_ID || SKIP.test(answer);
+
+  if (step === "child") {
+    const options = intake.childOptions ?? [];
+    const owner = await Player.findById(options[0])
+      .select("userId")
+      .lean()
+      .catch(() => null);
+    const account = owner
+      ? await accountChildren(String(owner.userId), now).catch(() => null)
+      : null;
+    const kids = (account?.children ?? []).filter((k) => options.includes(k.id));
+    const tapped = replyId?.startsWith(CHILD_ID) ? replyId.slice(CHILD_ID.length) : null;
+    const child = (tapped ? kids.find((k) => k.id === tapped) : undefined) ?? namedIn(answer, kids);
+    if (!child && !skipped && intake.retries < MAX_RETRIES) {
+      enquiry.intake = { ...intake, retries: intake.retries + 1 };
+      enquiry.lastMessageAt = now;
+      await enquiry.save();
+      return { reply: RETRY.child!, buttons: childButtons(kids) };
+    }
+    const from = child ? useChild(enquiry, child, account?.city) : "";
+    const next = nextStep(enquiry, "child") ?? "needs";
+    enquiry.intake = {
+      step: next,
+      startedAt: intake.startedAt,
+      retries: 0,
+      ...(intake.wants ? { wants: intake.wants } : {}),
+      ...(child ? { childName: child.name } : {}),
+    };
+    enquiry.lastMessageAt = now;
+    await enquiry.save();
+    return ask(next, from || undefined);
+  }
 
   // Written on this enquiry directly: the intake belongs to it, whichever topic is newest.
   if (!skipped) {
@@ -262,6 +445,8 @@ export async function answerIntake(
     startedAt: intake.startedAt,
     retries: 0,
     ...(intake.needs ? { needs: intake.needs } : {}),
+    ...(intake.childName ? { childName: intake.childName } : {}),
+    ...(intake.wants ? { wants: intake.wants } : {}),
   };
   fresh.lastMessageAt = now;
   await fresh.save();

@@ -166,7 +166,9 @@ const FOLLOW_UP_WHAT = {
 export function followUpReply(
   kind: keyof typeof FOLLOW_UP_WHAT,
   reference: string,
-  alreadyRequested = false
+  alreadyRequested = false,
+  /** What was asked for, in the parent's terms ("that you are looking for an academy"). */
+  what?: string
 ): string {
   const lines = alreadyRequested
     ? [
@@ -174,7 +176,7 @@ export function followUpReply(
         `Your reference: ${reference}`,
       ]
     : [
-        `Thank you! We have noted ${FOLLOW_UP_WHAT[kind]}.`,
+        `Thank you! We have noted ${what ?? FOLLOW_UP_WHAT[kind]}.`,
         "Our team will review your request and get back to you here on WhatsApp with the next steps.",
         `Your reference: ${reference}`,
       ];

@@ -492,7 +492,9 @@ export async function answerWhatsAppMessage(
   if (intent?.kind === "followup" && intent.assistance === "coach") {
     // No coaches or academies are listed yet, so the team matches by hand: collect what it needs.
     try {
-      const step = await startIntake(phoneHash, userMessage);
+      // The account's children fill in what would otherwise be asked.
+      const userId = await findUserIdByPhone(message.from).catch(() => undefined);
+      const step = await startIntake(phoneHash, userMessage, new Date(), userId ?? undefined);
       return intakeAnswer(phoneHash, message.from, userMessage, step);
     } catch (err) {
       log.error("could not start the coach intake", err);
