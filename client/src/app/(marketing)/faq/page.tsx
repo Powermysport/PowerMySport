@@ -144,7 +144,7 @@ const faqs = [
       {
         question: "What if the coach or venue cancels on me?",
         answer:
-          "If the coach, venue, or PowerMySport cancels, you're entitled to a 100% refund. Additionally, you can open a dispute ticket in your account or file a complaint at teams@powermysport.com.",
+          "If the coach, venue, or PowerMySport cancels, you're entitled to a 100% refund. Additionally, you can raise a support ticket from Dashboard > Support Tickets or email a complaint to teams@powermysport.com.",
       },
     ],
   },
@@ -154,7 +154,7 @@ const faqs = [
       {
         question: "How do I file a dispute?",
         answer:
-          "You can file a dispute through your PowerMySport account: go to My Bookings, select the booking, and click 'File Dispute.' You'll receive a unique Dispute Ticket ID (format: DISP-YYYY-XXXXXX) to track your case. You can also email teams@powermysport.com with booking details.",
+          "Raise a support ticket from your PowerMySport account: go to Dashboard > Support Tickets, click 'Create Support Ticket', choose the Booking or Payment category, and include your booking details. You can follow replies and status updates on that page. You can also email teams@powermysport.com with booking details.",
       },
       {
         question: "How long does dispute resolution take?",

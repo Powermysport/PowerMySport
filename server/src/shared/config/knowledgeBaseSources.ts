@@ -175,7 +175,7 @@ export const KNOWLEDGE_BASE_SOURCES: KnowledgeSourceEntry[] = [
     sourceId: "refunds-coach-or-venue-cancels",
     title: "What if the coach or venue cancels on me?",
     content:
-      "If the coach, venue, or PowerMySport cancels, a 100% refund applies. A dispute ticket can also be opened in the account, or a complaint filed at teams@powermysport.com.",
+      "If the coach, venue, or PowerMySport cancels, a 100% refund applies. A support ticket can also be raised from Dashboard > Support Tickets, or a complaint emailed to teams@powermysport.com.",
   },
 
   // ── Payment Disputes & Resolution ────────────────────────────────────────
@@ -184,7 +184,7 @@ export const KNOWLEDGE_BASE_SOURCES: KnowledgeSourceEntry[] = [
     sourceId: "disputes-how-to-file",
     title: "How do I file a dispute?",
     content:
-      "Through the account: go to My Bookings, select the booking, and click 'File Dispute.' A unique Dispute Ticket ID (format DISP-YYYY-XXXXXX) is issued to track the case. Disputes can also be emailed to teams@powermysport.com with booking details.",
+      "Raise a support ticket: go to Dashboard > Support Tickets, click 'Create Support Ticket', choose the Booking or Payment category, and include the booking details. Replies and status updates appear on that page. Disputes can also be emailed to teams@powermysport.com with booking details. There is no separate 'File Dispute' button.",
   },
   {
     sourceType: "faq",
