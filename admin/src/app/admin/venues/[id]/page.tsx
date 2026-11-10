@@ -14,6 +14,10 @@ import { btn, fieldClass, labelClass } from "@/modules/shared/ui/buttonStyles";
 import { Panel } from "@/modules/shared/ui/Panel";
 import { ArrowLeft, Image as ImageIcon, Pencil, Star, X } from "lucide-react";
 import { ErrorNotice, SkeletonBlock } from "@/modules/shared/ui/States";
+import { onboardingApi } from "@/modules/onboarding/services/onboarding";
+import { useConfirm } from "@/modules/shared/ui/useConfirm";
+import { usePrompt } from "@/modules/shared/ui/usePrompt";
+import type { OnboardingVenue } from "@/modules/onboarding/types/onboarding";
 
 interface VenueEditForm {
   name: string;
@@ -22,7 +26,6 @@ interface VenueEditForm {
   sports: string;
   amenities: string;
   allowExternalCoaches: boolean;
-  approvalStatus: "PENDING" | "APPROVED" | "REJECTED" | "REVIEW";
 }
 
 export default function AdminVenueDetailPage() {
@@ -35,6 +38,12 @@ export default function AdminVenueDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<VenueEditForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const [confirmAction, confirmDialog] = useConfirm();
+  const [prompt, promptDialog] = usePrompt();
+  // Photos and signed document links come from the onboarding review endpoint,
+  // and are only needed while a decision is still open.
+  const [review, setReview] = useState<OnboardingVenue | null>(null);
 
   const fetchVenue = async () => {
     try {
@@ -58,6 +67,23 @@ export default function AdminVenueDetailPage() {
     fetchVenue();
   }, [venueId]);
 
+  const needsDecision = Boolean(venue && venue.approvalStatus !== "APPROVED");
+  useEffect(() => {
+    if (!needsDecision) return;
+    let active = true;
+    onboardingApi
+      .getVenueDetailsForReview(venueId)
+      .then((response) => {
+        if (active && response.success && response.data) setReview(response.data);
+      })
+      .catch(() => {
+        // The decision panel still works without it; only the extra material is missing.
+      });
+    return () => {
+      active = false;
+    };
+  }, [needsDecision, venueId]);
+
   const openEdit = () => {
     if (!venue) return;
     setEditForm({
@@ -67,7 +93,6 @@ export default function AdminVenueDetailPage() {
       sports: (venue.sports || []).join(", "),
       amenities: (venue.amenities || []).join(", "),
       allowExternalCoaches: venue.allowExternalCoaches,
-      approvalStatus: venue.approvalStatus || "PENDING",
     });
     setIsEditing(true);
   };
@@ -94,7 +119,6 @@ export default function AdminVenueDetailPage() {
           .map((s) => s.trim())
           .filter(Boolean),
         allowExternalCoaches: editForm.allowExternalCoaches,
-        approvalStatus: editForm.approvalStatus,
       });
       if (response.success) {
         toast.success("Venue updated.");
@@ -108,6 +132,72 @@ export default function AdminVenueDetailPage() {
       toast.error("Failed to update venue.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // The decision routes (not a plain approvalStatus edit) are what notify the
+  // owner and record the reason, so the review queue sends venues here.
+  const noteLength = (value: string) =>
+    value.trim().length < 5
+      ? "Write at least 5 characters."
+      : value.trim().length > 500
+        ? "Keep it under 500 characters."
+        : null;
+
+  const decide = async (kind: "APPROVE" | "REVIEW" | "REJECT") => {
+    if (!venue) return;
+    let note: string | null = null;
+    if (kind === "APPROVE") {
+      const ok = await confirmAction({
+        title: `Approve "${venue.name}"?`,
+        description: "The venue goes live immediately.",
+        confirmLabel: "Approve venue",
+      });
+      if (!ok) return;
+    } else {
+      note = await prompt(
+        kind === "REJECT"
+          ? {
+              title: "Why reject this venue?",
+              description: "The owner sees this reason in their notification.",
+              label: "Reason",
+              confirmLabel: "Reject venue",
+              multiline: true,
+              validate: noteLength,
+            }
+          : {
+              title: "What should the owner change?",
+              description: "The owner is notified and the venue moves to review.",
+              label: "Notes for the owner",
+              confirmLabel: "Ask for changes",
+              multiline: true,
+              validate: noteLength,
+            }
+      );
+      if (!note) return;
+    }
+
+    setDeciding(true);
+    try {
+      const response =
+        kind === "APPROVE"
+          ? await onboardingApi.approveVenue(venueId)
+          : kind === "REJECT"
+            ? await onboardingApi.rejectVenue(venueId, note as string)
+            : await onboardingApi.markVenueForReview(venueId, note as string);
+      if (!response.success) throw new Error(response.message || "The decision didn't save.");
+      toast.success(
+        kind === "APPROVE"
+          ? "Venue approved."
+          : kind === "REJECT"
+            ? "Venue rejected. The owner has been notified."
+            : "Changes requested. The owner has been notified."
+      );
+      await fetchVenue();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "The decision didn't save.");
+    } finally {
+      setDeciding(false);
     }
   };
 
@@ -267,9 +357,98 @@ export default function AdminVenueDetailPage() {
               </div>
             </div>
           </Panel>
+
+          {review?.images && review.images.length > 1 && (
+            <Panel title="All photos">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {review.images.map((photo, idx) => (
+                  <div key={photo} className="relative aspect-video overflow-hidden rounded-lg">
+                    <Image
+                      src={photo}
+                      alt={`Venue photo ${idx + 1}`}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {needsDecision && (
+            <Panel title="Documents">
+              {review?.documents && review.documents.length > 0 ? (
+                <ul className="divide-y divide-slate-100">
+                  {review.documents.map((doc) => (
+                    <li
+                      key={doc.url}
+                      className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{doc.type}</p>
+                        <p className="truncate text-sm text-slate-600">{doc.fileName}</p>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={btn("outline", "sm")}
+                      >
+                        Open
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-500">No documents uploaded.</p>
+              )}
+            </Panel>
+          )}
         </div>
 
         <div className="space-y-6">
+          {needsDecision && (
+            <Panel
+              title="Decision"
+              description={
+                venue.approvalStatus === "REJECTED"
+                  ? "This venue was rejected. You can still approve it or ask for changes."
+                  : "Approving puts the venue live. The owner is notified of every decision."
+              }
+            >
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => decide("APPROVE")}
+                  disabled={deciding}
+                  className={btn("primary")}
+                >
+                  Approve venue
+                </button>
+                {venue.approvalStatus !== "REVIEW" && (
+                  <button
+                    type="button"
+                    onClick={() => decide("REVIEW")}
+                    disabled={deciding}
+                    className={btn("outline")}
+                  >
+                    Ask for changes
+                  </button>
+                )}
+                {venue.approvalStatus !== "REJECTED" && (
+                  <button
+                    type="button"
+                    onClick={() => decide("REJECT")}
+                    disabled={deciding}
+                    className={btn("danger")}
+                  >
+                    Reject
+                  </button>
+                )}
+              </div>
+            </Panel>
+          )}
+
           <Panel title="Details">
             <dl className="divide-y divide-slate-100">
               {facts.map((fact) => (
@@ -397,30 +576,6 @@ export default function AdminVenueDetailPage() {
                     className={fieldClass}
                   />
                 </div>
-                <div>
-                  <label htmlFor="v-status" className={labelClass}>
-                    Approval status
-                  </label>
-                  <select
-                    id="v-status"
-                    value={editForm.approvalStatus}
-                    onChange={(e) =>
-                      setEditForm(
-                        (prev) =>
-                          prev && {
-                            ...prev,
-                            approvalStatus: e.target.value as VenueEditForm["approvalStatus"],
-                          }
-                      )
-                    }
-                    className={fieldClass}
-                  >
-                    <option value="PENDING">Pending</option>
-                    <option value="REVIEW">In review</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="REJECTED">Rejected</option>
-                  </select>
-                </div>
               </div>
 
               <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -459,6 +614,8 @@ export default function AdminVenueDetailPage() {
           </div>
         </div>
       )}
+      {confirmDialog}
+      {promptDialog}
     </div>
   );
 }

@@ -15,8 +15,6 @@ import {
   submitCoachVerificationAdminHandler,
   getCoachVerificationDetails,
   getAdminProfile,
-  handleDispute,
-  listDisputes,
   getBookingTimeline,
   listWebhookErrors,
   retryWebhookError,
@@ -239,7 +237,7 @@ router.post(
   submitCoachVerificationAdminHandler
 );
 
-// Refund & dispute handling
+// Refund handling
 router.get(
   "/refunds",
   authMiddleware,
@@ -261,13 +259,6 @@ router.get(
   requirePermission("bookings:refund"),
   getRefundStatus
 );
-router.get(
-  "/disputes",
-  authMiddleware,
-  adminMiddleware,
-  requirePermission("disputes:view"),
-  listDisputes
-);
 
 // Append-only lifecycle timeline for a booking or expert session.
 // Read-only, so it sits behind bookings:view rather than bookings:manage.
@@ -277,13 +268,6 @@ router.get(
   adminMiddleware,
   requirePermission("bookings:view"),
   getBookingTimeline
-);
-router.post(
-  "/disputes/:bookingId",
-  authMiddleware,
-  adminMiddleware,
-  requirePermission("disputes:resolve"),
-  handleDispute
 );
 
 // Webhook Recovery & Reconciliations

@@ -40,19 +40,6 @@ const buildRouteKey = (req: Request): string => {
   return `${req.method.toUpperCase()} ${routePath || "/"}`;
 };
 
-/* ------------------------------------------- lifetime latency histograms */
-
-/**
- * Per-route reservoirs for lifetime p50/p95/p99. Both dimensions are bounded:
- * `LIFETIME_SAMPLE_CAP` samples per route, `MAX_TRACKED_ROUTES` routes total.
- * Percentiles over an unbounded array is how an observability layer becomes
- * the thing that takes the process down.
- */
-const LIFETIME_SAMPLE_CAP = 1000;
-const MAX_TRACKED_ROUTES = 200;
-
-const lifetimeLatencies = new Map<string, number[]>();
-
 /* ------------------------------------------------------- latency budgets */
 
 /**
@@ -193,43 +180,6 @@ export const takeWindowSnapshot = (): WindowSnapshot => {
   };
 };
 
-/* ------------------------------------------------------ latency profiles */
-
-export interface LatencyProfile {
-  routeKey: string;
-  samples: number;
-  p50: number;
-  p95: number;
-  p99: number;
-  max: number;
-  budgetMs: number | null;
-  overBudget: boolean;
-}
-
-/**
- * Lifetime per-route percentiles. Kept separate from
- * `getObservabilitySnapshot()` so that function's shape stays frozen for the
- * admin Server tab.
- */
-export const getLatencyProfiles = (): LatencyProfile[] =>
-  Array.from(lifetimeLatencies.entries())
-    .map(([routeKey, samples]) => {
-      const sorted = [...samples].sort((a, b) => a - b);
-      const p95 = percentile(sorted, 95);
-      const budgetMs = getBudgetMs(routeKey);
-      return {
-        routeKey,
-        samples: sorted.length,
-        p50: percentile(sorted, 50),
-        p95,
-        p99: percentile(sorted, 99),
-        max: sorted[sorted.length - 1] ?? 0,
-        budgetMs,
-        overBudget: budgetMs !== null && p95 > budgetMs,
-      };
-    })
-    .sort((a, b) => b.p95 - a.p95);
-
 /* ----------------------------------------------------------- middleware */
 
 export const observabilityMiddleware = (req: Request, res: Response, next: NextFunction): void => {
@@ -264,18 +214,6 @@ export const observabilityMiddleware = (req: Request, res: Response, next: NextF
     }
 
     routeMetrics.set(routeKey, existing);
-
-    // Lifetime reservoir for p50/p95/p99. New routes stop being tracked once
-    // the cap is reached — bounded memory beats perfect coverage.
-    let reservoir = lifetimeLatencies.get(routeKey);
-    if (!reservoir && lifetimeLatencies.size < MAX_TRACKED_ROUTES) {
-      reservoir = [];
-      lifetimeLatencies.set(routeKey, reservoir);
-    }
-    if (reservoir) {
-      if (reservoir.length >= LIFETIME_SAMPLE_CAP) reservoir.shift();
-      reservoir.push(latencyMs);
-    }
 
     // Rolling window for the periodic digest.
     windowStore.count += 1;

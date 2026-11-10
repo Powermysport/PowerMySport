@@ -392,14 +392,6 @@ export const adminApi = {
     return response.data;
   },
 
-  updateProfile: async (data: { name?: string; email?: string }): Promise<ApiResponse<Admin>> => {
-    const response = await axiosInstance.put("/admin/profile", data);
-    if (response.data?.data) {
-      response.data.data = normalizeAdmin(response.data.data);
-    }
-    return response.data;
-  },
-
   createAdmin: async (data: {
     name: string;
     email: string;
@@ -579,18 +571,6 @@ export const adminApi = {
    */
   getBookingTimeline: async (subjectId: string): Promise<ApiResponse<BookingEvent[]>> => {
     const response = await axiosInstance.get(`/admin/bookings/${subjectId}/timeline`);
-    return response.data;
-  },
-
-  handleDispute: async (
-    bookingId: string,
-    data: {
-      disputeType: "NO_SHOW" | "POOR_QUALITY" | "PAYMENT_ISSUE" | "OTHER";
-      resolution: "FULL_REFUND" | "PARTIAL_REFUND" | "NO_REFUND";
-      evidence?: string;
-    }
-  ): Promise<ApiResponse<unknown>> => {
-    const response = await axiosInstance.post(`/admin/disputes/${bookingId}`, data);
     return response.data;
   },
 
@@ -1037,11 +1017,6 @@ export const adminApi = {
     bookingIds: string[];
   }): Promise<ApiResponse<unknown>> => {
     const response = await axiosInstance.post("/admin/payouts/mark-paid", data);
-    return response.data;
-  },
-
-  getDisputes: async (): Promise<ApiResponse<any[]>> => {
-    const response = await axiosInstance.get("/admin/disputes");
     return response.data;
   },
 

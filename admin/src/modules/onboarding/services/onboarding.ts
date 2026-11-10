@@ -1,12 +1,7 @@
 ﻿import axiosInstance from "@/lib/api/axios";
 import {
-  ConfirmImagesPayload,
   OnboardingStep1Payload,
-  OnboardingStep2Payload,
-  OnboardingStep3Payload,
-  OnboardingStep5Payload,
   OnboardingVenue,
-  PendingVenueListItem,
   PresignedUrl,
 } from "@/modules/onboarding/types/onboarding";
 import axios from "axios";
@@ -31,26 +26,6 @@ export interface ApiResponse<T> {
  */
 export const onboardingApi = {
   /**
-   * STEP 1: Create venue with venue lister contact info
-   */
-  submitContactInfo: async (
-    data: OnboardingStep1Payload
-  ): Promise<ApiResponse<OnboardingVenue>> => {
-    const response = await axiosInstance.post(`${API_BASE}/step1`, data);
-    return response.data;
-  },
-
-  /**
-   * STEP 2: Update venue with detailed information
-   */
-  submitVenueDetails: async (
-    data: OnboardingStep2Payload
-  ): Promise<ApiResponse<OnboardingVenue>> => {
-    const response = await axiosInstance.post(`${API_BASE}/step2`, data);
-    return response.data;
-  },
-
-  /**
    * STEP 3A: Get presigned URLs for image upload
    * Now generates URLs for 3 general images + 5 per sport
    */
@@ -62,16 +37,6 @@ export const onboardingApi = {
       venueId,
       sports,
     });
-    return response.data;
-  },
-
-  /**
-   * STEP 3B: Confirm images after upload
-   */
-  confirmImagesStep3: async (
-    payload: ConfirmImagesPayload
-  ): Promise<ApiResponse<OnboardingVenue>> => {
-    const response = await axiosInstance.post(`${API_BASE}/step3/confirm`, payload);
     return response.data;
   },
 
@@ -90,24 +55,6 @@ export const onboardingApi = {
       venueId,
       documents,
     });
-    return response.data;
-  },
-
-  /**
-   * STEP 4B: Finalize onboarding with documents
-   */
-  finalizeOnboarding: async (
-    payload: OnboardingStep3Payload
-  ): Promise<ApiResponse<OnboardingVenue>> => {
-    const response = await axiosInstance.post(`${API_BASE}/step4/finalize`, payload);
-    return response.data;
-  },
-
-  /**
-   * STEP 5: Submit in-house coaches (optional)
-   */
-  submitCoaches: async (payload: OnboardingStep5Payload): Promise<ApiResponse<OnboardingVenue>> => {
-    const response = await axiosInstance.post(`${API_BASE}/step5/coaches`, payload);
     return response.data;
   },
 
@@ -137,47 +84,6 @@ export const onboardingApi = {
   },
 
   // DEPRECATED: Old Step 2 method (kept for compatibility)
-  /**
-   * @deprecated Use confirmImagesStep3 instead
-   */
-  confirmImagesStep2: async (
-    payload: OnboardingStep2Payload
-  ): Promise<ApiResponse<OnboardingVenue>> => {
-    const response = await axiosInstance.post(`${API_BASE}/step3/confirm`, payload);
-    return response.data;
-  },
-
-  /**
-   * Cancel incomplete onboarding
-   */
-  cancelOnboarding: async (venueId: string): Promise<ApiResponse<void>> => {
-    const response = await axiosInstance.delete(`${API_BASE}/${venueId}`);
-    return response.data;
-  },
-
-  /**
-   * ADMIN: List pending venues
-   */
-  getPendingVenues: async (
-    page: number = 1,
-    limit: number = 20,
-    status?: string
-  ): Promise<
-    ApiResponse<{
-      venues: PendingVenueListItem[];
-      total: number;
-      page: number;
-      totalPages: number;
-    }>
-  > => {
-    const params = new URLSearchParams();
-    params.append("page", page.toString());
-    params.append("limit", limit.toString());
-    if (status) params.append("status", status);
-
-    const response = await axiosInstance.get(`${API_BASE}/admin/pending?${params}`);
-    return response.data;
-  },
 
   /**
    * ADMIN: Get venue details for review

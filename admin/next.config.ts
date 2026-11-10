@@ -10,6 +10,29 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(process.cwd(), ".."),
   },
+  // Pages that were folded into other screens. Kept as redirects so old
+  // bookmarks and emailed links still land somewhere useful.
+  async redirects() {
+    return [
+      {
+        source: "/admin/venue-approval",
+        destination: "/admin/review-queue?kind=venue",
+        permanent: true,
+      },
+      {
+        source: "/admin/academy-onboarding",
+        destination: "/admin/review-queue?kind=academy",
+        permanent: true,
+      },
+      { source: "/admin/disputes", destination: "/admin/refunds", permanent: true },
+      {
+        source: "/admin/provider-changes",
+        destination: "/admin/review-queue?tab=changes",
+        permanent: true,
+      },
+      { source: "/admin/user-safety", destination: "/admin/users?tab=status", permanent: true },
+    ];
+  },
   images: {
     remotePatterns: [
       {

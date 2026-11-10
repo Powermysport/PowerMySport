@@ -15,12 +15,6 @@ type QueueItem = {
 
 const QUEUE: QueueItem[] = [
   {
-    key: "disputes",
-    href: "/admin/disputes",
-    label: "Disputes",
-    hint: "Payment disputes waiting on a decision",
-  },
-  {
     key: "webhookErrors",
     href: "/admin/webhook-recovery",
     label: "Webhook errors",
@@ -40,15 +34,21 @@ const QUEUE: QueueItem[] = [
   },
   {
     key: "venueApprovals",
-    href: "/admin/venue-approval",
+    href: "/admin/review-queue?kind=venue",
     label: "Venue approvals",
     hint: "New venues waiting to go live",
   },
   {
     key: "academyOnboarding",
-    href: "/admin/academy-onboarding",
+    href: "/admin/review-queue?kind=academy",
     label: "Academy onboarding",
     hint: "Academies that finished the onboarding form",
+  },
+  {
+    key: "providerChanges",
+    href: "/admin/review-queue?tab=changes",
+    label: "Profile edits",
+    hint: "Approved providers changed their sports, certifications or address",
   },
   {
     key: "conciergeRequests",

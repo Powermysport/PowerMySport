@@ -14,13 +14,14 @@ export interface PendingCounts {
   coachVerification: number;
   venueApprovals: number;
   communityReports: number;
-  disputes: number;
   supportTickets: number;
   conciergeRequests: number;
   webhookErrors: number;
   dataSourcesPending: number;
   /** Everyone waiting on an admin across coaches, experts, venues and academies. */
   reviewQueue: number;
+  /** Approved providers with profile edits waiting for review. */
+  providerChanges?: number;
 }
 
 export interface UserData {
@@ -340,18 +341,6 @@ export const statsApi = {
 
   getPendingCounts: async (): Promise<ApiResponse<PendingCounts>> => {
     const response = await axiosInstance.get("/stats/pending-counts");
-    return response.data;
-  },
-
-  getAllUsers: async (pagination?: {
-    page?: number;
-    limit?: number;
-  }): Promise<ApiResponse<UserData[]>> => {
-    const params = new URLSearchParams();
-    if (pagination?.page) params.append("page", pagination.page.toString());
-    if (pagination?.limit) params.append("limit", pagination.limit.toString());
-
-    const response = await axiosInstance.get(`/stats/users?${params.toString()}`);
     return response.data;
   },
 

@@ -1,14 +1,11 @@
 "use client";
 
-import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
 import { UserSafetyRecord, adminApi } from "@/modules/admin/services/admin";
 import { btn, fieldClass, labelClass } from "@/modules/shared/ui/buttonStyles";
-import { SkeletonBlock } from "@/modules/shared/ui/States";
 import { StatusBadge } from "@/modules/shared/ui/StatusBadge";
 import { toast } from "@/lib/toast";
 import { AdminDataTable, AdminDataTableColumn } from "@/modules/shared/ui/AdminDataTable";
-import { useRouter, usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const formatDate = (value?: string | null): string =>
   value
@@ -19,18 +16,11 @@ const formatDate = (value?: string | null): string =>
       })
     : "—";
 
-export default function AdminUserSafetyPage() {
-  return (
-    <Suspense fallback={<SkeletonBlock rows={6} label="Loading user safety" />}>
-      <AdminUserSafetyPageContent />
-    </Suspense>
-  );
-}
-
-function AdminUserSafetyPageContent() {
-  const router = useRouter();
-  const pathname = usePathname();
-
+/**
+ * Suspend, reactivate or deactivate accounts. The "Account status" tab of the
+ * Users page; it was its own User safety page until Nov 2026.
+ */
+export function UserSafetyPanel() {
   // Local React State for status filter and page selection
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "SUSPENDED">("ALL");
   const [page, setPage] = useState(1);
@@ -50,19 +40,6 @@ function AdminUserSafetyPageContent() {
     null
   );
   const [modalReason, setModalReason] = useState("");
-
-  // Restore states from URL query params on initial mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const statusParam = params.get("status") as "ALL" | "ACTIVE" | "SUSPENDED";
-    if (statusParam === "ALL" || statusParam === "ACTIVE" || statusParam === "SUSPENDED") {
-      setStatusFilter(statusParam);
-    }
-    const pageParam = Number(params.get("page"));
-    if (!isNaN(pageParam) && pageParam > 0) {
-      setPage(pageParam);
-    }
-  }, []);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -92,20 +69,9 @@ function AdminUserSafetyPageContent() {
   const handleStatusChange = (newStatus: "ALL" | "ACTIVE" | "SUSPENDED") => {
     setStatusFilter(newStatus);
     setPage(1);
-
-    const current = new URLSearchParams(window.location.search);
-    current.set("status", newStatus);
-    current.set("page", "1");
-    router.replace(`${pathname}?${current.toString()}`, { scroll: false });
   };
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-
-    const current = new URLSearchParams(window.location.search);
-    current.set("page", String(newPage));
-    router.replace(`${pathname}?${current.toString()}`, { scroll: false });
-  };
+  const handlePageChange = (newPage: number) => setPage(newPage);
 
   const visibleUsers = users.filter((user) => {
     const query = search.trim().toLowerCase();
@@ -254,12 +220,11 @@ function AdminUserSafetyPageContent() {
   ];
 
   return (
-    <div className="space-y-6">
-      <AdminPageHeader
-        badge="Trust & Support"
-        title="User safety"
-        subtitle="Suspend, reactivate or deactivate accounts. Every action needs a reason, which is saved to the audit log."
-      />
+    <div className="space-y-4">
+      <p className="max-w-[70ch] text-sm text-slate-600">
+        Suspend, reactivate or deactivate any account. Suspending or deactivating needs a reason,
+        which is saved to the audit log.
+      </p>
 
       <AdminDataTable
         columns={columns}

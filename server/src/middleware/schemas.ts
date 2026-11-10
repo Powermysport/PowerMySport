@@ -967,8 +967,9 @@ export const adminApproveVenueSchema = z.object({
 /**
  * Admin: Reject Venue
  */
+// The venue id is a route param (`/admin/:venueId/...`), not a body field;
+// requiring it here made every reject and mark-review fail with a 400.
 export const adminRejectVenueSchema = z.object({
-  venueId: z.string().min(1, "Venue ID is required"),
   reason: z
     .string()
     .min(5, "Rejection reason must be at least 5 characters")
@@ -979,7 +980,6 @@ export const adminRejectVenueSchema = z.object({
  * Admin: Mark for Review
  */
 export const adminReviewVenueSchema = z.object({
-  venueId: z.string().min(1, "Venue ID is required"),
   notes: z
     .string()
     .min(5, "Review notes must be at least 5 characters")

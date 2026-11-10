@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
+import { ShopTabs } from "@/modules/admin/components/ShopTabs";
 import {
   AdminProductRecord,
   ProductEditableFields,
@@ -185,7 +186,7 @@ function AdminProductsPageContent() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        badge="Commerce"
+        badge="Shop"
         title="Products"
         subtitle="The merchandise catalog: prices, stock and whether each item is on sale."
         action={
@@ -195,6 +196,8 @@ function AdminProductsPageContent() {
           </Link>
         }
       />
+
+      <ShopTabs />
 
       <div className="flex items-center gap-2">
         <label htmlFor="product-status" className="text-sm text-slate-600">

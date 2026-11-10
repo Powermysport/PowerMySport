@@ -5,16 +5,16 @@ import { AnalyticsEvent } from "../../models/AnalyticsEvent";
 import { User } from "../../../client/models/User";
 import { Venue } from "../../../client/models/Venue";
 import VenueInquiry from "../../../client/models/VenueInquiry";
-import { Dispute } from "../../../client/models/Dispute";
 import { SupportTicket } from "../../../client/models/SupportTicket";
 import { CommunityReport } from "../../../community/models/CommunityReport";
 import { ConciergeRequest } from "../../../shared/models/ConciergeRequest";
 import Academy from "../../models/Academy";
 import { DataSourceSubmission } from "../../../shared/models/DataSourceSubmission";
 import { WebhookRecoveryService } from "../../../shared/controllers/WebhookController";
-import { getLatencyProfiles, getObservabilitySnapshot } from "../../../middleware/observability";
+import { getObservabilitySnapshot } from "../../../middleware/observability";
 import { asyncHandler } from "../../../middleware/asyncHandler";
 import { countReviewQueue } from "../../../shared/services/reviewQueue";
+import { countPendingChanges } from "../../../shared/services/pendingChanges";
 
 export const getPublicPlatformStats = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
@@ -192,24 +192,6 @@ export const getObservabilityStats = asyncHandler(
 );
 
 /**
- * Lifetime per-route p50/p95/p99 plus budget status. Kept separate from
- * getObservabilityStats so that payload's shape stays frozen for the
- * existing admin Server tab.
- */
-export const getLatencyProfileStats = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    res.status(200).json({
-      success: true,
-      message: "Latency profiles retrieved",
-      data: {
-        profiles: getLatencyProfiles(),
-        generatedAt: new Date().toISOString(),
-      },
-    });
-  }
-);
-
-/**
  * Lightweight actionable-item counts for admin nav badges. Each count mirrors
  * the exact filter its own list page treats as "still needs admin action".
  */
@@ -219,21 +201,21 @@ export const getPendingCounts = asyncHandler(async (req: Request, res: Response)
     coachVerification,
     venueApprovals,
     communityReports,
-    disputes,
     supportTickets,
     conciergeRequests,
     dataSourcesPending,
     reviewQueue,
+    providerChanges,
   ] = await Promise.all([
     Academy.countDocuments({ onboardingCompleted: true, isApproved: false }),
     Coach.countDocuments({ verificationStatus: "PENDING" }),
     Venue.countDocuments({ approvalStatus: "PENDING" }),
     CommunityReport.countDocuments({ status: "OPEN" }),
-    Dispute.countDocuments({ status: "OPEN" }),
     SupportTicket.countDocuments({ status: "OPEN" }),
     ConciergeRequest.countDocuments({ status: "pending" }),
     DataSourceSubmission.countDocuments({ status: "PENDING_REVIEW" }),
     countReviewQueue(),
+    countPendingChanges(),
   ]);
 
   res.status(200).json({
@@ -244,12 +226,12 @@ export const getPendingCounts = asyncHandler(async (req: Request, res: Response)
       coachVerification,
       venueApprovals,
       communityReports,
-      disputes,
       supportTickets,
       conciergeRequests,
       webhookErrors: WebhookRecoveryService.listErrors().length,
       dataSourcesPending,
       reviewQueue,
+      providerChanges,
     },
   });
 });

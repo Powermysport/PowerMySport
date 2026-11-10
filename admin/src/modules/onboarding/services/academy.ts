@@ -1,13 +1,6 @@
 import axiosInstance from "@/lib/api/axios";
 import {
-  AcademyListResponse,
   AcademyStep1Payload,
-  AcademyStep2Payload,
-  AcademyStep3Payload,
-  AcademyStep4Payload,
-  AcademyStep5Payload,
-  AcademyStep6Payload,
-  AcademyStep7Payload,
   ApiResponse,
   ConfirmDocumentsPayload,
   ConfirmImagesPayload,
@@ -49,14 +42,6 @@ export const academyOnboardingApi = {
     data: AcademyStepPayload
   ): Promise<ApiResponse<OnboardingAcademy>> => {
     const response = await axiosInstance.put(`${API_BASE}/${academyId}/step/${stepNumber}`, data);
-    return response.data;
-  },
-
-  /**
-   * STEP 2: Update location and contact details
-   */
-  submitStep2: async (data: AcademyStep2Payload): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.put(`${API_BASE}/${data.academyId}/step/2`, data);
     return response.data;
   },
 
@@ -111,83 +96,10 @@ export const academyOnboardingApi = {
   },
 
   /**
-   * STEP 3: Update legal details and save documents
-   */
-  submitStep3: async (data: AcademyStep3Payload): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.put(`${API_BASE}/${data.academyId}/step/3`, data);
-    return response.data;
-  },
-
-  /**
-   * STEP 4: Submit academy venue details
-   */
-  submitStep4: async (data: AcademyStep4Payload): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.put(`${API_BASE}/${data.academyId}/step/4`, data);
-    return response.data;
-  },
-
-  /**
-   * STEP 5: Submit academy coach details
-   */
-  submitStep5: async (data: AcademyStep5Payload): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.put(`${API_BASE}/${data.academyId}/step/5`, data);
-    return response.data;
-  },
-
-  /**
-   * STEP 6: Set pricing and subscription preferences
-   */
-  submitStep6: async (data: AcademyStep6Payload): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.put(`${API_BASE}/${data.academyId}/step/6`, data);
-    return response.data;
-  },
-
-  /**
-   * STEP 7: Set payout details and final policies
-   */
-  submitStep7: async (data: AcademyStep7Payload): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.put(`${API_BASE}/${data.academyId}/step/7`, data);
-    return response.data;
-  },
-
-  /**
    * Submit academy for admin approval
    */
   submitForApproval: async (academyId: string): Promise<ApiResponse<OnboardingAcademy>> => {
     const response = await axiosInstance.post(`${API_BASE}/${academyId}/submit`);
-    return response.data;
-  },
-
-  /**
-   * List approved academies (public)
-   */
-  listApprovedAcademies: async (
-    page: number = 1,
-    limit: number = 20,
-    filters?: {
-      city?: string;
-      sport?: string;
-      ageGroup?: string;
-      minPrice?: number;
-      maxPrice?: number;
-      verifiedOnly?: boolean;
-    }
-  ): Promise<ApiResponse<AcademyListResponse>> => {
-    const response = await axiosInstance.get(`${API_BASE.replace("/onboarding", "")}`, {
-      params: {
-        page,
-        limit,
-        ...filters,
-      },
-    });
-    return response.data;
-  },
-
-  /**
-   * Get single academy profile by slug
-   */
-  getAcademyProfile: async (slug: string): Promise<ApiResponse<OnboardingAcademy>> => {
-    const response = await axiosInstance.get(`${API_BASE.replace("/onboarding", "")}/${slug}`);
     return response.data;
   },
 };

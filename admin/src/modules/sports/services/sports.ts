@@ -25,17 +25,4 @@ export const sportsApi = {
       return [];
     }
   },
-
-  searchSports: async (query: string): Promise<Sport[]> => {
-    try {
-      if (!query.trim()) return await sportsApi.getAllSports();
-      const response = await axiosInstance.get<SportsResponse<Sport[]>>(
-        `/sports/search?q=${encodeURIComponent(query)}`
-      );
-      return response.data.data || [];
-    } catch (error) {
-      console.error("Error searching sports:", error);
-      return [];
-    }
-  },
 };

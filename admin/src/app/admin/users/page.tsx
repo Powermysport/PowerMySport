@@ -19,6 +19,7 @@ import { EntityBadge } from "@/modules/shared/ui/EntityBadge";
 import { MetricStrip } from "@/modules/shared/ui/Panel";
 import { StatusBadge } from "@/modules/shared/ui/StatusBadge";
 import { Tabs } from "@/modules/shared/ui/Tabs";
+import { UserSafetyPanel } from "@/modules/admin/components/UserSafetyPanel";
 import { DetailDrawer, DetailRow, DetailSection } from "@/modules/shared/ui/DetailDrawer";
 import { ExportCsvButton } from "@/modules/shared/ui/ExportCsvButton";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
@@ -114,6 +115,9 @@ function AdminUsersPageContent() {
   const pathname = usePathname();
 
   const tabParam = searchParams.get("tab") as UsersTabRole;
+  // "Account status" (suspend / reactivate) is not a role, so it is handled
+  // apart from the role tabs; /admin/user-safety redirects here.
+  const isStatusTab = searchParams.get("tab") === "status";
   const activeTab: UsersTabRole =
     tabParam === "EXPERT" ||
     tabParam === "Parent" ||
@@ -280,8 +284,9 @@ function AdminUsersPageContent() {
   }, [fetchSummary]);
 
   useEffect(() => {
+    if (isStatusTab) return;
     fetchUsersByRole();
-  }, [fetchUsersByRole]);
+  }, [fetchUsersByRole, isStatusTab]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -549,201 +554,242 @@ function AdminUsersPageContent() {
     ];
   }, [activeTab]);
 
-  const tabItems = (["EXPERT", "Parent", "Player", "Coach", "VenueLister"] as UsersTabRole[]).map(
-    (tab) => ({ id: tab, label: TAB_LABELS[tab], count: summary[tab] })
-  );
+  const tabItems: { id: UsersTabRole | "status"; label: string; count?: number }[] = [
+    ...(["EXPERT", "Parent", "Player", "Coach", "VenueLister"] as UsersTabRole[]).map((tab) => ({
+      id: tab,
+      label: TAB_LABELS[tab],
+      count: summary[tab],
+    })),
+    { id: "status", label: "Account status" },
+  ];
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         badge="People"
         title="Users"
-        subtitle="Every account on the platform, by role. Open a row for full details."
+        subtitle="Every account on the platform, by role. Open a row for full details, or use Account status to suspend or reactivate one."
       />
 
-      <Tabs tabs={tabItems} value={activeTab} onChange={switchTab} label="User roles" />
-
-      {error && <ErrorNotice message={error} onRetry={fetchUsersByRole} />}
-
-      {activeTab === "Player" && playersAnalytics && (
-        <MetricStrip
-          items={[
-            { label: "Total", value: String(playersAnalytics.totalPlayers) },
-            { label: "New this month", value: String(playersAnalytics.newThisMonth) },
-            { label: "With sports profile", value: String(playersAnalytics.withSportsProfile) },
-            { label: "With dependents", value: String(playersAnalytics.withDependents) },
-            { label: "New in last 24h", value: String(playersAnalytics.newAccountsLast24Hours) },
-          ]}
-        />
-      )}
-
-      {activeTab === "Coach" && coachesAnalytics && (
-        <MetricStrip
-          items={[
-            { label: "Total", value: String(coachesAnalytics.totalCoaches) },
-            { label: "Verified", value: String(coachesAnalytics.verifiedCount) },
-            { label: "Pending or in review", value: String(coachesAnalytics.pendingOrReviewCount) },
-            { label: "Average rating", value: String(coachesAnalytics.avgRating.toFixed(2)) },
-            { label: "New in last 24h", value: String(coachesAnalytics.newAccountsLast24Hours) },
-          ]}
-        />
-      )}
-
-      {activeTab === "VenueLister" && venueListersAnalytics && (
-        <MetricStrip
-          items={[
-            { label: "Total", value: String(venueListersAnalytics.totalVenueListers) },
-            {
-              label: "Owners with venues",
-              value: String(venueListersAnalytics.withAtLeastOneVenue),
-            },
-            { label: "Approved venues", value: String(venueListersAnalytics.approvedVenuesCount) },
-            { label: "Pending venues", value: String(venueListersAnalytics.pendingVenuesCount) },
-            {
-              label: "New in last 24h",
-              value: String(venueListersAnalytics.newAccountsLast24Hours),
-            },
-          ]}
-        />
-      )}
-
-      <AdminDataTable<UsersRow>
-        columns={columns}
-        rows={visibleUsers}
-        getRowKey={(u) => u.id}
-        loading={loading}
-        emptyMessage={
-          searchQuery
-            ? `No ${TAB_LABELS[activeTab].toLowerCase()} match your search`
-            : `No ${TAB_LABELS[activeTab].toLowerCase()} found`
-        }
-        onRowClick={(u) => setSelectedUser(u)}
-        search={{
-          value: searchQuery,
-          onChange: setSearchQuery,
-          placeholder: "Search this page by name, email or phone",
+      <Tabs
+        tabs={tabItems}
+        value={isStatusTab ? "status" : activeTab}
+        onChange={(tab) => {
+          if (tab === "status") {
+            updateQueryParams({ tab: "status", page: null });
+            setSelectedUser(null);
+          } else {
+            switchTab(tab);
+          }
         }}
-        sort={{
-          column: sortColumn,
-          direction: sortDirection,
-          onChange: onSortChange,
-        }}
-        pagination={{
-          page: currentPage,
-          totalPages: pagination.totalPages,
-          total: pagination.total,
-          onPageChange: setCurrentPage,
-        }}
-        toolbarExtra={
-          <ExportCsvButton
-            filename={`${activeTab.toLowerCase()}-users.csv`}
-            rows={visibleUsers}
-            label="Export this page (CSV)"
-            columns={exportColumns}
-          />
-        }
+        label="User roles"
       />
 
-      <DetailDrawer
-        open={Boolean(selectedUser)}
-        onClose={() => setSelectedUser(null)}
-        title={selectedUser?.name || "User"}
-        subtitle={selectedUser?.email}
-        headerExtra={
-          selectedUser ? (
-            <OnlinePill
-              online={selectedUser.isOnlineNow}
-              lastActiveAt={selectedUser.lastActiveAt}
+      {isStatusTab ? (
+        <UserSafetyPanel />
+      ) : (
+        <>
+          {error && <ErrorNotice message={error} onRetry={fetchUsersByRole} />}
+
+          {activeTab === "Player" && playersAnalytics && (
+            <MetricStrip
+              items={[
+                { label: "Total", value: String(playersAnalytics.totalPlayers) },
+                { label: "New this month", value: String(playersAnalytics.newThisMonth) },
+                { label: "With sports profile", value: String(playersAnalytics.withSportsProfile) },
+                { label: "With dependents", value: String(playersAnalytics.withDependents) },
+                {
+                  label: "New in last 24h",
+                  value: String(playersAnalytics.newAccountsLast24Hours),
+                },
+              ]}
             />
-          ) : null
-        }
-      >
-        {selectedUser && (
-          <>
-            <DetailSection title="Account">
-              <DetailRow label="Role" value={TAB_LABELS[activeTab]} />
-              <DetailRow label="Email" value={selectedUser.email} />
-              <DetailRow label="Phone" value={selectedUser.phone || "—"} />
-              <DetailRow label="Joined" value={formatDateTime(selectedUser.createdAt)} />
-              <DetailRow label="Last active" value={formatDateTime(selectedUser.lastActiveAt)} />
-            </DetailSection>
+          )}
 
-            {selectedUser.role === "EXPERT" && (
-              <DetailSection title="Expert profile">
-                <DetailRow
-                  label="Specialization"
-                  value={(selectedUser as ExpertUserRow).specialization || "—"}
-                />
-                <DetailRow
-                  label="Sessions"
-                  value={(selectedUser as ExpertUserRow).sessionCount ?? "—"}
-                />
-              </DetailSection>
-            )}
+          {activeTab === "Coach" && coachesAnalytics && (
+            <MetricStrip
+              items={[
+                { label: "Total", value: String(coachesAnalytics.totalCoaches) },
+                { label: "Verified", value: String(coachesAnalytics.verifiedCount) },
+                {
+                  label: "Pending or in review",
+                  value: String(coachesAnalytics.pendingOrReviewCount),
+                },
+                { label: "Average rating", value: String(coachesAnalytics.avgRating.toFixed(2)) },
+                {
+                  label: "New in last 24h",
+                  value: String(coachesAnalytics.newAccountsLast24Hours),
+                },
+              ]}
+            />
+          )}
 
-            {selectedUser.role === "Parent" && (
-              <DetailSection title="Parent profile">
-                <DetailRow
-                  label="Dependents"
-                  value={(selectedUser as ParentUserRow).dependentsCount}
-                />
-              </DetailSection>
-            )}
+          {activeTab === "VenueLister" && venueListersAnalytics && (
+            <MetricStrip
+              items={[
+                { label: "Total", value: String(venueListersAnalytics.totalVenueListers) },
+                {
+                  label: "Owners with venues",
+                  value: String(venueListersAnalytics.withAtLeastOneVenue),
+                },
+                {
+                  label: "Approved venues",
+                  value: String(venueListersAnalytics.approvedVenuesCount),
+                },
+                {
+                  label: "Pending venues",
+                  value: String(venueListersAnalytics.pendingVenuesCount),
+                },
+                {
+                  label: "New in last 24h",
+                  value: String(venueListersAnalytics.newAccountsLast24Hours),
+                },
+              ]}
+            />
+          )}
 
-            {selectedUser.role === "Player" && (
-              <DetailSection title="Player profile">
-                <DetailRow
-                  label="Has sports profile"
-                  value={selectedUser.hasSportsProfile ? "Yes" : "No"}
-                />
-                <DetailRow
-                  label="Sports"
-                  value={selectedUser.sports.length ? selectedUser.sports.join(", ") : "—"}
-                />
-              </DetailSection>
-            )}
+          <AdminDataTable<UsersRow>
+            columns={columns}
+            rows={visibleUsers}
+            getRowKey={(u) => u.id}
+            loading={loading}
+            emptyMessage={
+              searchQuery
+                ? `No ${TAB_LABELS[activeTab].toLowerCase()} match your search`
+                : `No ${TAB_LABELS[activeTab].toLowerCase()} found`
+            }
+            onRowClick={(u) => setSelectedUser(u)}
+            search={{
+              value: searchQuery,
+              onChange: setSearchQuery,
+              placeholder: "Search this page by name, email or phone",
+            }}
+            sort={{
+              column: sortColumn,
+              direction: sortDirection,
+              onChange: onSortChange,
+            }}
+            pagination={{
+              page: currentPage,
+              totalPages: pagination.totalPages,
+              total: pagination.total,
+              onPageChange: setCurrentPage,
+            }}
+            toolbarExtra={
+              <ExportCsvButton
+                filename={`${activeTab.toLowerCase()}-users.csv`}
+                rows={visibleUsers}
+                label="Export this page (CSV)"
+                columns={exportColumns}
+              />
+            }
+          />
 
-            {selectedUser.role === "Coach" && (
-              <DetailSection title="Coach profile">
-                <DetailRow
-                  label="Verification"
-                  value={<StatusBadge status={selectedUser.verificationStatus} />}
+          <DetailDrawer
+            open={Boolean(selectedUser)}
+            onClose={() => setSelectedUser(null)}
+            title={selectedUser?.name || "User"}
+            subtitle={selectedUser?.email}
+            headerExtra={
+              selectedUser ? (
+                <OnlinePill
+                  online={selectedUser.isOnlineNow}
+                  lastActiveAt={selectedUser.lastActiveAt}
                 />
-                <DetailRow label="Service mode" value={selectedUser.serviceMode || "—"} />
-                <DetailRow
-                  label="Hourly rate"
-                  value={selectedUser.hourlyRate != null ? `₹${selectedUser.hourlyRate}` : "—"}
-                />
-                <DetailRow
-                  label="Rating"
-                  value={`${selectedUser.rating.toFixed(1)} (${selectedUser.reviewCount} reviews)`}
-                />
-                <DetailRow
-                  label="Sports"
-                  value={selectedUser.sports.length ? selectedUser.sports.join(", ") : "—"}
-                />
-                <DetailRow
-                  label="Profile complete"
-                  value={selectedUser.profileIncomplete ? "No" : "Yes"}
-                />
-              </DetailSection>
-            )}
+              ) : null
+            }
+          >
+            {selectedUser && (
+              <>
+                <DetailSection title="Account">
+                  <DetailRow label="Role" value={TAB_LABELS[activeTab]} />
+                  <DetailRow label="Email" value={selectedUser.email} />
+                  <DetailRow label="Phone" value={selectedUser.phone || "—"} />
+                  <DetailRow label="Joined" value={formatDateTime(selectedUser.createdAt)} />
+                  <DetailRow
+                    label="Last active"
+                    value={formatDateTime(selectedUser.lastActiveAt)}
+                  />
+                </DetailSection>
 
-            {selectedUser.role === "VenueLister" && (
-              <DetailSection title="Venue owner profile">
-                <DetailRow label="Business" value={selectedUser.businessName || "—"} />
-                <DetailRow label="Total venues" value={selectedUser.venueCount} />
-                <DetailRow label="Approved venues" value={selectedUser.approvedVenueCount} />
-                <DetailRow label="Pending venues" value={selectedUser.pendingVenueCount} />
-                <DetailRow
-                  label="Can add more venues"
-                  value={selectedUser.canAddMoreVenues ? "Yes" : "No"}
-                />
-              </DetailSection>
+                {selectedUser.role === "EXPERT" && (
+                  <DetailSection title="Expert profile">
+                    <DetailRow
+                      label="Specialization"
+                      value={(selectedUser as ExpertUserRow).specialization || "—"}
+                    />
+                    <DetailRow
+                      label="Sessions"
+                      value={(selectedUser as ExpertUserRow).sessionCount ?? "—"}
+                    />
+                  </DetailSection>
+                )}
+
+                {selectedUser.role === "Parent" && (
+                  <DetailSection title="Parent profile">
+                    <DetailRow
+                      label="Dependents"
+                      value={(selectedUser as ParentUserRow).dependentsCount}
+                    />
+                  </DetailSection>
+                )}
+
+                {selectedUser.role === "Player" && (
+                  <DetailSection title="Player profile">
+                    <DetailRow
+                      label="Has sports profile"
+                      value={selectedUser.hasSportsProfile ? "Yes" : "No"}
+                    />
+                    <DetailRow
+                      label="Sports"
+                      value={selectedUser.sports.length ? selectedUser.sports.join(", ") : "—"}
+                    />
+                  </DetailSection>
+                )}
+
+                {selectedUser.role === "Coach" && (
+                  <DetailSection title="Coach profile">
+                    <DetailRow
+                      label="Verification"
+                      value={<StatusBadge status={selectedUser.verificationStatus} />}
+                    />
+                    <DetailRow label="Service mode" value={selectedUser.serviceMode || "—"} />
+                    <DetailRow
+                      label="Hourly rate"
+                      value={selectedUser.hourlyRate != null ? `₹${selectedUser.hourlyRate}` : "—"}
+                    />
+                    <DetailRow
+                      label="Rating"
+                      value={`${selectedUser.rating.toFixed(1)} (${selectedUser.reviewCount} reviews)`}
+                    />
+                    <DetailRow
+                      label="Sports"
+                      value={selectedUser.sports.length ? selectedUser.sports.join(", ") : "—"}
+                    />
+                    <DetailRow
+                      label="Profile complete"
+                      value={selectedUser.profileIncomplete ? "No" : "Yes"}
+                    />
+                  </DetailSection>
+                )}
+
+                {selectedUser.role === "VenueLister" && (
+                  <DetailSection title="Venue owner profile">
+                    <DetailRow label="Business" value={selectedUser.businessName || "—"} />
+                    <DetailRow label="Total venues" value={selectedUser.venueCount} />
+                    <DetailRow label="Approved venues" value={selectedUser.approvedVenueCount} />
+                    <DetailRow label="Pending venues" value={selectedUser.pendingVenueCount} />
+                    <DetailRow
+                      label="Can add more venues"
+                      value={selectedUser.canAddMoreVenues ? "Yes" : "No"}
+                    />
+                  </DetailSection>
+                )}
+              </>
             )}
-          </>
-        )}
-      </DetailDrawer>
+          </DetailDrawer>
+        </>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
+import { ShopTabs } from "@/modules/admin/components/ShopTabs";
 import {
   AdminOrderDetailRecord,
   AdminOrderRecord,
@@ -217,10 +218,12 @@ function AdminOrdersPageContent() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        badge="Commerce"
+        badge="Shop"
         title="Orders"
         subtitle="Merchandise orders, their payment status and where each one is in fulfilment."
       />
+
+      <ShopTabs />
 
       <div className="flex items-center gap-2">
         <label htmlFor="order-status" className="text-sm text-slate-600">

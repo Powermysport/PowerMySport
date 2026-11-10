@@ -132,6 +132,17 @@ export interface PendingChangeRow {
   changes: { field: string; current: unknown; proposed: unknown }[];
 }
 
+/** How many approved providers have edits waiting (the admin nav badge). */
+export const countPendingChanges = async (): Promise<number> => {
+  const has = { "pendingChanges.fields": { $exists: true } };
+  const counts = await Promise.all([
+    Coach.countDocuments(has),
+    Expert.countDocuments(has),
+    Venue.countDocuments(has),
+  ]);
+  return counts.reduce((sum, n) => sum + n, 0);
+};
+
 export const listPendingChanges = async (): Promise<PendingChangeRow[]> => {
   const has = { "pendingChanges.fields": { $exists: true } };
   const [coaches, experts, venues] = await Promise.all([

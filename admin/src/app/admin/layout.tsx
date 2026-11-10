@@ -4,21 +4,24 @@ import { adminApi } from "@/modules/admin/services/admin";
 import { PendingCounts, statsApi } from "@/modules/analytics/services/stats";
 import { CommandPalette } from "@/modules/shared/ui/CommandPalette";
 import {
-  GraduationCap,
+  BadgeCheck,
   BarChart2,
   Bell,
-  BookOpen,
   Building2,
   Calendar,
-  CheckCircle,
   ChevronsLeft,
   ChevronsRight,
+  ConciergeBell,
   Database,
-  Gavel,
+  Dumbbell,
+  FilePenLine,
+  GraduationCap,
+  KeyRound,
+  Landmark,
   LayoutDashboard,
   LifeBuoy,
+  ListChecks,
   LogOut,
-  Landmark,
   Map,
   Menu,
   MessageCircle,
@@ -26,21 +29,20 @@ import {
   Package,
   Plus,
   ReceiptText,
+  School,
   ScrollText,
   Search,
   ShieldAlert,
-  ShieldCheck,
   ShoppingBag,
   Star,
+  Stethoscope,
   Tag,
   UserCheck,
   UserCircle2,
+  UserCog,
   Users,
   Webhook,
-  Stethoscope,
   X,
-  FilePenLine,
-  ListChecks,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -57,6 +59,8 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ size?: number }>;
+  /** Other routes that belong to this item, so it stays highlighted on them. */
+  also?: string[];
 };
 
 type NavGroup = {
@@ -64,26 +68,63 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const isAdminRouteActive = (pathname: string, href: string) =>
-  href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+const isAdminRouteActive = (pathname: string, item: NavItem) =>
+  item.href === "/admin"
+    ? pathname === "/admin"
+    : [item.href, ...(item.also ?? [])].some((prefix) => pathname.startsWith(prefix));
 
-const NAV_BADGE_KEYS: Record<string, keyof PendingCounts> = {
-  "/admin/review-queue": "reviewQueue",
-  "/admin/academy-onboarding": "academyOnboarding",
-  "/admin/coach-verification": "coachVerification",
-  "/admin/venue-approval": "venueApprovals",
-  "/admin/community-reports": "communityReports",
-  "/admin/disputes": "disputes",
-  "/admin/support-tickets": "supportTickets",
-  "/admin/concierge-requests": "conciergeRequests",
-  "/admin/webhook-recovery": "webhookErrors",
-  "/admin/data-sources": "dataSourcesPending",
+// Pages kept out of the sidebar. Each is reached from a button on its list
+// page, and stays findable by name in the search (Ctrl/Cmd+K).
+const SEARCH_ONLY_ITEMS: {
+  href: string;
+  label: string;
+  group: string;
+  icon: NavItem["icon"];
+}[] = [
+  { href: "/admin/coaches/add", label: "Add coach", group: "Shortcuts", icon: Plus },
+  { href: "/admin/academies/add", label: "Add academy", group: "Shortcuts", icon: Plus },
+  { href: "/admin/experts/add", label: "Add expert", group: "Shortcuts", icon: Plus },
+  { href: "/admin/venues/add", label: "Add venue", group: "Shortcuts", icon: Plus },
+  { href: "/admin/products/new", label: "Add product", group: "Shortcuts", icon: Plus },
+  {
+    href: "/admin/coach-verification",
+    label: "Coach verification",
+    group: "Shortcuts",
+    icon: UserCheck,
+  },
+  { href: "/admin/orders", label: "Orders", group: "Shop", icon: Package },
+  { href: "/admin/promo-codes", label: "Promo codes", group: "Shop", icon: Tag },
+  {
+    href: "/admin/review-queue?tab=changes",
+    label: "Profile edits (provider changes)",
+    group: "Review queue",
+    icon: FilePenLine,
+  },
+  {
+    href: "/admin/users?tab=status",
+    label: "Account status (suspend, reactivate)",
+    group: "Users",
+    icon: ShieldAlert,
+  },
+  { href: "/admin/profile", label: "Your profile", group: "Account", icon: UserCircle2 },
+  { href: "/admin/change-password", label: "Change password", group: "Account", icon: KeyRound },
+];
+
+// A badge can add up several counts: the review queue holds both new
+// providers and profile edits.
+const NAV_BADGE_KEYS: Record<string, (keyof PendingCounts)[]> = {
+  "/admin/review-queue": ["reviewQueue", "providerChanges"],
+  "/admin/community-reports": ["communityReports"],
+  "/admin/support-tickets": ["supportTickets"],
+  "/admin/concierge-requests": ["conciergeRequests"],
+  "/admin/webhook-recovery": ["webhookErrors"],
+  "/admin/data-sources": ["dataSourcesPending"],
 };
 
 const getNavBadgeCount = (href: string, pendingCounts: PendingCounts | null): number => {
   if (!pendingCounts) return 0;
-  const key = NAV_BADGE_KEYS[href];
-  return key ? pendingCounts[key] : 0;
+  const keys = NAV_BADGE_KEYS[href] ?? [];
+  return keys.reduce((sum, key) => sum + (pendingCounts[key] ?? 0), 0);
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -140,158 +181,104 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navGroups = useMemo<NavGroup[]>(() => {
     const groups: NavGroup[] = [
       {
-        title: "Overview",
+        title: "Today",
         items: [
           { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-          { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
           {
-            href: "/admin/notifications",
-            label: "Notifications",
-            icon: Bell,
+            href: "/admin/review-queue",
+            label: "Review queue",
+            icon: ListChecks,
+            also: ["/admin/coach-verification"],
           },
-          {
-            href: "/admin/whatsapp-pilot",
-            label: "WhatsApp Pilot",
-            icon: MessageCircle,
-          },
-          { href: "/admin/profile", label: "Profile", icon: UserCircle2 },
         ],
       },
       {
-        title: "People",
+        title: "Providers & users",
         items: [
-          { href: "/admin/review-queue", label: "Review Queue", icon: ListChecks },
           { href: "/admin/users", label: "Users", icon: Users },
-          { href: "/admin/coaches", label: "Coaches", icon: Users },
-          {
-            href: "/admin/coaches/add",
-            label: "Create Coach",
-            icon: Plus,
-          },
-          {
-            href: "/admin/coach-verification",
-            label: "Coach Verification",
-            icon: UserCheck,
-          },
-          { href: "/admin/academies", label: "Academies", icon: BookOpen },
-          {
-            href: "/admin/academies/add",
-            label: "Create Academy",
-            icon: Plus,
-          },
-          {
-            href: "/admin/academy-onboarding",
-            label: "Academy Onboarding",
-            icon: CheckCircle,
-          },
-          { href: "/admin/experts", label: "Experts", icon: ShieldCheck },
-          { href: "/admin/provider-changes", label: "Provider Changes", icon: FilePenLine },
+          { href: "/admin/coaches", label: "Coaches", icon: Dumbbell },
+          { href: "/admin/academies", label: "Academies", icon: School },
+          { href: "/admin/experts", label: "Experts", icon: BadgeCheck },
+          { href: "/admin/venues", label: "Venues", icon: Building2 },
         ],
       },
       {
-        title: "Commerce",
+        title: "Money",
         items: [
           { href: "/admin/bookings", label: "Bookings", icon: Calendar },
-          { href: "/admin/payouts", label: "Payouts", icon: Landmark },
-          { href: "/admin/venues", label: "Venues", icon: Building2 },
-          {
-            href: "/admin/venues/add",
-            label: "Create Venue",
-            icon: Plus,
-          },
-          {
-            href: "/admin/venue-approval",
-            label: "Venue Approvals",
-            icon: CheckCircle,
-          },
-          { href: "/admin/products", label: "Products", icon: Package },
-          { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
           { href: "/admin/refunds", label: "Refunds", icon: ReceiptText },
-          { href: "/admin/disputes", label: "Disputes", icon: Gavel },
-          { href: "/admin/reviews", label: "Reviews", icon: Star },
-          { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag },
+          { href: "/admin/payouts", label: "Payouts", icon: Landmark },
+          {
+            href: "/admin/products",
+            label: "Shop",
+            icon: ShoppingBag,
+            also: ["/admin/orders", "/admin/promo-codes"],
+          },
+        ],
+      },
+      {
+        title: "Requests",
+        items: [
+          { href: "/admin/support-tickets", label: "Support tickets", icon: LifeBuoy },
+          { href: "/admin/concierge-requests", label: "Concierge requests", icon: ConciergeBell },
+          { href: "/admin/screenings", label: "Screenings", icon: Stethoscope },
+          { href: "/admin/whatsapp-pilot", label: "WhatsApp enquiries", icon: MessageCircle },
+        ],
+      },
+      {
+        title: "Moderation",
+        items: [
+          { href: "/admin/reviews", label: "Reviews & experiences", icon: Star },
+          {
+            href: "/admin/community-reports",
+            label: "Community reports",
+            icon: MessageSquareWarning,
+          },
         ],
       },
       {
         title: "Content",
         items: [
-          {
-            href: "/admin/pathways",
-            label: "Pathways",
-            icon: Map,
-          },
+          { href: "/admin/pathways", label: "Pathways", icon: Map },
           {
             href: "/admin/opportunities",
-            label: "Admissions & Scholarships",
+            label: "Admissions & scholarships",
             icon: GraduationCap,
           },
-          {
-            href: "/admin/screenings",
-            label: "Screenings",
-            icon: Stethoscope,
-          },
-          {
-            href: "/admin/data-sources",
-            label: "Data Sources",
-            icon: Database,
-          },
+          { href: "/admin/data-sources", label: "Tournament data", icon: Database },
         ],
       },
       {
-        title: "Trust & Support",
+        title: "System",
         items: [
-          {
-            href: "/admin/user-safety",
-            label: "User Safety",
-            icon: ShieldAlert,
-          },
-          {
-            href: "/admin/community-reports",
-            label: "Community Reports",
-            icon: MessageSquareWarning,
-          },
-          {
-            href: "/admin/support-tickets",
-            label: "Support Tickets",
-            icon: LifeBuoy,
-          },
-          {
-            href: "/admin/concierge-requests",
-            label: "Concierge Requests",
-            icon: BookOpen,
-          },
-          {
-            href: "/admin/webhook-recovery",
-            label: "Webhook Recovery",
-            icon: Webhook,
-          },
+          { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
+          { href: "/admin/notifications", label: "Notifications & jobs", icon: Bell },
+          { href: "/admin/webhook-recovery", label: "Webhook recovery", icon: Webhook },
+          ...(isSuperAdmin
+            ? [
+                { href: "/admin/admins", label: "Admins", icon: UserCog },
+                { href: "/admin/audit-log", label: "Audit log", icon: ScrollText },
+              ]
+            : []),
         ],
       },
     ];
-
-    if (isSuperAdmin) {
-      groups.push({
-        title: "System",
-        items: [
-          { href: "/admin/admins", label: "Admins", icon: ShieldCheck },
-          { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
-        ],
-      });
-    }
 
     return groups;
   }, [isSuperAdmin]);
 
   const commandPaletteItems = useMemo(
     () =>
-      navGroups.flatMap((group) =>
-        group.items.map((item) => ({
-          href: item.href,
-          label: item.label,
-          group: group.title,
-          icon: item.icon,
-        }))
-      ),
+      navGroups
+        .flatMap((group) =>
+          group.items.map((item) => ({
+            href: item.href,
+            label: item.label,
+            group: group.title,
+            icon: item.icon,
+          }))
+        )
+        .concat(SEARCH_ONLY_ITEMS),
     [navGroups]
   );
 
@@ -497,7 +484,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <div className="space-y-1">
                           {group.items.map((item) => {
                             const Icon = item.icon;
-                            const isActive = isAdminRouteActive(pathname, item.href);
+                            const isActive = isAdminRouteActive(pathname, item);
 
                             return (
                               <Link
@@ -532,7 +519,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     ))}
                   </nav>
 
-                  <div className="border-t border-slate-200 p-4">
+                  <div className="space-y-2 border-t border-slate-200 p-4">
+                    <Link
+                      href="/admin/profile"
+                      onClick={() => setIsMobileNavOpen(false)}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                    >
+                      <UserCircle2 size={17} />
+                      Your profile
+                    </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100"
@@ -643,7 +638,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       <div className="space-y-0.5">
                         {group.items.map((item) => {
                           const Icon = item.icon;
-                          const isActive = isAdminRouteActive(pathname, item.href);
+                          const isActive = isAdminRouteActive(pathname, item);
                           const badgeCount = getNavBadgeCount(item.href, pendingCounts);
 
                           return (
@@ -652,8 +647,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                               href={item.href}
                               // The label becomes the tooltip when it is not on
                               // screen. A rail of unlabelled icons is otherwise a
-                              // memory test, and several of these icons repeat —
-                              // Users, Plus and CheckCircle each appear twice.
+                              // memory test.
                               title={
                                 isSidebarCollapsed
                                   ? badgeCount > 0
@@ -712,6 +706,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     isSidebarCollapsed ? "p-3" : "p-4"
                   }`}
                 >
+                  <Link
+                    href="/admin/profile"
+                    title={isSidebarCollapsed ? `${adminName} · Your profile` : undefined}
+                    aria-label={isSidebarCollapsed ? "Your profile" : undefined}
+                    aria-current={pathname === "/admin/profile" ? "page" : undefined}
+                    className={`mb-2 flex min-h-10 items-center gap-3 rounded-lg py-2 text-sm transition-colors ${
+                      isSidebarCollapsed ? "justify-center px-0" : "px-3"
+                    } ${
+                      pathname === "/admin/profile"
+                        ? "bg-white/10 text-white"
+                        : "text-slate-300 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <UserCircle2 size={18} className="shrink-0" />
+                    {!isSidebarCollapsed && (
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{adminName}</span>
+                        <span className="block text-xs text-slate-400">Your profile</span>
+                      </span>
+                    )}
+                  </Link>
                   <button
                     onClick={handleLogout}
                     title={isSidebarCollapsed ? "Log out" : undefined}

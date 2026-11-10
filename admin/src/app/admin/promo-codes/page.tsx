@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
+import { ShopTabs } from "@/modules/admin/components/ShopTabs";
 import { PromoCodeRecord, PromoCodeStats, adminApi } from "@/modules/admin/services/admin";
 import { btn, fieldClass } from "@/modules/shared/ui/buttonStyles";
 import { ConfirmModal } from "@/modules/shared/ui/ConfirmModal";
@@ -153,7 +154,7 @@ export default function AdminPromoCodesPage() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        badge="Commerce"
+        badge="Shop"
         title="Promo codes"
         subtitle="Discount codes players can apply at checkout."
         action={
@@ -169,6 +170,8 @@ export default function AdminPromoCodesPage() {
           </button>
         }
       />
+
+      <ShopTabs />
 
       {showForm && (
         <Panel title="Create promo code">

@@ -22,10 +22,8 @@ interface PaginationData {
   totalPages: number;
 }
 
-type BookingActionType = "REFUND" | "DISPUTE";
+type BookingActionType = "REFUND";
 type BookingTabType = "ALL" | "VENUE" | "Coach" | "ACADEMY";
-const REFUND_ACTIONS_ENABLED = true;
-const DISPUTE_ACTIONS_ENABLED = false;
 
 const getBookingId = (booking: Booking): string => {
   const fallback = booking as Booking & { _id?: string };
@@ -87,14 +85,7 @@ export default function AdminBookingsPage() {
   const [actionType, setActionType] = useState<BookingActionType | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [refundType, setRefundType] = useState<"FULL" | "PARTIAL">("FULL");
-  const [disputeType, setDisputeType] = useState<
-    "NO_SHOW" | "POOR_QUALITY" | "PAYMENT_ISSUE" | "OTHER"
-  >("OTHER");
-  const [resolution, setResolution] = useState<"FULL_REFUND" | "PARTIAL_REFUND" | "NO_REFUND">(
-    "NO_REFUND"
-  );
   const [reason, setReason] = useState("");
-  const [evidence, setEvidence] = useState("");
   const [refundStatusByBookingId, setRefundStatusByBookingId] = useState<
     Record<string, AdminPhonePeRefundStatus>
   >({});
@@ -133,10 +124,7 @@ export default function AdminBookingsPage() {
     setSelectedBooking(booking);
     setActionType(null);
     setReason("");
-    setEvidence("");
     setRefundType("FULL");
-    setDisputeType("OTHER");
-    setResolution("NO_REFUND");
   };
 
   const closeBooking = () => {
@@ -145,17 +133,8 @@ export default function AdminBookingsPage() {
   };
 
   const beginAction = (type: BookingActionType) => {
-    if (type === "REFUND" && !REFUND_ACTIONS_ENABLED) {
-      toast.error("Refund actions are not available yet.");
-      return;
-    }
-    if (type === "DISPUTE" && !DISPUTE_ACTIONS_ENABLED) {
-      toast.error("Dispute actions are not available yet.");
-      return;
-    }
     setActionType(type);
     setReason("");
-    setEvidence("");
   };
 
   const checkPhonePeRefundStatus = useCallback(async (bookingId: string, silent = false) => {
@@ -204,21 +183,12 @@ export default function AdminBookingsPage() {
 
     setActionLoading(true);
     try {
-      if (actionType === "REFUND") {
-        await adminApi.processRefund(bookingId, {
-          refundType,
-          reason: reason.trim(),
-        });
-        toast.success("Refund request submitted.");
-        await checkPhonePeRefundStatus(bookingId, true);
-      } else {
-        await adminApi.handleDispute(bookingId, {
-          disputeType,
-          resolution,
-          evidence: evidence.trim() || undefined,
-        });
-        toast.success("Dispute request submitted.");
-      }
+      await adminApi.processRefund(bookingId, {
+        refundType,
+        reason: reason.trim(),
+      });
+      toast.success("Refund request submitted.");
+      await checkPhonePeRefundStatus(bookingId, true);
       setActionType(null);
       await loadBookings();
     } catch (submitError) {
@@ -353,13 +323,6 @@ export default function AdminBookingsPage() {
         ]}
       />
 
-      {!DISPUTE_ACTIONS_ENABLED && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Disputes can&apos;t be started from here yet. They switch on once the payment gateway
-          integration is live.
-        </div>
-      )}
-
       <AdminDataTable<Booking>
         columns={columns}
         rows={filteredBookings}
@@ -420,16 +383,7 @@ export default function AdminBookingsPage() {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => beginAction("DISPUTE")}
-                disabled={!DISPUTE_ACTIONS_ENABLED}
-                className={btn("outline")}
-              >
-                Open dispute
-              </button>
-              <button
-                type="button"
                 onClick={() => beginAction("REFUND")}
-                disabled={!REFUND_ACTIONS_ENABLED}
                 className={btn("primary")}
               >
                 Refund booking
@@ -528,48 +482,15 @@ export default function AdminBookingsPage() {
             )}
 
             {actionType && (
-              <DetailSection title={actionType === "REFUND" ? "Process refund" : "Handle dispute"}>
-                {actionType === "REFUND" ? (
-                  <select
-                    value={refundType}
-                    onChange={(event) => setRefundType(event.target.value as "FULL" | "PARTIAL")}
-                    className={fieldClass}
-                  >
-                    <option value="FULL">Full refund</option>
-                    <option value="PARTIAL">Partial refund</option>
-                  </select>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <select
-                      value={disputeType}
-                      onChange={(event) =>
-                        setDisputeType(
-                          event.target.value as
-                            "NO_SHOW" | "POOR_QUALITY" | "PAYMENT_ISSUE" | "OTHER"
-                        )
-                      }
-                      className={fieldClass}
-                    >
-                      <option value="NO_SHOW">No show</option>
-                      <option value="POOR_QUALITY">Poor quality</option>
-                      <option value="PAYMENT_ISSUE">Payment issue</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                    <select
-                      value={resolution}
-                      onChange={(event) =>
-                        setResolution(
-                          event.target.value as "FULL_REFUND" | "PARTIAL_REFUND" | "NO_REFUND"
-                        )
-                      }
-                      className={fieldClass}
-                    >
-                      <option value="FULL_REFUND">Full refund</option>
-                      <option value="PARTIAL_REFUND">Partial refund</option>
-                      <option value="NO_REFUND">No refund</option>
-                    </select>
-                  </div>
-                )}
+              <DetailSection title="Process refund">
+                <select
+                  value={refundType}
+                  onChange={(event) => setRefundType(event.target.value as "FULL" | "PARTIAL")}
+                  className={fieldClass}
+                >
+                  <option value="FULL">Full refund</option>
+                  <option value="PARTIAL">Partial refund</option>
+                </select>
 
                 <textarea
                   rows={3}
@@ -579,28 +500,14 @@ export default function AdminBookingsPage() {
                   className={fieldClass}
                 />
 
-                {actionType === "DISPUTE" && (
-                  <textarea
-                    rows={3}
-                    value={evidence}
-                    onChange={(event) => setEvidence(event.target.value)}
-                    placeholder="Evidence / details (optional)"
-                    className={fieldClass}
-                  />
-                )}
-
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={submitAction}
                     disabled={actionLoading || !reason.trim()}
-                    className={btn(actionType === "REFUND" ? "danger" : "primary")}
+                    className={btn("danger")}
                   >
-                    {actionLoading
-                      ? "Submitting…"
-                      : actionType === "REFUND"
-                        ? "Issue refund"
-                        : "Submit dispute"}
+                    {actionLoading ? "Submitting…" : "Issue refund"}
                   </button>
                   <button
                     type="button"

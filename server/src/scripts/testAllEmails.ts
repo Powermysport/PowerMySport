@@ -386,34 +386,6 @@ const cases: Case[] = [
     expect: ["4,500"],
   },
   {
-    category: "Dispute raised",
-    expectedTo: to("dispute1@example.com"),
-    run: () =>
-      email.sendDisputeStatusEmail({
-        name: "Asha",
-        email: to("dispute1@example.com"),
-        disputeType: "NO_SHOW",
-        status: "OPEN",
-        bookingId: "bk123456",
-      }),
-    expect: ["bk123456"],
-  },
-  {
-    category: "Dispute resolved (with refund)",
-    expectedTo: to("dispute2@example.com"),
-    run: () =>
-      email.sendDisputeStatusEmail({
-        name: "Asha",
-        email: to("dispute2@example.com"),
-        disputeType: "POOR_QUALITY",
-        status: "RESOLVED",
-        bookingId: "bk123456",
-        resolution: "PARTIAL_REFUND",
-        refundAmount: 250,
-      }),
-    expect: ["PARTIAL REFUND"],
-  },
-  {
     category: "Waitlist slot available",
     expectedTo: to("waitlist@example.com"),
     run: () =>

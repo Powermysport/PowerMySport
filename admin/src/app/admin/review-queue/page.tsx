@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
+import { ProviderChangesPanel } from "@/modules/admin/components/ProviderChangesPanel";
 import {
   reviewQueueApi,
   type ReviewKind,
@@ -11,9 +12,11 @@ import { btn } from "@/modules/shared/ui/buttonStyles";
 import { MetricStrip, Panel } from "@/modules/shared/ui/Panel";
 import { EmptyState, ErrorNotice, SkeletonBlock } from "@/modules/shared/ui/States";
 import { StatusBadge } from "@/modules/shared/ui/StatusBadge";
+import { Tabs } from "@/modules/shared/ui/Tabs";
 import { cn } from "@/utils/cn";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
 const KIND_LABEL: Record<ReviewKind, string> = {
   coach: "Coach",
@@ -52,11 +55,43 @@ const detailHref = (row: ReviewQueueRow): string => {
 const waitedLabel = (days: number): string =>
   days === 0 ? "Today" : days === 1 ? "1 day" : `${days} days`;
 
+type QueueTab = "new" | "changes";
+
 export default function ReviewQueuePage() {
+  return (
+    <Suspense fallback={<SkeletonBlock rows={5} label="Loading the review queue" />}>
+      <ReviewQueueContent />
+    </Suspense>
+  );
+}
+
+function ReviewQueueContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Both live in the URL: the old Provider changes, Venue approvals and
+  // Academy onboarding pages redirect here with `?tab=changes` / `?kind=...`.
+  const tab: QueueTab = searchParams.get("tab") === "changes" ? "changes" : "new";
+  const kindParam = searchParams.get("kind");
+  const kind: ReviewKind | "all" =
+    kindParam && kindParam in KIND_LABEL ? (kindParam as ReviewKind) : "all";
+
+  const setParams = (next: Record<string, string | null>) => {
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    for (const [key, value] of Object.entries(next)) {
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    }
+    const query = params.toString();
+    router.replace(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
+  };
+  const setKind = (next: ReviewKind | "all") => setParams({ kind: next === "all" ? null : next });
+
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [kind, setKind] = useState<ReviewKind | "all">("all");
+  const [changesCount, setChangesCount] = useState<number | undefined>(undefined);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -94,79 +129,98 @@ export default function ReviewQueuePage() {
       <AdminPageHeader
         badge="People"
         title="Review queue"
-        subtitle="Everyone waiting on a decision, across coaches, experts, venues and academies. Oldest first."
+        subtitle="Everyone waiting on a decision: new coaches, experts, venues and academies, and edits approved providers made to their profiles."
       />
 
-      <MetricStrip
-        items={[
-          { label: "Waiting", value: String(queue?.rows.length ?? 0) },
-          {
-            label: `Overdue (over ${queue?.overdueAfterDays ?? 5} days)`,
-            value: String(overdueCount),
-          },
+      <Tabs
+        label="Review queue"
+        value={tab}
+        onChange={(next) => setParams({ tab: next === "new" ? null : next })}
+        tabs={[
+          { id: "new" as const, label: "New providers", count: queue?.rows.length },
+          { id: "changes" as const, label: "Profile edits", count: changesCount },
         ]}
       />
 
-      <Panel
-        title="Waiting for a decision"
-        description="Open a row to approve, reject or ask for more."
-        action={
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
-            {KIND_FILTERS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={kind === option.id}
-                onClick={() => setKind(option.id)}
-                className={cn(btn(kind === option.id ? "primary" : "outline", "sm"))}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        {loading ? (
-          <SkeletonBlock rows={5} label="Loading the review queue" />
-        ) : error ? (
-          <ErrorNotice message={error} onRetry={load} />
-        ) : rows.length === 0 ? (
-          <EmptyState
-            title="Nothing waiting"
-            description="New submissions from coaches, experts, venues and academies appear here."
+      {/* Mounted while hidden so the tab count is known before it is opened. */}
+      <div hidden={tab !== "changes"}>
+        <ProviderChangesPanel onCountChange={setChangesCount} />
+      </div>
+
+      {tab === "new" && (
+        <>
+          <MetricStrip
+            items={[
+              { label: "Waiting", value: String(queue?.rows.length ?? 0) },
+              {
+                label: `Overdue (over ${queue?.overdueAfterDays ?? 5} days)`,
+                value: String(overdueCount),
+              },
+            ]}
           />
-        ) : (
-          <ul className="divide-y divide-slate-200">
-            {rows.map((row) => (
-              <li
-                key={`${row.kind}:${row.id}`}
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">
-                    {row.name}{" "}
-                    <span className="font-normal text-slate-500">{KIND_LABEL[row.kind]}</span>
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Waiting {waitedLabel(row.ageDays)}
-                    {row.waitingOn ? `, on ${row.waitingOn.toLowerCase()}` : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {row.overdue && <StatusBadge status="Overdue" tone="red" />}
-                  <StatusBadge
-                    status={STATUS_LABEL[row.lifecycle]}
-                    tone={row.lifecycle === "NEEDS_INFO" ? "blue" : "amber"}
-                  />
-                  <Link href={detailHref(row)} className={btn("outline", "sm")}>
-                    Open
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+
+          <Panel
+            title="Waiting for a decision"
+            description="Open a row to approve, reject or ask for more."
+            action={
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
+                {KIND_FILTERS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={kind === option.id}
+                    onClick={() => setKind(option.id)}
+                    className={cn(btn(kind === option.id ? "primary" : "outline", "sm"))}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            {loading ? (
+              <SkeletonBlock rows={5} label="Loading the review queue" />
+            ) : error ? (
+              <ErrorNotice message={error} onRetry={load} />
+            ) : rows.length === 0 ? (
+              <EmptyState
+                title="Nothing waiting"
+                description="New submissions from coaches, experts, venues and academies appear here."
+              />
+            ) : (
+              <ul className="divide-y divide-slate-200">
+                {rows.map((row) => (
+                  <li
+                    key={`${row.kind}:${row.id}`}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {row.name}{" "}
+                        <span className="font-normal text-slate-500">{KIND_LABEL[row.kind]}</span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Waiting {waitedLabel(row.ageDays)}
+                        {row.waitingOn ? `, on ${row.waitingOn.toLowerCase()}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {row.overdue && <StatusBadge status="Overdue" tone="red" />}
+                      <StatusBadge
+                        status={STATUS_LABEL[row.lifecycle]}
+                        tone={row.lifecycle === "NEEDS_INFO" ? "blue" : "amber"}
+                      />
+                      <Link href={detailHref(row)} className={btn("outline", "sm")}>
+                        Open
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </>
+      )}
     </div>
   );
 }
