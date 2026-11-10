@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { ORGANIZATION } from "@/lib/seo";
-import { PRINCIPLES, TEAM } from "@/modules/marketing/data/about";
+import { FOUNDER, PRINCIPLES, TEAM } from "@/modules/marketing/data/about";
 import { Button } from "@/modules/shared/ui/Button";
 import { PageHeader } from "@/modules/shared/ui/PageHeader";
 import { Mail } from "lucide-react";
@@ -10,7 +10,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Careers",
   description:
-    "PowerMySport is three engineers in Mullanpur, Punjab. What the work is, how we work, and how to get in touch if you want to help.",
+    "PowerMySport is a small team in Mullanpur, Punjab. What the work is, how we work, and how to get in touch if you want to help.",
   alternates: {
     canonical: "/careers",
   },
@@ -22,8 +22,8 @@ export const metadata: Metadata = {
  * This page used to list six full-time openings across five cities, with
  * health insurance, learning budgets and "industry-leading salaries and
  * equity". None of it was real, and the About page says, correctly, that we
- * are three engineers in Mullanpur. Everything here comes from that page's own
- * data (`PRINCIPLES`, `TEAM`) or is true of this codebase, so the two pages
+ * are a small team in Mullanpur. Everything here comes from that page's own
+ * data (`PRINCIPLES`, `FOUNDER`, `TEAM`) or is true of this codebase, so the two pages
  * cannot drift apart again. Add a role here only once it actually exists.
  */
 const WORK = [
@@ -40,7 +40,7 @@ const WORK = [
   {
     title: "The platform",
     description:
-      "A Next.js and TypeScript web app on a Node and MongoDB backend, built and shipped by the three of us.",
+      "A Next.js and TypeScript web app on a Node and MongoDB backend, built and shipped in-house.",
   },
 ];
 
@@ -52,7 +52,7 @@ export default function CareersPage() {
       <PageHeader
         eyebrow="Careers"
         title="Work with us"
-        description={`PowerMySport is three engineers in ${ORGANIZATION.addressLocality}, ${ORGANIZATION.addressRegion}, building the guide we wish every sports parent in India had. We don't post job descriptions. If you want to help, write to us.`}
+        description={`PowerMySport is a small team in ${ORGANIZATION.addressLocality}, ${ORGANIZATION.addressRegion}, building the guide we wish every sports parent in India had. We don't post job descriptions. If you want to help, write to us.`}
         width="5xl"
         actions={
           <Button asChild variant="primary" size="lg">
@@ -106,14 +106,23 @@ export default function CareersPage() {
             Who you would work with
           </h2>
           <ul className="mt-6 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-            {TEAM.map((member) => (
+            {[FOUNDER, ...TEAM].map((member) => (
               <li
                 key={member.name}
                 className="flex flex-col gap-1 px-6 py-4 sm:flex-row sm:items-baseline sm:gap-6"
               >
                 <span className="w-44 shrink-0 font-semibold text-slate-900">{member.name}</span>
                 <span className="text-sm text-slate-600">
-                  <span className="font-medium text-slate-700">{member.role}.</span> {member.desc}
+                  <span className="font-medium text-slate-700">{member.role}.</span> {member.desc}{" "}
+                  <a
+                    href={member.linkedin}
+                    target="_blank"
+                    rel="noopener noreferrer me"
+                    aria-label={`${member.name} on LinkedIn (opens in a new tab)`}
+                    className="text-power-orange-solid font-semibold underline underline-offset-2"
+                  >
+                    LinkedIn
+                  </a>
                 </span>
               </li>
             ))}
@@ -129,7 +138,7 @@ export default function CareersPage() {
           </h2>
           <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
             Tell us what you would like to work on, and send something you have built, written or
-            researched. {ORGANIZATION.email} reaches all three of us.
+            researched. {ORGANIZATION.email} reaches all of us.
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="primary" size="lg">

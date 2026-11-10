@@ -39,6 +39,9 @@ export const ORGANIZATION = {
   addressRegion: "Punjab",
   addressCountry: "IN",
   foundingDate: "2026",
+  /** Must match the founder named on /about (modules/marketing/data/about.ts). */
+  founder: "Rahul Khandelwal",
+  founderLinkedIn: "https://www.linkedin.com/in/rahul-khandelwal-7918906/",
   /** Only profiles that actually exist. An invented `sameAs` is worse than none. */
   socialProfiles: [
     "https://www.instagram.com/powermysport",
@@ -151,6 +154,12 @@ export const organizationJsonLd: JsonLdObject = {
   logo: absoluteUrl("/android-chrome-512x512.png"),
   description: SITE_DESCRIPTION,
   foundingDate: ORGANIZATION.foundingDate,
+  founder: {
+    "@type": "Person",
+    name: ORGANIZATION.founder,
+    jobTitle: "Founder",
+    sameAs: [ORGANIZATION.founderLinkedIn],
+  },
   areaServed: { "@type": "Country", name: "India" },
   address: {
     "@type": "PostalAddress",

@@ -103,6 +103,19 @@ export const PHASES = [
 ];
 
 /**
+ * Who founded and leads the company. Listed above the team so the page answers
+ * "who runs this" directly: grant and programme reviewers (Google for Startups
+ * rejected an application in Nov 2026 for want of exactly this) look for a
+ * named founder, not just a list of engineers.
+ */
+export const FOUNDER = {
+  name: "Rahul Khandelwal",
+  role: "Founder",
+  desc: "Started PowerMySport and leads the company.",
+  linkedin: "https://www.linkedin.com/in/rahul-khandelwal-7918906/",
+};
+
+/**
  * The team, described by what they build rather than by job title.
  *
  * The section this replaced was headlined "Built by Sports Enthusiasts" over
@@ -114,15 +127,18 @@ export const TEAM = [
     name: "Jatin",
     role: "Platform and infrastructure",
     desc: "Builds the roadmap engine and keeps the thing running.",
+    linkedin: "https://www.linkedin.com/in/jatin1011/",
   },
   {
     name: "Rakshak Phogat",
     role: "Product and interfaces",
     desc: "Turns federation documents into screens a parent can act on.",
+    linkedin: "https://www.linkedin.com/in/rakhshakkumar/",
   },
   {
     name: "Vanshika Narang",
     role: "Full stack and deployments",
     desc: "Builds features end to end and ships them safely.",
+    linkedin: "https://www.linkedin.com/in/vanshika-narang-975b9932b/",
   },
 ];

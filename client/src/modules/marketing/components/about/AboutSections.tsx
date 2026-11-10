@@ -8,6 +8,7 @@ import {
   LIVE_CAPABILITIES,
   PHASES,
   PRINCIPLES,
+  FOUNDER,
   SAFETY_COMMITMENTS,
   TEAM,
 } from "@/modules/marketing/data/about";
@@ -19,6 +20,20 @@ import {
 // globals.css rather than a framer-motion stagger.
 
 const SURFACE = "rounded-lg border border-slate-200 bg-white premium-shadow";
+
+function LinkedInLink({ name, href }: { name: string; href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer me"
+      aria-label={`${name} on LinkedIn (opens in a new tab)`}
+      className="text-power-orange-solid mt-1 text-sm font-semibold underline underline-offset-2"
+    >
+      LinkedIn
+    </a>
+  );
+}
 
 function SectionHead({
   eyebrow,
@@ -250,14 +265,25 @@ export function WhoWeAre() {
   return (
     <section className="reveal-on-scroll bg-paper-deep py-16 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <SectionHead eyebrow="Who's building this" title="A small team, building in the open">
-          Three engineers in {ORGANIZATION.addressLocality}, {ORGANIZATION.addressRegion}, who got
+        <SectionHead eyebrow="Founder and team" title="A small team, building in the open">
+          A small team in {ORGANIZATION.addressLocality}, {ORGANIZATION.addressRegion}, who got
           tired of watching families guess. We are not a sports institution and we do not pretend to
           be, what we do is read the federation documents nobody else will, talk to coaches and
           parents, and turn what we learn into something you can act on in ten minutes.
         </SectionHead>
 
-        <ul className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-3">
+        <div className={`mx-auto mt-10 flex max-w-md flex-col gap-1.5 p-6 text-center ${SURFACE}`}>
+          <p className="text-ink-muted text-xs font-semibold uppercase tracking-wide">Founder</p>
+          <h3 className="text-lg font-bold text-slate-900">{FOUNDER.name}</h3>
+          <p className="text-ink-muted text-sm font-medium">{FOUNDER.role}</p>
+          <p className="text-sm leading-relaxed text-slate-600">{FOUNDER.desc}</p>
+          <LinkedInLink name={FOUNDER.name} href={FOUNDER.linkedin} />
+        </div>
+
+        <h3 className="text-ink-muted mt-10 text-center text-xs font-semibold uppercase tracking-wide">
+          Team
+        </h3>
+        <ul className="mx-auto mt-4 grid max-w-4xl gap-4 sm:grid-cols-3">
           {TEAM.map((member) => (
             <li
               key={member.name}
@@ -266,6 +292,7 @@ export function WhoWeAre() {
               <h3 className="text-base font-bold text-slate-900">{member.name}</h3>
               <p className="text-ink-muted text-sm font-medium">{member.role}</p>
               <p className="text-sm leading-relaxed text-slate-600">{member.desc}</p>
+              <LinkedInLink name={member.name} href={member.linkedin} />
             </li>
           ))}
         </ul>
@@ -279,7 +306,7 @@ export function WhoWeAre() {
             <Mail aria-hidden className="h-3.5 w-3.5" />
             {ORGANIZATION.email}
           </a>{" "}
-          reaches all three of us. We are also{" "}
+          reaches all of us. We are also{" "}
           <Link
             href="/careers"
             className="font-semibold text-slate-700 underline underline-offset-2"
