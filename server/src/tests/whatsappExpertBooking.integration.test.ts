@@ -190,6 +190,59 @@ describe("booking an expert from WhatsApp", () => {
     assert.equal(String(session.userId), userId);
     const created = await BookingEvent.findOne({ type: "CREATED" }).lean();
     assert.equal(created.channel, "WHATSAPP");
+    assert.equal(session.bookedVia, "WHATSAPP");
+    // After paying, PhonePe sends the parent back to the chat, not to a page that needs a sign-in.
+    const pay = PhonePeService.initiatePhonePePayment.mock.calls.at(-1).arguments[0];
+    assert.equal(pay.redirectUrl, "https://wa.me/918968582443");
+  });
+
+  it("when the payment lands, the parent gets a receipt in the chat and the assistant knows", async () => {
+    const expertId = await seedExpert();
+    const userId = await seedParent();
+    const picker = ctx(userId);
+    await tool("prepare_expert_booking").execute({ expert: expertId }, picker);
+    await tool("prepare_expert_booking").execute(
+      { expert: expertId, slot: picker.outbound.slotPicker.rows[0].title },
+      ctx(userId)
+    );
+    await nextMessage();
+    await tool("confirm_pending_action").execute({}, ctx(userId, "yes"));
+
+    const sent: any[] = [];
+    const realFetch = global.fetch;
+    process.env.WHATSAPP_ACCESS_TOKEN = "token";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "123";
+    global.fetch = (async (_url: string, init: { body: string }) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.r" }] }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const {
+        applyExpertPaymentSuccess,
+      } = require("../client/services/ExpertsService/sessionLifecycle");
+      const { hashPhone } = require("../shared/services/whatsappAssistantService");
+      const { sendWhatsAppBookingReceipt } = require("../shared/services/whatsappBookingReceipt");
+      // The parent's chat with the assistant, keyed by the number they booked from.
+      await WhatsAppConversation.create({ phoneHash: hashPhone("919000000002"), messages: [] });
+      const session = await ExpertSession.findOne({});
+      await applyExpertPaymentSuccess(session);
+      // The receipt is fire-and-forget there; send it directly too and wait, so the test is not racing it.
+      await sendWhatsAppBookingReceipt(session);
+
+      const receipts = sent.filter((m) => m.type === "text");
+      assert.ok(receipts.length >= 1);
+      assert.equal(receipts[0].to, "919000000002");
+      assert.match(receipts[0].text.body, /Payment received: ₹1500/);
+      assert.match(receipts[0].text.body, /Asha/);
+      const chat = await WhatsAppConversation.findOne({
+        phoneHash: hashPhone("919000000002"),
+      }).lean();
+      assert.match(chat.messages.at(-1).content, /\(Booking update\) Payment received/);
+    } finally {
+      global.fetch = realFetch;
+      delete process.env.WHATSAPP_ACCESS_TOKEN;
+      delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+    }
   });
 
   it("does not hold anything without a clear yes", async () => {

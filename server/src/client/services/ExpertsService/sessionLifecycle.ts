@@ -10,6 +10,10 @@ import {
   getPhonePeOrderStatus,
 } from "../../../shared/services/PhonePeService";
 import { recordExpertSessionEvent } from "../BookingEventService";
+import {
+  sendWhatsAppBookingReceipt,
+  whatsappChatUrl,
+} from "../../../shared/services/whatsappBookingReceipt";
 import type { BookingEventChannel } from "../../models/BookingEvent";
 import { assertSlotBookable } from "../ExpertAvailabilityService";
 import {
@@ -183,6 +187,7 @@ export const initiateExpertSession = async (params: {
           holdExpiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
           mode: resolvedMode,
           clientNote: params.clientNote?.trim(),
+          ...(channel === "WHATSAPP" ? { bookedVia: "WHATSAPP" } : {}),
         },
       ],
       { session: dbSession }
@@ -212,7 +217,12 @@ export const initiateExpertSession = async (params: {
   const payment = await initiatePhonePePayment({
     merchantOrderId,
     amount: toPaise(expert.sessionFee),
-    redirectUrl: `${frontendUrl()}/experts/sessions/${session._id}`,
+    // A parent paying from WhatsApp goes back to the chat, where the receipt arrives; the website
+    // page needs them signed in on that browser. The webhook and the cron confirm the payment.
+    redirectUrl:
+      channel === "WHATSAPP"
+        ? whatsappChatUrl()
+        : `${frontendUrl()}/experts/sessions/${session._id}`,
     ...(params.userPhone ? { userPhone: params.userPhone } : {}),
   });
 
@@ -288,6 +298,11 @@ export const applyExpertPaymentSuccess = async (
         scheduledAt: session.scheduledAt ? new Date(session.scheduledAt).toISOString() : null,
       },
     });
+  }
+
+  if (!wasPaid && session.bookedVia === "WHATSAPP") {
+    // Never awaited into a failure: a receipt that cannot be sent must not undo a payment.
+    void sendWhatsAppBookingReceipt(session).catch(() => undefined);
   }
 
   if (!wasPaid) {

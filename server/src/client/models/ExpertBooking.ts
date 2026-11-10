@@ -48,6 +48,8 @@ export interface ExpertSessionDocument extends Document {
   mode?: "ONLINE" | "IN_PERSON";
   meetingLink?: string;
   clientNote?: string;
+  /** Set when the parent booked from the WhatsApp assistant: they are told there when it is paid. */
+  bookedVia?: "WHATSAPP";
   callbackPayload?: unknown;
   // Cancellation
   cancelledAt?: Date;
@@ -158,6 +160,7 @@ const expertSessionSchema = new Schema<ExpertSessionDocument>(
     mode: { type: String, enum: ["ONLINE", "IN_PERSON"] },
     meetingLink: { type: String, trim: true },
     clientNote: { type: String, trim: true, maxlength: 1000 },
+    bookedVia: { type: String, enum: ["WHATSAPP"] },
     callbackPayload: { type: Schema.Types.Mixed },
     cancelledAt: { type: Date },
     cancelledBy: {
