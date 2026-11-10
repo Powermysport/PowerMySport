@@ -16,18 +16,18 @@ export function FollowButton({ slug }: { slug: string }) {
   const { signedIn, hydrated, ready, following, toggle } = useOpportunityFollow(slug);
 
   // Reserve the space so the card does not jump when the session is read.
-  if (!hydrated || !ready) return <div aria-hidden className="mt-4 min-h-11" />;
+  if (!hydrated || !ready) return <div aria-hidden className="min-h-6" />;
 
   if (!signedIn) {
     return (
-      <p className="mt-4 text-sm text-slate-600">
+      <p className="text-ink-body text-sm">
         <Link
           href={`/login?redirect=${encodeURIComponent(window.location.pathname)}`}
-          className="font-semibold text-slate-900 underline"
+          className="text-ink decoration-ink/30 hover:decoration-ink font-medium underline underline-offset-4"
         >
           Sign in
         </Link>{" "}
-        to get an email when this window opens or is about to close.
+        to get an email when applications open or are about to close.
       </p>
     );
   }
@@ -39,10 +39,10 @@ export function FollowButton({ slug }: { slug: string }) {
       onClick={() => toggle.mutate(!following)}
       disabled={toggle.isPending}
       aria-pressed={following}
-      className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60"
+      className="text-ink decoration-ink/30 hover:decoration-ink focus-visible:ring-ink inline-flex min-h-11 items-center gap-2 rounded-sm text-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60"
     >
       <Icon aria-hidden className="h-4 w-4" />
-      {following ? "Stop alerts for this entry" : "Tell me when the dates move"}
+      {following ? "Stop these emails" : "Email me about these dates"}
     </button>
   );
 }

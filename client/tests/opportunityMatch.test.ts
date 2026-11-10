@@ -286,7 +286,7 @@ describe("daysUntil and deadlineLine", () => {
     ).toBe("Opens 1 Nov 2026");
     expect(
       deadlineLine({ cycleState: "closed", cycle: { keyDates: [] } }, "2026-10-03")?.text
-    ).toBe("Closed for this cycle");
+    ).toBe("Closed for now");
   });
 
   it("says nothing for an entry with no fixed window", () => {

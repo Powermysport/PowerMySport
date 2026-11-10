@@ -1,166 +1,185 @@
-import { AlertTriangle, ExternalLink, Info } from "lucide-react";
+import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { PageHeader } from "@/modules/shared/ui/PageHeader";
 import type { ReactNode } from "react";
 
-import { OWNER_TYPE_LABELS, TRACKS } from "../config/tracks";
+import { TRACKS } from "../config/tracks";
 import type { Opportunity } from "../services/opportunities";
+import { ownerLine, whoLine } from "../utils/atAGlance";
 import { formatDay, sportsLabel, whereLabel } from "../utils/format";
 import { AtAGlance } from "./AtAGlance";
 import { EligibilityChecklist } from "./EligibilityChecklist";
 
 // ─── One admission route or scholarship ─────────────────────────────────────
 //
-// Ordered by the questions a parent asks, in the order they ask them: what is
-// this, what do we get and when, what do we do next (all in the at-a-glance
-// block, which is the side rail on a wide screen and comes first on a phone),
-// does our child qualify, what are the steps. The sources and the date we last
-// checked come last but are never hidden, because every figure above them is
-// only as good as they are.
+// Ordered by the questions a parent asks, in the order they ask them, and
+// weighted by how much each answer matters:
+//   1. What is this?            title, who runs it, a two-line summary
+//   2. Is it worth it, by when, and what do I do?
+//                               the decision panel: the figure set largest,
+//                               the deadline with days left, the one button
+//   3. Can my child apply?      the rules, checkable against the child
+//   4. How do we apply?         numbered steps
+//   5. Dates, then good-to-know facts
+//   6. Where this came from     quiet, last, never hidden
+// Every other line was cut: each fact is said once, in the place it answers.
+
+/** India's date ("2026-11-10"), so "6 days left" is counted the way the server counts. */
+function todayInIndia(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="border-t border-slate-200 pt-8 first:border-t-0 first:pt-0">
-      <h2 className="font-editorial text-xl font-normal text-slate-900">{title}</h2>
-      <div className="mt-4 text-[15px] leading-relaxed text-slate-700">{children}</div>
+    <section className="border-hairline border-t pt-10">
+      <h2 className="font-editorial text-ink text-balance text-3xl font-light tracking-tight">
+        {title}
+      </h2>
+      <div className="mt-6">{children}</div>
     </section>
   );
 }
 
+function stepsTitle(selection: Opportunity["selection"]): string {
+  if (selection === "scouted" || selection === "nominated") return "How players are chosen";
+  if (selection === "apply" || selection === "trials") return "How to apply";
+  return "What to do";
+}
+
 export function OpportunityDetail({ opportunity }: { opportunity: Opportunity }) {
   const track = TRACKS[opportunity.track];
-  const category = track.categories[opportunity.category];
   const keyDates = [...(opportunity.cycle?.keyDates ?? [])].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
-  const facts = [
+  const steps = opportunity.steps ?? [];
+  const facts = opportunity.keyFacts ?? [];
+  const sources = opportunity.sources ?? [];
+  const who = whoLine(opportunity.eligibility);
+  const context = [
     sportsLabel(opportunity),
     whereLabel(opportunity.geography),
-    category?.label,
     opportunity.cycle?.label ? `Rules for ${opportunity.cycle.label}` : null,
   ].filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="bg-paper min-h-screen">
       <PageHeader
         width="5xl"
         breadcrumbs={[{ label: track.title, href: track.path }, { label: opportunity.title }]}
+        eyebrow={ownerLine(opportunity.owner) ?? undefined}
         title={opportunity.title}
-        description={
-          opportunity.owner?.name
-            ? `${opportunity.owner.name}${
-                OWNER_TYPE_LABELS[opportunity.owner.type]
-                  ? ` · ${OWNER_TYPE_LABELS[opportunity.owner.type]}`
-                  : ""
-              }`
-            : undefined
-        }
-        meta={<span className="font-semibold text-slate-600">{facts.join(" · ")}</span>}
+        description={opportunity.summary}
+        meta={<span className="text-ink-body">{context.join(" · ")}</span>}
       />
 
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-        {opportunity.summary && (
-          <p className="max-w-3xl text-[17px] leading-relaxed text-slate-800">
-            {opportunity.summary}
-          </p>
-        )}
-
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6 sm:pt-10 lg:px-8">
         {opportunity.stale && (
-          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="mb-6 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              We last checked this more than a year ago, and the rules may have changed. Treat the
-              official source as the final word.
+              We last checked this more than a year ago, so the rules may have changed. Go by what
+              the official website says.
             </span>
           </p>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-          {/* First on a phone, so the answers and the next step come before the detail. */}
-          <div className="lg:order-last">
-            <AtAGlance opportunity={opportunity} />
-          </div>
+        <AtAGlance opportunity={opportunity} today={todayInIndia()} />
 
-          <article className="min-w-0 space-y-8">
-            <Section title="Who it is for">
-              <EligibilityChecklist opportunity={opportunity} />
-            </Section>
-
-            {(opportunity.steps?.length ?? 0) > 0 && (
-              <Section
-                title={
-                  opportunity.selection === "scouted" || opportunity.selection === "nominated"
-                    ? "How players are picked"
-                    : "What to do"
-                }
-              >
-                <ol className="list-decimal space-y-2 pl-5">
-                  {opportunity.steps!.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-              </Section>
+        {/* One reading column: long lines across the full width are hard to follow. */}
+        <article className="mt-16 max-w-3xl space-y-14">
+          <Section title="Can your child apply?">
+            {who && (
+              <p className="text-ink mb-6 max-w-[60ch] text-pretty text-lg leading-relaxed">
+                {who}
+              </p>
             )}
+            <EligibilityChecklist opportunity={opportunity} />
+          </Section>
 
-            {keyDates.length > 0 && (
-              <Section title="Key dates">
-                <ul className="space-y-1.5">
-                  {keyDates.map((d) => (
-                    <li key={`${d.label}-${d.date}`} className="flex gap-3">
-                      <span className="w-28 shrink-0 font-semibold text-slate-900">
-                        {formatDay(d.date)}
-                      </span>
-                      <span>{d.label}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-            )}
-
-            {(opportunity.keyFacts?.length ?? 0) > 0 && (
-              <Section title="Good to know">
-                <ul className="list-disc space-y-2 pl-5">
-                  {opportunity.keyFacts!.map((fact) => (
-                    <li key={fact}>{fact}</li>
-                  ))}
-                </ul>
-              </Section>
-            )}
-
-            <Section title="Sources">
-              {opportunity.lastVerifiedOn && (
-                <p className="text-[14px] text-slate-600">
-                  Last checked by PowerMySport on {formatDay(opportunity.lastVerifiedOn)}.
-                </p>
-              )}
-              {opportunity.verificationNote && (
-                <p className="mt-3 flex items-start gap-2 rounded-lg bg-slate-100 p-3 text-[14px] text-slate-700">
-                  <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                  <span>{opportunity.verificationNote}</span>
-                </p>
-              )}
-              <ul className="mt-3 space-y-2">
-                {(opportunity.sources ?? []).map((source) => (
-                  <li key={source.url}>
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-start gap-1.5 font-semibold text-orange-700 hover:text-orange-800 hover:underline"
+          {steps.length > 0 && (
+            <Section title={stepsTitle(opportunity.selection)}>
+              <ol className="space-y-5">
+                {steps.map((step, index) => (
+                  <li key={step} className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3">
+                    <span
+                      aria-hidden
+                      className="font-editorial text-ink text-3xl font-light tabular-nums leading-none"
                     >
-                      <span>{source.label}</span>
-                      <ExternalLink aria-hidden className="mt-1 h-3.5 w-3.5 shrink-0" />
-                    </a>
-                    {source.publishedOn && (
-                      <span className="ml-2 text-[13px] text-slate-500">
-                        {formatDay(source.publishedOn)}
-                      </span>
-                    )}
+                      {index + 1}
+                    </span>
+                    <p className="text-ink-body text-pretty leading-relaxed">
+                      <span className="sr-only">Step {index + 1}: </span>
+                      {step}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </Section>
+          )}
+
+          {keyDates.length > 0 && (
+            <Section title="Important dates">
+              <ul className="divide-hairline border-hairline divide-y border-y">
+                {keyDates.map((d) => (
+                  <li
+                    key={`${d.label}-${d.date}`}
+                    className="flex flex-col gap-1 py-3 sm:flex-row sm:gap-6"
+                  >
+                    <span className="text-ink w-32 shrink-0 font-medium tabular-nums">
+                      {formatDay(d.date)}
+                    </span>
+                    <span className="text-ink-body">{d.label}</span>
                   </li>
                 ))}
               </ul>
             </Section>
-          </article>
-        </div>
+          )}
+
+          {facts.length > 0 && (
+            <Section title="Good to know">
+              <ul className="space-y-3">
+                {facts.map((fact) => (
+                  <li key={fact} className="text-ink-body flex gap-3 leading-relaxed">
+                    <span
+                      aria-hidden
+                      className="bg-ink/40 mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                    />
+                    <span className="text-pretty">{fact}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {/* Last and quiet, but never hidden: every figure above is only as good as these. */}
+          {(sources.length > 0 || opportunity.verificationNote) && (
+            <section className="border-hairline border-t pt-8">
+              <h2 className="text-ink text-base font-medium">Where this information comes from</h2>
+              {opportunity.verificationNote && (
+                <p className="text-ink-body mt-2 max-w-[60ch] text-pretty text-sm leading-relaxed">
+                  {opportunity.verificationNote}
+                </p>
+              )}
+              <ul className="mt-3 space-y-2">
+                {sources.map((source) => (
+                  <li key={source.url} className="text-sm">
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-ink decoration-ink/30 hover:decoration-ink inline-flex items-start gap-1 font-medium underline underline-offset-4"
+                    >
+                      {source.label}
+                      <ArrowUpRight aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    </a>
+                    {source.publishedOn && (
+                      <span className="text-ink-muted ml-2">{formatDay(source.publishedOn)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </article>
       </div>
     </div>
   );

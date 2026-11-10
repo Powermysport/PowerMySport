@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
 import { EligibilityChecklist } from "../src/modules/opportunities/components/EligibilityChecklist";
 import { OpportunityBrowser } from "../src/modules/opportunities/components/OpportunityBrowser";
@@ -45,7 +48,10 @@ const type = (label: string, value: string) =>
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
   });
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  replace.mockClear();
+});
 afterEach(() => cleanup());
 
 describe("the list when there are only a few entries", () => {
@@ -73,15 +79,15 @@ describe("the list when there are only a few entries", () => {
   it("says plainly how much is listed and when it was last checked", () => {
     browser(few);
 
-    expect(screen.getByText("2 entries listed so far")).toBeTruthy();
-    expect(screen.getByText(/last checked 1 Oct 2026/)).toBeTruthy();
-    expect(screen.getByText(/We add more as each one is checked/)).toBeTruthy();
+    expect(screen.getByText("2 scholarships listed so far")).toBeTruthy();
+    expect(screen.getByText(/Last checked on 1 Oct 2026/)).toBeTruthy();
+    expect(screen.getByText(/We add more once we have checked each one/)).toBeTruthy();
   });
 
   it("uses the singular for one entry", () => {
     browser([few[0]!]);
 
-    expect(screen.getByText("1 entry listed so far")).toBeTruthy();
+    expect(screen.getByText("1 scholarship listed so far")).toBeTruthy();
   });
 
   it("filters by type with chips, and only when there is more than one type", () => {
@@ -129,7 +135,7 @@ describe("the list when there are many entries", () => {
   it("does not repeat the category on every card, and has no 'more to come' note or ask panel", () => {
     browser(many);
 
-    expect(screen.queryByText(/We add more as each one is checked/)).toBeNull();
+    expect(screen.queryByText(/We add more once we have checked each one/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Ask on WhatsApp/ })).toBeNull();
   });
 });
@@ -138,9 +144,11 @@ describe("the list when there is nothing", () => {
   it("says it is still being checked, and offers a person, and shows no filter bar", () => {
     browser([]);
 
-    expect(screen.getByText("We are checking these against their official sources.")).toBeTruthy();
+    expect(
+      screen.getByText("We are still checking these on their official websites.")
+    ).toBeTruthy();
     expect(screen.getByRole("link", { name: /Ask on WhatsApp/ })).toBeTruthy();
-    expect(screen.queryByText("Find what fits your child")).toBeNull();
+    expect(screen.queryByText("See which ones suit your child")).toBeNull();
   });
 });
 
@@ -169,8 +177,8 @@ describe("finding what fits", () => {
   it("marks nothing until the parent says something about the child", () => {
     browser(items);
 
-    expect(screen.queryByText("Fits your child")).toBeNull();
-    expect(screen.queryByText("Not a match")).toBeNull();
+    expect(screen.queryByText("Matches your child")).toBeNull();
+    expect(screen.queryByText("Does not match")).toBeNull();
   });
 
   it("marks each entry, and puts the ones that fit first", () => {
@@ -179,9 +187,9 @@ describe("finding what fits", () => {
     type("Child's age", "14");
     type("Sport", "tennis");
 
-    expect(screen.getAllByText("Fits your child")).toHaveLength(1);
+    expect(screen.getAllByText("Matches your child")).toHaveLength(1);
     expect(screen.getAllByText("Check the details")).toHaveLength(1);
-    expect(screen.getAllByText("Not a match")).toHaveLength(1);
+    expect(screen.getAllByText("Does not match")).toHaveLength(1);
     expect(titlesInOrder()).toEqual(["Wide open", "Needs marks", "Under 12s only"]);
   });
 
@@ -191,9 +199,9 @@ describe("finding what fits", () => {
     type("Sport", "tennis");
 
     const summary = screen.getByRole("status");
-    expect(within(summary).getByText("1 fit")).toBeTruthy();
+    expect(within(summary).getByText("1 match")).toBeTruthy();
     expect(within(summary).getByText("1 to check")).toBeTruthy();
-    expect(within(summary).getByText("1 not a match")).toBeTruthy();
+    expect(within(summary).getByText("1 do not match")).toBeTruthy();
   });
 
   it("can hide the ones that do not match", () => {
@@ -209,18 +217,18 @@ describe("finding what fits", () => {
   it("forgets the child when cleared", () => {
     browser(items);
     type("Child's age", "14");
-    expect(screen.getAllByText("Not a match")).toHaveLength(1);
+    expect(screen.getAllByText("Does not match")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: /Clear/ }));
 
-    expect(screen.queryByText("Not a match")).toBeNull();
+    expect(screen.queryByText("Does not match")).toBeNull();
     expect((screen.getByLabelText("Child's age") as HTMLInputElement).value).toBe("");
   });
 
   it("remembers the child on this device", () => {
     browser(items);
     type("Sport", "chess");
-    type("Boy or girl", "girl");
+    fireEvent.click(screen.getByRole("button", { name: "Girl" }));
 
     expect(JSON.parse(localStorage.getItem("pms_opportunity_profile")!)).toMatchObject({
       sport: "chess",
@@ -275,15 +283,15 @@ describe("OpportunityRow", () => {
   it("says when it was last checked", () => {
     render(<OpportunityRow today={TODAY} opportunity={entry({ lastVerifiedOn: "2026-10-03" })} />);
 
-    expect(screen.getByText("Checked 3 Oct 2026")).toBeTruthy();
+    expect(screen.getByText("Last checked 3 Oct 2026")).toBeTruthy();
   });
 
   it("shows no verdict badge unless one is given", () => {
     const { rerender } = render(<OpportunityRow today={TODAY} opportunity={entry()} />);
-    expect(screen.queryByText("Fits your child")).toBeNull();
+    expect(screen.queryByText("Matches your child")).toBeNull();
 
     rerender(<OpportunityRow today={TODAY} opportunity={entry()} verdict="fits" />);
-    expect(screen.getByText("Fits your child")).toBeTruthy();
+    expect(screen.getByText("Matches your child")).toBeTruthy();
   });
 });
 
@@ -317,7 +325,7 @@ describe("EligibilityChecklist", () => {
 
     expect(within(rowFor("Sport")).getByText("Matches")).toBeTruthy();
     expect(within(rowFor("Age")).getByText("Does not match")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Not a match");
+    expect(screen.getByRole("status").textContent).toContain("Does not match");
   });
 
   it("leaves marks and level for the parent, never ticking them", () => {
@@ -333,6 +341,56 @@ describe("EligibilityChecklist", () => {
   it("says what is missing for a rule it could check but cannot yet", () => {
     render(<EligibilityChecklist opportunity={rules} />);
 
-    expect(within(rowFor("Age")).getByText("Add this above to check")).toBeTruthy();
+    expect(within(rowFor("Age")).queryByText("Fill this in above to check")).toBeNull();
+    expect(within(rowFor("Age")).getByText(": Not checked yet")).toBeTruthy();
+  });
+});
+
+describe("the one sport control", () => {
+  const items = [
+    entry({ slug: "t", title: "Tennis only", allSports: false, sports: ["tennis"] }),
+    entry({ slug: "c", title: "Chess only", allSports: false, sports: ["chess"] }),
+    entry({ slug: "all", title: "Every sport" }),
+  ];
+  const titles = () =>
+    screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+
+  it("filters the list to the sport, keeping all-sports entries", () => {
+    browser(items);
+    type("Sport", "tennis");
+
+    expect(titles()).toEqual(["Tennis only", "Every sport"]);
+    expect(screen.getByRole("status").textContent).toContain("2 scholarships for Tennis");
+  });
+
+  it("is the only sport control on the page", () => {
+    browser(items);
+
+    expect(screen.getAllByLabelText("Sport")).toHaveLength(1);
+    expect(screen.queryByRole("navigation", { name: /sport/i })).toBeNull();
+  });
+
+  it("takes the sport from the link it was opened with", () => {
+    browser(items, { selectedSport: "chess" });
+
+    expect((screen.getByLabelText("Sport") as HTMLSelectElement).value).toBe("chess");
+    expect(JSON.parse(localStorage.getItem("pms_opportunity_profile")!).sport).toBe("chess");
+  });
+
+  it("widens a list the server cut to another sport, without scrolling", () => {
+    browser(items, { selectedSport: "chess" });
+    type("Sport", "tennis");
+
+    expect(replace).toHaveBeenCalledWith("/scholarships", { scroll: false });
+  });
+
+  it("lets boy or girl be taken back with a second tap", () => {
+    browser(items);
+    const girl = screen.getByRole("button", { name: "Girl" });
+
+    fireEvent.click(girl);
+    expect(girl.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(girl);
+    expect(girl.getAttribute("aria-pressed")).toBe("false");
   });
 });

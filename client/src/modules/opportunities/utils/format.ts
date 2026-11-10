@@ -21,15 +21,39 @@ const PERIOD: Record<string, string> = {
   total: " in total",
 };
 
-/** "₹6,28,000 a year", in the currency's own grouping. */
-export function formatAmount(amount: NonNullable<Opportunity["benefit"]>["amount"]): string | null {
+/** Notes that qualify the figure itself, so they read in front of it: "Up to $50,000". */
+const LEADING_QUALIFIER =
+  /^(up ?to|upto|from|about|around|approx\.?|approximately|at least|starting at)$/i;
+
+/**
+ * The amount and the editor's note, kept apart so a card can show the figure
+ * large and the note small. A qualifier such as "Up to" joins the figure
+ * ("Up to $50,000 a year"); any other note ("for one year", or a full sentence)
+ * is returned as `note`, never glued on in front with a colon.
+ */
+export function amountParts(
+  amount: NonNullable<Opportunity["benefit"]>["amount"]
+): { money: string; note: string | null } | null {
   if (!amount) return null;
-  const money = new Intl.NumberFormat(amount.currency === "INR" ? "en-IN" : "en-US", {
+  const figure = new Intl.NumberFormat(amount.currency === "INR" ? "en-IN" : "en-US", {
     style: "currency",
     currency: amount.currency,
     maximumFractionDigits: 0,
   }).format(amount.value);
-  return `${amount.note ? `${amount.note}: ` : ""}${money}${PERIOD[amount.period] ?? ""}`;
+  const money = `${figure}${PERIOD[amount.period] ?? ""}`;
+  const note = amount.note?.trim().replace(/[\s:.,;]+$/, "") || null;
+  if (note && LEADING_QUALIFIER.test(note)) {
+    const lead = note.charAt(0).toUpperCase() + note.slice(1);
+    return { money: `${lead} ${money}`, note: null };
+  }
+  return { money, note };
+}
+
+/** "₹6,28,000 a year", or "₹40,000 a month (for one year)", in one line. */
+export function formatAmount(amount: NonNullable<Opportunity["benefit"]>["amount"]): string | null {
+  const parts = amountParts(amount);
+  if (!parts) return null;
+  return parts.note ? `${parts.money} (${parts.note})` : parts.money;
 }
 
 /**
@@ -52,7 +76,7 @@ export function costLine(cost: Opportunity["cost"]): string | null {
   } else head = "Varies";
   // A "varies" with nothing to say what it varies on says only that, and the
   // official page is the answer.
-  if (!note) return head === "Varies" ? "Varies. Check the official page." : head;
+  if (!note) return head === "Varies" ? "Varies. See the official website." : head;
   return `${head}. ${note}`;
 }
 
@@ -84,11 +108,11 @@ export function cycleLine(opportunity: Pick<Opportunity, "cycle" | "cycleState">
   const label = cycle?.label ? `${cycle.label} ` : "";
   switch (cycleState) {
     case "open":
-      return cycle?.closesOn ? `Open now, closes ${formatDay(cycle.closesOn)}` : "Open now";
+      return cycle?.closesOn ? `Open now. Closes on ${formatDay(cycle.closesOn)}` : "Open now";
     case "upcoming":
-      return cycle?.opensOn ? `Opens ${formatDay(cycle.opensOn)}` : "Opening soon";
+      return cycle?.opensOn ? `Opens on ${formatDay(cycle.opensOn)}` : "Opening soon";
     case "closed":
-      return `The ${label}window closed${cycle?.closesOn ? ` on ${formatDay(cycle.closesOn)}` : ""}. Next cycle's dates are not out yet.`;
+      return `Applications ${label ? `for ${label}` : ""}closed${cycle?.closesOn ? ` on ${formatDay(cycle.closesOn)}` : ""}. The next dates are not out yet.`;
     default:
       return null;
   }
@@ -158,7 +182,7 @@ export function deadlineLine(
       urgent: false,
     };
   }
-  if (cycleState === "closed") return { text: "Closed for this cycle", urgent: false };
+  if (cycleState === "closed") return { text: "Closed for now", urgent: false };
   return null;
 }
 

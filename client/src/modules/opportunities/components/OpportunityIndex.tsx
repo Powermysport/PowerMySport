@@ -36,8 +36,8 @@ export async function OpportunityIndex({
         <p className="text-ink-body border-hairline flex items-start gap-2 border-y py-4 text-sm leading-relaxed">
           <ShieldCheck aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-green-700" />
           <span>
-            Every entry links the official source it was checked against and the date we last
-            checked it. These rules change every year, so confirm on the source before you apply.
+            Each one links to the official website we checked, and shows the date we last checked
+            it. Rules change every year, so please confirm on the official website before you apply.
           </span>
         </p>
 

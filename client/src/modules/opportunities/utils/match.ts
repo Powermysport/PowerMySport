@@ -64,7 +64,7 @@ export function checkOpportunity(
     ? "Open to every sport"
     : sportNames.length > 0
       ? `For ${sportNames.join(", ")}`
-      : "Sport not specified";
+      : "Sport not stated";
   checks.push({
     key: "sport",
     label: "Sport",
@@ -86,7 +86,8 @@ export function checkOpportunity(
         : e.ageMax !== undefined
           ? `Up to age ${e.ageMax}`
           : `Age ${e.ageMin} and over`;
-    const detail = [range, e.ageNote].filter(Boolean).join(". ");
+    const note = e.ageNote ? e.ageNote.charAt(0).toUpperCase() + e.ageNote.slice(1) : null;
+    const detail = [range, note].filter(Boolean).join(". ");
     const tooYoung = profile.age !== null && e.ageMin !== undefined && profile.age < e.ageMin;
     const tooOld = profile.age !== null && e.ageMax !== undefined && profile.age > e.ageMax;
     checks.push({
@@ -104,7 +105,7 @@ export function checkOpportunity(
     const wanted = e.gender === "female" ? "girl" : "boy";
     checks.push({
       key: "gender",
-      label: "Who",
+      label: "Boys or girls",
       detail: e.gender === "female" ? "Girls and women only" : "Boys and men only",
       state: !profile.gender ? "unknown" : profile.gender === wanted ? "pass" : "fail",
     });
@@ -156,7 +157,8 @@ export function checkOpportunity(
     checks.push({
       key: "rules",
       label: "Other rules",
-      detail: "We have not recorded who can apply. Read the official source.",
+      detail:
+        "We do not have the rules for who can apply yet. Please read them on the official website.",
       state: "manual",
     });
   }
@@ -168,9 +170,9 @@ export function checkOpportunity(
 }
 
 export const VERDICT_LABELS: Record<Verdict, string> = {
-  fits: "Fits your child",
+  fits: "Matches your child",
   check: "Check the details",
-  no: "Not a match",
+  no: "Does not match",
 };
 
 /** Fits first, then ones to check, then the rest, so the useful ones lead. */

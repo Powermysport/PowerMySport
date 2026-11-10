@@ -20,21 +20,31 @@ export const TRACKS: Record<
     title: "Admissions",
     heading: "Sports admissions",
     intro:
-      "Ways into schools, colleges and academies that count your child's sporting record. Each entry says how it works, who it is for and where we checked it.",
+      "Schools, colleges and academies that give admission, or a seat, to children who play sport. For each one we explain how it works, who can apply, and which official website we checked.",
     metaDescription:
-      "Sports admissions for young athletes in India: schools, colleges and academies that count a sporting record, each with its sources.",
+      "Sports admissions for young athletes in India: schools, colleges and academies that give admission to children who play sport, each linked to its official source.",
     categories: {
       college: {
         label: "Colleges and universities",
-        blurb: "Seats kept for athletes, usually on top of normal intake.",
+        blurb:
+          "Seats reserved for players (the sports quota), usually in addition to the regular seats.",
       },
-      school: { label: "Schools", blurb: "Admission rules that count a child's sporting record." },
+      school: {
+        label: "Schools",
+        blurb: "Schools that consider your child's sport when giving admission.",
+      },
       "exam-concession": {
         label: "Board exams and attendance",
-        blurb: "What a board allows when competing clashes with school.",
+        blurb: "What school boards allow when a tournament clashes with exams or classes.",
       },
-      academy: { label: "Academies", blurb: "Full-time training places, and how they select." },
-      "study-abroad": { label: "Studying abroad", blurb: "College sport outside India." },
+      academy: {
+        label: "Academies",
+        blurb: "Full-time training programmes, and how they choose players.",
+      },
+      "study-abroad": {
+        label: "Studying abroad",
+        blurb: "Playing sport at a college outside India.",
+      },
     },
   },
   scholarship: {
@@ -42,45 +52,67 @@ export const TRACKS: Record<
     title: "Scholarships",
     heading: "Scholarships and funding",
     intro:
-      "Money and support for young athletes. Some you apply for; many pick players from their results, and each entry says which, who it is for and where we checked it.",
+      "Money and other help for young players. For some, you fill in an application. For many others, players are chosen on their tournament results. Each one tells you which kind it is, who can get it, and which official website we checked.",
     metaDescription:
-      "Sports scholarships for young athletes in India: funding and support from governments, federations, companies and universities, each with its sources.",
+      "Sports scholarships for young athletes in India: money and support from governments, federations, companies and universities, each linked to its official source.",
     categories: {
-      government: { label: "Government", blurb: "Central and state schemes." },
-      federation: { label: "Federations", blurb: "Support run by a sport's own federation." },
+      government: {
+        label: "Government",
+        blurb: "Schemes run by the Government of India and by state governments.",
+      },
+      federation: {
+        label: "Federations",
+        blurb:
+          "Help from the national body that runs the sport, such as the tennis or badminton federation.",
+      },
       international: {
         label: "International",
-        blurb: "Programmes run by international bodies for players from India.",
+        blurb: "Programmes from international sports bodies that players from India can join.",
       },
-      company: { label: "Companies and foundations", blurb: "Corporate and non-profit support." },
-      university: { label: "Universities", blurb: "Fee waivers for athletes." },
+      company: {
+        label: "Companies and foundations",
+        blurb: "Support from companies, trusts and NGOs.",
+      },
+      university: {
+        label: "Universities",
+        blurb: "Colleges that reduce or waive fees for players.",
+      },
     },
   },
 };
 
 /** Said plainly, because "apply" against "scouted" decides what a parent does next. */
 export const SELECTION_LABELS: Record<SelectionMode, { label: string; explain: string }> = {
-  apply: { label: "Apply", explain: "You apply, with the documents it asks for." },
-  trials: { label: "Selection trials", explain: "Selection is decided at a trial." },
+  apply: {
+    label: "Apply",
+    explain: "You fill in an application form and send the documents it asks for.",
+  },
+  trials: {
+    label: "Selection trials",
+    explain: "Your child plays at a trial, and is chosen there.",
+  },
   nominated: {
     label: "Nominated",
-    explain: "There is no application form: players are nominated, usually on their results.",
+    explain:
+      "There is no form to fill in. An official body puts players' names forward, usually based on their results.",
   },
   scouted: {
     label: "Picked by scouts",
-    explain: "There is no application form: scouts pick players from their performances.",
+    explain:
+      "There is no form to fill in. Scouts watch players compete and pick the ones they want.",
   },
   recruitment: {
     label: "Recruited",
-    explain: "Coaches find and approach players; the player's job is to be findable.",
+    explain:
+      "Coaches look for players and contact them. Your part is to make your child easy to find, with results and videos online.",
   },
 };
 
 export const CYCLE_LABELS: Record<CycleState, string> = {
   open: "Open now",
   upcoming: "Opening soon",
-  closed: "Closed for this cycle",
-  rolling: "No fixed window",
+  closed: "Closed for now",
+  rolling: "No fixed dates",
 };
 
 export const OWNER_TYPE_LABELS: Record<string, string> = {

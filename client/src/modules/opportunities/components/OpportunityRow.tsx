@@ -7,7 +7,7 @@ import type { Opportunity } from "../services/opportunities";
 import {
   deadlineLine,
   eligibilityChips,
-  formatAmount,
+  amountParts,
   formatDay,
   sportsLabel,
   whereLabel,
@@ -40,10 +40,10 @@ export function OpportunityTableHead() {
       aria-hidden="true"
       className={`${ROW_GRID} text-ink-muted border-hairline hidden border-b pb-3 text-sm`}
     >
-      <span>Entry</span>
-      <span>What it gives</span>
+      <span>Name</span>
+      <span>What your child gets</span>
       <span>Who it is for</span>
-      <span>Window</span>
+      <span>Dates</span>
     </div>
   );
 }
@@ -71,7 +71,7 @@ export function OpportunityRow({
 }) {
   const track = TRACKS[opportunity.track];
   const selection = opportunity.selection ? SELECTION_LABELS[opportunity.selection] : null;
-  const amount = formatAmount(opportunity.benefit?.amount);
+  const amount = amountParts(opportunity.benefit?.amount);
   const where = whereLabel(opportunity.geography);
   const chips = eligibilityChips(opportunity.eligibility).slice(0, 3);
   const deadline = deadlineLine(opportunity, today);
@@ -83,7 +83,7 @@ export function OpportunityRow({
       href={`${track.path}/${opportunity.slug}`}
       className={`${ROW_GRID} hover:bg-paper-deep/60 focus-visible:ring-ink group block space-y-4 px-1 py-6 transition-colors focus-visible:outline-none focus-visible:ring-2 md:space-y-0 md:px-2`}
     >
-      <Cell caption="Entry">
+      <Cell caption="Name">
         {categoryLabel && <p className="text-ink-muted mb-1 text-sm">{categoryLabel}</p>}
         <h3 className="text-ink text-lg font-medium leading-snug group-hover:underline group-hover:underline-offset-4">
           {opportunity.title}
@@ -102,10 +102,11 @@ export function OpportunityRow({
         {selection && <p className="text-ink-body mt-2 text-sm">{selection.label}</p>}
       </Cell>
 
-      <Cell caption="What it gives">
+      <Cell caption="What your child gets">
         {amount && (
-          <p className="text-ink text-2xl font-light tabular-nums tracking-tight">{amount}</p>
+          <p className="text-ink text-2xl font-light tabular-nums tracking-tight">{amount.money}</p>
         )}
+        {amount?.note && <p className="text-ink-muted mt-0.5 text-sm">{amount.note}</p>}
         {opportunity.benefit?.summary && (
           <p
             className={`text-ink-body line-clamp-3 text-pretty text-sm leading-relaxed ${amount ? "mt-1" : ""}`}
@@ -128,7 +129,7 @@ export function OpportunityRow({
         </p>
       </Cell>
 
-      <Cell caption="Window">
+      <Cell caption="Dates">
         {cycle && <p className="text-ink-body text-sm">{cycle}</p>}
         {deadline && (
           <p
@@ -139,7 +140,9 @@ export function OpportunityRow({
         )}
         <p className="text-ink-muted mt-2 flex items-center justify-between gap-2 text-sm">
           <span>
-            {opportunity.lastVerifiedOn ? `Checked ${formatDay(opportunity.lastVerifiedOn)}` : ""}
+            {opportunity.lastVerifiedOn
+              ? `Last checked ${formatDay(opportunity.lastVerifiedOn)}`
+              : ""}
           </span>
           <ArrowRight aria-hidden className="text-ink h-4 w-4 shrink-0" />
         </p>

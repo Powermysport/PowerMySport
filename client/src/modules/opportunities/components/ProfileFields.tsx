@@ -10,31 +10,70 @@ import { useOpportunityProfile } from "../hooks/useOpportunityProfile";
 const MAX_AGE = 25;
 
 const fieldClass =
-  "focus-visible:border-ink focus-visible:ring-ink/20 border-hairline w-full rounded-md border bg-white px-3 py-2 text-base text-slate-900 focus-visible:outline-none focus-visible:ring-2";
+  "focus-visible:border-ink focus-visible:ring-ink/20 border-hairline h-11 w-full rounded-md border bg-white px-3 text-base text-ink transition-colors hover:border-ink/40 focus-visible:outline-none focus-visible:ring-2";
+
+const labelClass = "text-ink mb-1.5 block text-sm font-medium";
 
 /**
- * The four answers that let us mark which entries fit a child: age, sport,
- * gender, state. They are kept in this browser only (see useOpportunityProfile)
- * and each one is optional; an entry is checked against whatever was given.
+ * The four answers that let us mark which entries fit a child: sport, age,
+ * boy or girl, state. They are kept in this browser only (see
+ * useOpportunityProfile) and each one is optional; an entry is checked against
+ * whatever was given.
+ *
+ * Sport and state are wide (long names), age and boy-or-girl are narrow, so on
+ * a phone the two narrow ones share a row. Boy or girl is a two-button switch,
+ * not a dropdown: one tap instead of two, and both answers are always visible.
  *
  * `sports` are the slugs worth offering. With none given, every sport we name.
+ * `onSportChange` lets the list also act on the sport (it filters by it).
  */
 export function ProfileFields({
   sports,
-  className = "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
+  className = "grid grid-cols-2 gap-x-3 gap-y-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1.25fr)]",
+  sportValue,
+  sportPlaceholder = "Choose a sport",
+  onSportChange,
 }: {
   sports: string[];
   /** The grid classes. The default is four across on a wide page. */
   className?: string;
+  /** Overrides the remembered sport shown in the field (the list's URL filter). */
+  sportValue?: string | undefined;
+  sportPlaceholder?: string;
+  onSportChange?: (sport: string | null) => void;
 }) {
   const { profile, setField } = useOpportunityProfile();
   const ids = { age: useId(), sport: useId(), gender: useId(), state: useId() };
   const sportOptions = sports.length > 0 ? sports : Object.keys(SPORT_LABEL);
+  const sport = sportValue ?? profile.sport ?? "";
 
   return (
     <div className={className}>
-      <div>
-        <label htmlFor={ids.age} className="text-ink mb-1 block text-sm font-medium">
+      <div className="col-span-2 lg:col-span-1">
+        <label htmlFor={ids.sport} className={labelClass}>
+          Sport
+        </label>
+        <select
+          id={ids.sport}
+          value={sport}
+          onChange={(e) => {
+            const next = e.target.value || null;
+            setField("sport", next);
+            onSportChange?.(next);
+          }}
+          className={fieldClass}
+        >
+          <option value="">{sportPlaceholder}</option>
+          {sportOptions.map((slug) => (
+            <option key={slug} value={slug}>
+              {SPORT_LABEL[slug] ?? slug}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="min-w-0">
+        <label htmlFor={ids.age} className={labelClass}>
           Child&apos;s age
         </label>
         <input
@@ -49,49 +88,41 @@ export function ProfileFields({
             const age = parseTypedAge(e.target.value);
             setField("age", age === null ? null : Math.min(MAX_AGE, age));
           }}
-          className={fieldClass}
+          className={`${fieldClass} tabular-nums`}
         />
       </div>
 
-      <div>
-        <label htmlFor={ids.sport} className="text-ink mb-1 block text-sm font-medium">
-          Sport
-        </label>
-        <select
-          id={ids.sport}
-          value={profile.sport ?? ""}
-          onChange={(e) => setField("sport", e.target.value || null)}
-          className={fieldClass}
-        >
-          <option value="">Not chosen</option>
-          {sportOptions.map((slug) => (
-            <option key={slug} value={slug}>
-              {SPORT_LABEL[slug] ?? slug}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label htmlFor={ids.gender} className="text-ink mb-1 block text-sm font-medium">
+      <div className="min-w-0">
+        <span id={ids.gender} className={labelClass}>
           Boy or girl
-        </label>
-        <select
-          id={ids.gender}
-          value={profile.gender ?? ""}
-          onChange={(e) =>
-            setField("gender", e.target.value === "" ? null : (e.target.value as "boy" | "girl"))
-          }
-          className={fieldClass}
+        </span>
+        <div
+          role="group"
+          aria-labelledby={ids.gender}
+          className="border-hairline grid h-11 grid-cols-2 gap-0.5 rounded-md border bg-white p-0.5"
         >
-          <option value="">Not said</option>
-          <option value="boy">Boy</option>
-          <option value="girl">Girl</option>
-        </select>
+          {(["boy", "girl"] as const).map((value) => {
+            const on = profile.gender === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={on}
+                // A second tap takes the answer back, since "not said" has no button.
+                onClick={() => setField("gender", on ? null : value)}
+                className={`btn-motion focus-visible:ring-ink rounded-[4px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+                  on ? "bg-ink text-white" : "text-ink-body hover:bg-paper-deep"
+                }`}
+              >
+                {value === "boy" ? "Boy" : "Girl"}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div>
-        <label htmlFor={ids.state} className="text-ink mb-1 block text-sm font-medium">
+      <div className="col-span-2 lg:col-span-1">
+        <label htmlFor={ids.state} className={labelClass}>
           State
         </label>
         <select
@@ -100,7 +131,7 @@ export function ProfileFields({
           onChange={(e) => setField("state", e.target.value || null)}
           className={fieldClass}
         >
-          <option value="">Not chosen</option>
+          <option value="">Choose a state</option>
           {INDIAN_STATES_AND_UTS.map((name) => (
             <option key={name} value={name}>
               {name}
