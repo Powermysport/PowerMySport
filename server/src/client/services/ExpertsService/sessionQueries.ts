@@ -167,6 +167,36 @@ export const listExpertOwnSessions = async (expertUserId: string) => {
 };
 
 /** Admin: an expert's sessions plus an earnings summary. */
+/**
+ * Every expert session that owes the parent a refund, across all experts, for the admin Refunds
+ * page. Before this, they were reachable only from inside one expert's session list.
+ */
+export const listExpertRefundsForAdmin = async () => {
+  const sessions = await ExpertSession.find({ refundStatus: "REQUIRED" })
+    .populate("userId", "name email")
+    .populate({ path: "expertId", select: "userId", populate: { path: "userId", select: "name" } })
+    .sort({ updatedAt: -1 })
+    .limit(200)
+    .lean();
+  return sessions.map((s) => {
+    const parent = s.userId as unknown as { name?: string; email?: string } | null;
+    const expert = s.expertId as unknown as { userId?: { name?: string } } | null;
+    return {
+      id: String(s._id),
+      parentName: parent?.name || "Unknown",
+      parentEmail: parent?.email || "",
+      expertName: expert?.userId?.name || "Expert",
+      amount: s.amount,
+      scheduledAt: s.scheduledAt ?? null,
+      status: s.status,
+      cancelReason: s.cancelReason ?? null,
+      paidAt: s.paidAt ?? null,
+      canRefundViaPhonePe: Boolean(s.merchantOrderId),
+      bookedVia: s.bookedVia ?? null,
+    };
+  });
+};
+
 export const getExpertSessionsForAdmin = async (expertId: string) => {
   const expertDoc = await Expert.findById(expertId).select("timezone").lean();
   const tz = (expertDoc as any)?.timezone || "Asia/Kolkata";

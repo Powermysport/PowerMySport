@@ -29,6 +29,7 @@ import {
   updateExpertByAdmin,
   setExpertActive,
   getExpertSessionsForAdmin,
+  listExpertRefundsForAdmin,
   markSessionRefundDone,
   setReviewHidden,
   submitExpertForReview,
@@ -639,6 +640,16 @@ export const expertSessionsAdmin = async (req: Request, res: Response): Promise<
   try {
     const data = await getExpertSessionsForAdmin(req.params.expertId as string);
     res.json({ success: true, message: "Sessions retrieved", data });
+  } catch (e) {
+    fail(res, e, 500);
+  }
+};
+
+// GET /api/experts/admin/refunds
+export const expertRefundsAdmin = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await listExpertRefundsForAdmin();
+    res.json({ success: true, message: "Expert refunds retrieved", data });
   } catch (e) {
     fail(res, e, 500);
   }

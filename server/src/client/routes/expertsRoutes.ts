@@ -49,6 +49,8 @@ router.patch(
   adminMiddleware,
   expert.setExpertActiveAdmin
 );
+// Literal path before /admin/:expertId so "refunds" is not read as an expert id.
+router.get("/admin/refunds", authMiddleware, adminMiddleware, expert.expertRefundsAdmin);
 router.get(
   "/admin/:expertId/sessions",
   authMiddleware,

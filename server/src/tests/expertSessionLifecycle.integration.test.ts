@@ -702,6 +702,13 @@ describe("unpaid hold expiry", () => {
     assert.equal(session.status, "CANCELLED", "not booked into a slot that may be gone");
     assert.equal(session.paymentStatus, "COMPLETED");
     assert.equal(session.refundStatus, "REQUIRED");
+
+    // And it is on the admin Refunds page's list, not only inside one expert's sessions.
+    const refunds = await ExpertsService.listExpertRefundsForAdmin();
+    const listed = refunds.find((r: { id: string }) => r.id === sessionId);
+    assert.ok(listed);
+    assert.equal(listed.parentName, "Parent Person");
+    assert.equal(listed.canRefundViaPhonePe, true);
   });
 
   it("leaves a hold that has not lapsed", async () => {

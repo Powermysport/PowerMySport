@@ -8,6 +8,7 @@ import { Pagination } from "@/modules/shared/ui/Pagination";
 import { AdminPageHeader } from "@/modules/admin/components/AdminPageHeader";
 import { adminApi } from "@/modules/admin/services/admin";
 import { toast } from "@/lib/toast";
+import { ExpertRefundsSection } from "./ExpertRefundsSection";
 import {
   AlertCircle,
   CheckCircle2,
@@ -451,9 +452,9 @@ export default function AdminRefundsPage() {
       {pendingRefunds.length === 0 && failedRefunds.length === 0 ? (
         <Card className="bg-white py-12 text-center">
           <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-emerald-500" />
-          <h3 className="text-lg font-semibold text-slate-900">No refunds waiting</h3>
+          <h3 className="text-lg font-semibold text-slate-900">No booking refunds waiting</h3>
           <p className="mx-auto mt-2 max-w-md text-slate-500">
-            Every refund request has been processed.
+            Every venue and coach refund has been processed. Expert sessions are listed below.
           </p>
         </Card>
       ) : (
@@ -569,6 +570,8 @@ export default function AdminRefundsPage() {
           )}
         </div>
       )}
+
+      <ExpertRefundsSection />
 
       <Pagination
         page={currentPage}

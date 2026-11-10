@@ -1,6 +1,22 @@
 import axiosInstance from "@/lib/api/axios";
 import { ApiResponse, PaginationMetadata } from "@/types";
 
+/** An expert session waiting for its refund, as the admin Refunds page lists it. */
+export interface ExpertRefund {
+  id: string;
+  parentName: string;
+  parentEmail: string;
+  expertName: string;
+  amount: number;
+  scheduledAt: string | null;
+  status: string;
+  cancelReason: string | null;
+  paidAt: string | null;
+  /** False when there is no PhonePe order to refund against: a bank transfer is needed. */
+  canRefundViaPhonePe: boolean;
+  bookedVia: "WHATSAPP" | null;
+}
+
 export interface AdminExpertAvailabilityWindow {
   dayOfWeek: number;
   start: string;
@@ -187,6 +203,12 @@ export const expertAdminApi = {
 
   getSessions: async (expertId: string): Promise<ApiResponse<AdminExpertSessionsResult>> => {
     const res = await axiosInstance.get(`/experts/admin/${expertId}/sessions`);
+    return res.data;
+  },
+
+  /** Every expert session that owes the parent a refund, across all experts. */
+  getRefunds: async (): Promise<ApiResponse<ExpertRefund[]>> => {
+    const res = await axiosInstance.get(`/experts/admin/refunds`);
     return res.data;
   },
 
