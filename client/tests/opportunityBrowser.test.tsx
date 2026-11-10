@@ -311,38 +311,55 @@ describe("EligibilityChecklist", () => {
   it("lists every rule, and does not claim a verdict before the child is described", () => {
     render(<EligibilityChecklist opportunity={rules} />);
 
-    for (const label of ["Sport", "Age", "Where", "Sporting level", "Academic"]) {
+    for (const label of ["Sport", "Age", "Sporting level", "Academic"]) {
       expect(screen.getByText(label, { selector: "p" })).toBeTruthy();
     }
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  it("gives a rule every child passes no row", () => {
+    render(<EligibilityChecklist opportunity={rules} />);
+
+    // Open across India: nothing for the parent to answer, nothing to tick.
+    expect(screen.queryByText("Where", { selector: "p" })).toBeNull();
+  });
+
+  it("asks each question on the row of the rule it checks", () => {
+    render(<EligibilityChecklist opportunity={rules} />);
+
+    expect(within(rowFor("Age")).getByLabelText("Child's age")).toBeTruthy();
+    expect(within(rowFor("Sport")).getByLabelText("Child's sport")).toBeTruthy();
   });
 
   it("ticks what matches and crosses what does not", () => {
     render(<EligibilityChecklist opportunity={rules} />);
 
     type("Child's age", "16");
-    type("Sport", "tennis");
+    type("Child's sport", "tennis");
 
     expect(within(rowFor("Sport")).getByText("Matches")).toBeTruthy();
     expect(within(rowFor("Age")).getByText("Does not match")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Does not match");
+    expect(screen.getByRole("status").textContent).toContain("does not meet the age rule");
   });
 
   it("leaves marks and level for the parent, never ticking them", () => {
     render(<EligibilityChecklist opportunity={rules} />);
     type("Child's age", "12");
-    type("Sport", "tennis");
+    type("Child's sport", "tennis");
 
-    expect(within(rowFor("Academic")).getByText("Check this yourself")).toBeTruthy();
-    expect(within(rowFor("Sporting level")).getByText("Check this yourself")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Check the details");
+    const yourself = screen.getByRole("heading", { name: "Check these yourself" }).parentElement!;
+    expect(within(yourself).getByText("Academic", { selector: "p" })).toBeTruthy();
+    expect(within(yourself).getByText("Sporting level", { selector: "p" })).toBeTruthy();
+    expect(within(yourself).queryByText("Matches")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Check the 2 below yourself");
   });
 
-  it("says what is missing for a rule it could check but cannot yet", () => {
+  it("says how far the check has got when only some questions are answered", () => {
     render(<EligibilityChecklist opportunity={rules} />);
+    type("Child's sport", "tennis");
 
-    expect(within(rowFor("Age")).queryByText("Fill this in above to check")).toBeNull();
-    expect(within(rowFor("Age")).getByText(": Not checked yet")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Answer the rest");
+    expect(within(rowFor("Age")).getByText("Not checked yet")).toBeTruthy();
   });
 });
 
