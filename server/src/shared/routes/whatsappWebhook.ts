@@ -27,7 +27,11 @@
  */
 import crypto from "crypto";
 import express from "express";
-import { answerWhatsAppMessage, type WhatsAppAnswer } from "../services/whatsappAssistantService";
+import {
+  answerOutsidePilot,
+  answerWhatsAppMessage,
+  type WhatsAppAnswer,
+} from "../services/whatsappAssistantService";
 import {
   FEEDBACK_BUTTONS,
   NEXT_STEPS_BODY,
@@ -41,7 +45,6 @@ import {
 import {
   FIRST_CONTACT_NOTICE,
   FIRST_CONTACT_NOTICE_MEMBER,
-  PILOT_REPLY,
   claimInboundMessage,
 } from "../services/whatsappPilot";
 import { mayUseAssistant } from "../services/whatsappPilotNumbers";
@@ -72,6 +75,9 @@ async function handleInboundMessage(message: InboundWhatsAppMessage): Promise<vo
   // so only the type and a masked number are logged.
   log.info(`inbound ${message.type} from ${maskPhone(message.from)}`);
   if (!whatsappSendingConfigured()) return;
+  // A reaction (a thumbs-up on our reply) is not a message to answer: replying "I can read text"
+  // to a 👍 is noise. It is seen, and that is all.
+  if (message.type === "reaction") return;
 
   await markWhatsAppRead(message.id);
 
@@ -82,7 +88,7 @@ async function handleInboundMessage(message: InboundWhatsAppMessage): Promise<vo
   // A pilot is limited to the numbers staff listed (admin panel or
   // WHATSAPP_ALLOWED_NUMBERS); anyone else is told so and nothing of theirs is stored.
   if (!(await mayUseAssistant(message.from))) {
-    await sendWhatsAppText(message.from, PILOT_REPLY);
+    await deliver(message.from, await answerOutsidePilot(message));
     return;
   }
 
@@ -112,12 +118,33 @@ export async function deliver(to: string, answer: WhatsAppAnswer): Promise<void>
     await sendWhatsAppButtons(to, answer.reply, FEEDBACK_BUTTONS);
     return;
   }
+  if (answer.buttons?.length) {
+    await sendWhatsAppButtons(to, answer.reply, answer.buttons);
+    return;
+  }
 
   const link = splitLinkButton(answer.reply);
   if (link) {
     await sendWhatsAppLinkButton(to, link.body, link.label, link.url);
   } else {
     await sendWhatsAppText(to, answer.reply);
+  }
+  // A payment or a time to pick comes after the words it belongs to, as its own message.
+  if (answer.payLink) {
+    await sendWhatsAppLinkButton(
+      to,
+      "Tap below to pay. The time is held for 15 minutes and is booked once the payment goes through.",
+      answer.payLink.label,
+      answer.payLink.url
+    );
+  }
+  if (answer.slotPicker?.rows.length) {
+    await sendWhatsAppList(
+      to,
+      `Open times with ${answer.slotPicker.expertName} (Indian time). Pick one to book.`,
+      "See open times",
+      answer.slotPicker.rows
+    );
   }
   if (answer.nextSteps) {
     await sendWhatsAppList(to, NEXT_STEPS_BODY, NEXT_STEPS_BUTTON, NEXT_STEP_ROWS);

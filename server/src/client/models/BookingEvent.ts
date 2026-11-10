@@ -51,7 +51,14 @@ export type BookingEventActorType = "USER" | "PROVIDER" | "ADMIN" | "SYSTEM" | "
  * measured facts with inferred ones.
  */
 export type BookingEventChannel =
-  "CLIENT_WEB" | "PROVIDER_WEB" | "ADMIN_PANEL" | "CRON" | "WEBHOOK" | "SYSTEM" | "BACKFILL";
+  | "CLIENT_WEB"
+  | "WHATSAPP"
+  | "PROVIDER_WEB"
+  | "ADMIN_PANEL"
+  | "CRON"
+  | "WEBHOOK"
+  | "SYSTEM"
+  | "BACKFILL";
 
 export type BookingEventType =
   // lifecycle
@@ -183,7 +190,16 @@ const bookingEventSchema = new Schema<BookingEventDocument>(
     },
     channel: {
       type: String,
-      enum: ["CLIENT_WEB", "PROVIDER_WEB", "ADMIN_PANEL", "CRON", "WEBHOOK", "SYSTEM", "BACKFILL"],
+      enum: [
+        "CLIENT_WEB",
+        "WHATSAPP",
+        "PROVIDER_WEB",
+        "ADMIN_PANEL",
+        "CRON",
+        "WEBHOOK",
+        "SYSTEM",
+        "BACKFILL",
+      ],
       required: true,
     },
     amountPaise: {

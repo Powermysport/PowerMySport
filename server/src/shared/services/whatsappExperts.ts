@@ -22,7 +22,7 @@ const LOOKS_LIKE_ID = /^[a-f0-9]{24}$/i;
 
 export const expertProfileUrl = (id: string): string => `${siteUrl()}/experts/${id}`;
 
-interface PublicExpert {
+export interface PublicExpert {
   id: string;
   name: string;
   bio?: string;
@@ -42,7 +42,7 @@ const modeWords = (mode: PublicExpert["sessionMode"]): string =>
   mode === "ONLINE" ? "online" : mode === "IN_PERSON" ? "in person" : "online or in person";
 
 /** The expert the parent means, or what to ask to settle it. */
-async function findExpert(
+export async function findExpert(
   query: string,
   sport: string | undefined
 ): Promise<{ expert: PublicExpert } | { reply: Record<string, unknown> }> {

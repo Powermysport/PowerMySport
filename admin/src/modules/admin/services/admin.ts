@@ -327,7 +327,8 @@ export interface BookingEvent {
   actorType: "USER" | "PROVIDER" | "ADMIN" | "SYSTEM" | "GATEWAY";
   /** Populated to a user object server-side when the actor is a real account. */
   actorUserId?: { _id: string; name?: string; email?: string; role?: string } | string;
-  channel: "CLIENT_WEB" | "PROVIDER_WEB" | "ADMIN_PANEL" | "CRON" | "WEBHOOK" | "SYSTEM";
+  channel:
+    "CLIENT_WEB" | "WHATSAPP" | "PROVIDER_WEB" | "ADMIN_PANEL" | "CRON" | "WEBHOOK" | "SYSTEM";
   /** PAISE, matching the server. Divide by 100 to display rupees. */
   amountPaise?: number;
   summary?: string;

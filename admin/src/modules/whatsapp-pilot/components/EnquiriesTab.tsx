@@ -13,6 +13,7 @@ import {
   EnquiryList,
   EnquiryTurn,
   FollowUpStatus,
+  TeamMessage,
   WhatsAppEnquiry,
   whatsappPilotApi,
 } from "@/lib/api/whatsappPilotApi";
@@ -57,7 +58,20 @@ const replyWindowOpen = (lastMessageAt: string) =>
   Date.now() < new Date(lastMessageAt).getTime() + WINDOW_MS;
 
 const child = (e: WhatsAppEnquiry) =>
-  [e.childAge ? `${e.childAge} yrs` : null, e.sport, e.level].filter(Boolean).join(", ") || "—";
+  [e.childAge ? `${e.childAge} yrs` : null, e.sport, e.level, e.city].filter(Boolean).join(", ") ||
+  "—";
+
+const MAX_REPLY = 1000;
+
+/** The parent's exchanges and the team's messages, in the order they happened. */
+type TimelineItem =
+  | { kind: "turn"; at: string; turn: EnquiryTurn }
+  | { kind: "team"; at: string; message: TeamMessage };
+const timeline = (turns: EnquiryTurn[], team: TeamMessage[]): TimelineItem[] =>
+  [
+    ...turns.map((turn): TimelineItem => ({ kind: "turn", at: turn.at, turn })),
+    ...team.map((message): TimelineItem => ({ kind: "team", at: message.at, message })),
+  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
 export function EnquiriesTab() {
   const [filters, setFilters] = useState<EnquiryFilters>({});
@@ -295,7 +309,10 @@ function EnquiryDrawer({
   const savedNote = enquiry?.teamNote ?? "";
   // The list does not carry the conversation, so it is fetched when the drawer opens.
   const [turns, setTurns] = useState<EnquiryTurn[] | null>(null);
+  const [teamMessages, setTeamMessages] = useState<TeamMessage[]>([]);
   const [turnsFailed, setTurnsFailed] = useState(false);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
   const enquiryId = enquiry?.id;
 
   useEffect(() => {
@@ -304,7 +321,9 @@ function EnquiryDrawer({
     whatsappPilotApi
       .getEnquiry(enquiryId)
       .then((full) => {
-        if (!cancelled) setTurns(full.turns ?? []);
+        if (cancelled) return;
+        setTurns(full.turns ?? []);
+        setTeamMessages(full.teamMessages ?? []);
       })
       .catch(() => {
         if (!cancelled) setTurnsFailed(true);
@@ -340,6 +359,25 @@ function EnquiryDrawer({
     }
   };
 
+  const send = async () => {
+    const text = reply.trim();
+    if (!text) return;
+    setSending(true);
+    try {
+      const updated = await whatsappPilotApi.sendReply(enquiry.id, text);
+      setTeamMessages(updated.teamMessages ?? []);
+      setReply("");
+      await onChanged();
+      toast.success("Sent on WhatsApp.");
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not send that."));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const windowOpen = replyWindowOpen(enquiry.lastMessageAt);
+
   return (
     <DetailDrawer
       open
@@ -367,6 +405,7 @@ function EnquiryDrawer({
         <DetailRow label="Age" value={enquiry.childAge ?? "—"} />
         <DetailRow label="Sport" value={enquiry.sport ?? "—"} />
         <DetailRow label="Level" value={enquiry.level ?? "—"} />
+        <DetailRow label="City / area" value={enquiry.city ?? "—"} />
         <DetailRow label="Objective" value={enquiry.objective ?? "—"} />
       </DetailSection>
 
@@ -375,24 +414,37 @@ function EnquiryDrawer({
           <p className="text-sm text-slate-500">The conversation could not be loaded.</p>
         ) : turns === null ? (
           <p className="text-sm text-slate-400">Loading...</p>
-        ) : turns.length === 0 ? (
+        ) : turns.length === 0 && teamMessages.length === 0 ? (
           // Enquiries from before every exchange was kept have only the latest answer.
           <p className="whitespace-pre-wrap break-words text-sm text-slate-700">
             {enquiry.guidance ?? "Nothing recorded."}
           </p>
         ) : (
           <ol className="space-y-3">
-            {turns.map((turn, index) => (
-              <li key={`${turn.at}-${index}`} className="space-y-1.5">
-                <p className="text-xs text-slate-400">{when(turn.at)}</p>
-                <p className="ml-6 whitespace-pre-wrap break-words rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-900">
-                  {turn.parent}
-                </p>
-                <p className="mr-6 whitespace-pre-wrap break-words rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
-                  {turn.assistant}
-                </p>
-              </li>
-            ))}
+            {timeline(turns, teamMessages).map((item, index) =>
+              item.kind === "turn" ? (
+                <li key={`t-${item.turn.at}-${index}`} className="space-y-1.5">
+                  <p className="text-xs text-slate-400">{when(item.turn.at)}</p>
+                  <p className="ml-6 whitespace-pre-wrap break-words rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-900">
+                    {item.turn.parent}
+                  </p>
+                  <p className="mr-6 whitespace-pre-wrap break-words rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                    {item.turn.assistant}
+                  </p>
+                </li>
+              ) : (
+                <li key={`m-${item.message.at}-${index}`} className="space-y-1.5">
+                  <p className="text-xs text-slate-400">
+                    {when(item.message.at)} · Team
+                    {item.message.by ? ` (${item.message.by})` : ""}
+                    {item.message.via === "template" ? " · sent as template" : ""}
+                  </p>
+                  <p className="mr-6 whitespace-pre-wrap break-words rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-900">
+                    {item.message.text}
+                  </p>
+                </li>
+              )
+            )}
           </ol>
         )}
       </DetailSection>
@@ -439,31 +491,56 @@ function EnquiryDrawer({
               </Button>
             ))}
           </div>
-          {enquiry.hasContact && (
-            <div className="mt-3 flex items-center gap-3">
+        </DetailSection>
+      )}
+
+      <DetailSection title="Contact the parent">
+        {enquiry.hasContact ? (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
               {phone ? (
-                <span className="font-mono text-sm text-slate-900">+{phone}</span>
+                <a href={`tel:+${phone}`} className="font-mono text-sm text-slate-900 underline">
+                  +{phone}
+                </a>
               ) : (
                 <Button size="sm" variant="outline" loading={revealing} onClick={reveal}>
                   Show WhatsApp number
                 </Button>
               )}
-              <span className="text-xs text-slate-500">
-                Kept because the parent asked for the team. Each look is logged.
-              </span>
+              <span className="text-xs text-slate-500">Each look is logged.</span>
             </div>
-          )}
-          {enquiry.hasContact && (
-            <p className="mt-2 text-xs text-slate-500">
-              {replyWindowOpen(enquiry.lastMessageAt)
-                ? `They last wrote ${when(enquiry.lastMessageAt)}. WhatsApp lets you reply freely until ${when(
+            <p className="text-xs text-slate-500">
+              {windowOpen
+                ? `They last wrote ${when(enquiry.lastMessageAt)}. A message sent before ${when(
                     replyWindowEnd(enquiry.lastMessageAt)
-                  )}.`
-                : `They last wrote ${when(enquiry.lastMessageAt)}, more than a day ago. WhatsApp now only allows an approved template message, so a free-text reply will not be delivered until they write again.`}
+                  )} goes as normal text.`
+                : `They last wrote ${when(enquiry.lastMessageAt)}, more than a day ago, so WhatsApp only allows the approved team template. Your message goes inside it, on one line.`}
             </p>
-          )}
-        </DetailSection>
-      )}
+            <textarea
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              rows={4}
+              maxLength={MAX_REPLY}
+              aria-label="Message to the parent"
+              placeholder="Write to the parent. It is sent from the PowerMySport WhatsApp number, signed as the team."
+              className="focus:border-power-orange-solid focus:ring-power-orange-solid/25 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm hover:border-slate-400 focus:outline-none focus:ring-2"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                {reply.length}/{MAX_REPLY}
+              </span>
+              <Button size="sm" loading={sending} disabled={!reply.trim()} onClick={send}>
+                Send on WhatsApp
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">
+            No number is kept for this enquiry: it started before numbers were kept with every
+            enquiry. If the parent writes again, their new enquiry will have one.
+          </p>
+        )}
+      </DetailSection>
 
       <DetailSection title="Team note">
         <textarea

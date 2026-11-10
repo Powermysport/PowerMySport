@@ -196,12 +196,12 @@ describe("replyToWhatsAppMessage", () => {
     await replyToWhatsAppMessage(msg("find me a tennis coach"), stub("Hi.", seen));
     // The prompt says a coach request is not a consultation request, and the fee
     // rule asks for rupees and the unit instead of a bare number.
-    assert.match(seen[0]!.systemPrompt, /regular coaching is coming soon/);
+    assert.match(seen[0]!.systemPrompt, /does not list coaches or academies yet/);
     assert.match(seen[0]!.systemPrompt, /per session/);
 
     const { ASSISTANT_CHAT_TOOLS } = require("../shared/services/chatToolsService");
     const tool = ASSISTANT_CHAT_TOOLS.find((t: { name: string }) => t.name === "search_experts");
-    assert.match(tool.description, /NOT coaches for regular training/);
+    assert.match(tool.description, /NOT coaches or academies for regular training/);
   });
 
   it("recognises a parent by number and passes their account to the tools", async () => {

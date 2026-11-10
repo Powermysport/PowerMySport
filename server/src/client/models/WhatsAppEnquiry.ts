@@ -11,9 +11,9 @@ import mongoose, { Document, Schema } from "mongoose";
  *
  * The number itself is not stored in the clear. `phoneHash` is the same keyed hash the chat uses,
  * so STOP deletes the chat, the notes and these together. `parentRef` is a short pseudonym of it
- * for the admin screen. Only when the parent asks for a person is the number kept at all, encrypted,
- * on that enquiry alone (`contactPhoneEnc`), because a team that cannot reach the parent cannot
- * honour "we will get back to you".
+ * for the admin screen. The number is kept encrypted on every enquiry (`contactPhoneEnc`), so the
+ * team can follow up on any question; it leaves the server only through the audit-logged reveal
+ * and the team-reply sender. The first-contact notice tells the parent so.
  *
  * Every free-text field is cut down and capped by the service before it gets here.
  */
@@ -21,6 +21,11 @@ import mongoose, { Document, Schema } from "mongoose";
 export const ENQUIRY_RETENTION_SECONDS = 60 * 60 * 24 * 180;
 /** A parent who writes again within this long of the last message is still on the same topic. */
 export const ENQUIRY_IDLE_MS = 24 * 60 * 60 * 1000;
+/**
+ * A parent answering the team within this long is still talking to the team about that enquiry.
+ * Longer than the idle window, because a template message can reach a parent days later.
+ */
+export const TEAM_THREAD_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The most recent exchanges kept on one enquiry. Older ones drop off, so a long chat stays bounded. */
 export const MAX_ENQUIRY_TURNS = 30;
@@ -40,6 +45,29 @@ export const FOLLOW_UP_STATUSES = ["none", "new", "contacted", "done"] as const;
 export type FollowUpStatus = (typeof FOLLOW_UP_STATUSES)[number];
 
 export const ENQUIRY_FEEDBACK = ["helpful", "not_helpful"] as const;
+
+/** A message the team sent the parent from the admin panel. */
+export interface TeamMessage {
+  at: Date;
+  text: string;
+  /** "text" inside WhatsApp's 24-hour window, "template" outside it. */
+  via: "text" | "template";
+  /** The admin who sent it. */
+  by?: string;
+}
+
+/** The steps of the coach/academy intake, asked in this order. */
+export const INTAKE_STEPS = ["age", "sport", "city", "level", "needs"] as const;
+export type IntakeStep = (typeof INTAKE_STEPS)[number];
+
+export interface EnquiryIntake {
+  step: IntakeStep;
+  startedAt: Date;
+  /** Wrong answers to the current step, so a parent is not asked the same thing forever. */
+  retries: number;
+  /** What the parent added at the last step (timings, budget...). */
+  needs?: string;
+}
 export type EnquiryFeedback = (typeof ENQUIRY_FEEDBACK)[number];
 
 export interface WhatsAppEnquiryDocument extends Document {
@@ -53,8 +81,9 @@ export interface WhatsAppEnquiryDocument extends Document {
   childAge?: number;
   sport?: string;
   level?: string;
+  /** City and area, asked when the parent wants a coach or academy. */
+  city?: string;
   objective?: string;
-  /** The assistant's latest answer on this topic, so the team sees what was advised. */
   /** The assistant's latest answer, kept as its own field for lists and quick reading. */
   guidance?: string;
   /** Every exchange on this topic, oldest first, so the team sees all the advice and not just the last. */
@@ -64,8 +93,16 @@ export interface WhatsAppEnquiryDocument extends Document {
   followUpSummary?: string;
   /** The support ticket the hand-off created, when there was one. */
   ticketId?: string;
-  /** Encrypted number, kept only when the parent asked for a person. */
+  /** Encrypted number, so the team can reach the parent. */
   contactPhoneEnc?: string;
+  /** Messages the team sent from the admin panel, oldest first. */
+  teamMessages: TeamMessage[];
+  /** When the team last wrote; a parent answering within a day stays on this enquiry. */
+  lastTeamMessageAt?: Date;
+  /** When the parent last wrote after a team message, so the team is told once per message. */
+  parentRepliedAt?: Date;
+  /** Set while the coach/academy intake is collecting the child's details. */
+  intake?: EnquiryIntake;
   feedback?: EnquiryFeedback;
   /** True once the parent said they were done, or the conversation moved on. */
   closed: boolean;
@@ -86,6 +123,7 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     childAge: { type: Number, min: 3, max: 21 },
     sport: { type: String, maxlength: 40 },
     level: { type: String, maxlength: 60 },
+    city: { type: String, maxlength: 60 },
     objective: { type: String, maxlength: 240 },
     guidance: { type: String, maxlength: 2000 },
     turns: {
@@ -106,6 +144,34 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     followUpSummary: { type: String, maxlength: 600 },
     ticketId: { type: String, maxlength: 40 },
     contactPhoneEnc: { type: String, maxlength: 400 },
+    teamMessages: {
+      type: [
+        new Schema<TeamMessage>(
+          {
+            at: { type: Date, required: true },
+            text: { type: String, required: true, maxlength: 1000 },
+            via: { type: String, enum: ["text", "template"], required: true },
+            by: { type: String, maxlength: 120 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    lastTeamMessageAt: { type: Date },
+    parentRepliedAt: { type: Date },
+    intake: {
+      type: new Schema<EnquiryIntake>(
+        {
+          step: { type: String, enum: INTAKE_STEPS, required: true },
+          startedAt: { type: Date, required: true },
+          retries: { type: Number, default: 0 },
+          needs: { type: String, maxlength: 240 },
+        },
+        { _id: false }
+      ),
+      required: false,
+    },
     feedback: { type: String, enum: ENQUIRY_FEEDBACK },
     closed: { type: Boolean, default: false },
     teamNote: { type: String, maxlength: 1000 },

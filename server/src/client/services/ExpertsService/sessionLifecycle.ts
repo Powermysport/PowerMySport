@@ -136,7 +136,10 @@ export const initiateExpertSession = async (params: {
   mode?: "ONLINE" | "IN_PERSON";
   userPhone?: string;
   playerId?: string;
+  /** Where the parent started it: the website, or the WhatsApp assistant. */
+  channel?: "CLIENT_WEB" | "WHATSAPP";
 }) => {
+  const channel = params.channel ?? "CLIENT_WEB";
   const expert = await Expert.findById(params.expertId);
   if (!expert || !expert.isActive) throw new Error("Expert not found");
   if (params.userId === (expert.userId as mongoose.Types.ObjectId).toString()) {
@@ -192,7 +195,7 @@ export const initiateExpertSession = async (params: {
     toStatus: session.status,
     actorType: "USER",
     actorUserId: params.userId,
-    channel: "CLIENT_WEB",
+    channel,
     amountPaise: toPaise(expert.sessionFee),
     summary: `Expert session held for ${new Date(scheduledAt).toISOString()} (${resolvedMode})`,
     metadata: {
@@ -218,7 +221,7 @@ export const initiateExpertSession = async (params: {
     toStatus: session.status,
     actorType: "USER",
     actorUserId: params.userId,
-    channel: "CLIENT_WEB",
+    channel,
     amountPaise: toPaise(expert.sessionFee),
     summary: "PhonePe payment initiated for expert session",
     metadata: { merchantOrderId, method: "PHONEPE" },

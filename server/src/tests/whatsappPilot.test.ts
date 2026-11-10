@@ -234,15 +234,47 @@ describe("the webhook in pilot mode", () => {
     delete process.env.WHATSAPP_ALLOWED_NUMBERS;
   });
 
-  it("tells a number that is not on the list it is a pilot, and sends nothing else", async () => {
+  it("tells a number that is not on the list it is a pilot, with a way to the team, and nothing else", async () => {
     const res = await post(payload(`wamid.${crypto.randomUUID()}`, "919000000001"));
     assert.equal(res.status, 200);
     await settle(2);
 
-    const texts = sent.filter((m) => m.body.type === "text");
-    assert.equal(texts.length, 1);
-    assert.equal(texts[0]!.body.to, "919000000001");
-    assert.equal(texts[0]!.body.text.body, PILOT_REPLY);
+    const replies = sent.filter((m) => m.body.type === "text" || m.body.type === "interactive");
+    assert.equal(replies.length, 1);
+    assert.equal(replies[0]!.body.to, "919000000001");
+    assert.equal(replies[0]!.body.interactive.body.text, PILOT_REPLY);
+    assert.equal(replies[0]!.body.interactive.action.buttons[0].reply.id, "ask_team");
+  });
+
+  it("says nothing back to a reaction, such as a thumbs-up on our reply", async () => {
+    const body = JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                messages: [
+                  {
+                    id: `wamid.${crypto.randomUUID()}`,
+                    from: "919000000003",
+                    type: "reaction",
+                    reaction: { message_id: "wamid.ours", emoji: "👍" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const res = await post(body);
+    assert.equal(res.status, 200);
+    await settle(2);
+    assert.equal(
+      sent.filter((m) => m.body.type === "text" || m.body.type === "interactive").length,
+      0
+    );
   });
 
   it("answers a redelivered message once", async () => {
@@ -252,6 +284,9 @@ describe("the webhook in pilot mode", () => {
     await post(payload(id, "919000000002"));
     await settle(2);
 
-    assert.equal(sent.filter((m) => m.body.type === "text").length, 1);
+    assert.equal(
+      sent.filter((m) => m.body.type === "text" || m.body.type === "interactive").length,
+      1
+    );
   });
 });

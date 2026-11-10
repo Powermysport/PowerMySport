@@ -21,6 +21,7 @@ const ACTOR_LABEL: Record<BookingEvent["actorType"], string> = {
 
 const CHANNEL_LABEL: Record<BookingEvent["channel"], string> = {
   CLIENT_WEB: "customer app",
+  WHATSAPP: "WhatsApp assistant",
   PROVIDER_WEB: "provider dashboard",
   ADMIN_PANEL: "admin panel",
   CRON: "scheduled job",

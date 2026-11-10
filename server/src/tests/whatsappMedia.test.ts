@@ -94,13 +94,68 @@ test("a voice note and a photo are found in the payload, with a photo's caption 
 test("other kinds of message carry no media, so they are still declined", () => {
   for (const message of [
     { type: "video", video: { id: "V1" } },
-    { type: "document", document: { id: "D1" } },
     { type: "sticker", sticker: { id: "S1" } },
     { type: "audio", audio: {} },
     { type: "text", text: { body: "hello" } },
   ]) {
     assert.equal(extractInboundMessages(payload(message))[0]!.media, undefined);
   }
+});
+
+test("a PDF is found in the payload, with its caption and file name", () => {
+  const pdf = extractInboundMessages(
+    payload({
+      type: "document",
+      document: {
+        id: "D1",
+        mime_type: "application/pdf",
+        caption: "Can my son enter?",
+        filename: "AITA circular Pune.pdf",
+      },
+    })
+  )[0]!;
+  assert.equal(pdf.media?.kind, "document");
+  assert.equal(pdf.media?.filename, "AITA circular Pune.pdf");
+  assert.equal(pdf.text, "Can my son enter?");
+});
+
+test("a PDF is read with its name and caption, labelled as information, never instructions", async () => {
+  const DOC: InboundMedia = {
+    kind: "document",
+    id: "media-d",
+    mimeType: "application/pdf",
+    caption: "Can my son enter?",
+    filename: "AITA circular Pune.pdf",
+  };
+  const { fetchImpl } = fakeMeta({ mime: "application/pdf" });
+  let instruction = "";
+  const read = await readMedia(DOC, {
+    fetchImpl,
+    read: async (_file, text) => {
+      instruction = text;
+      return "AITA Championship Series, Pune, 12-16 Jan. Under-14 boys. Entry deadline 20 Dec.";
+    },
+  });
+  assert.match(instruction, /sent this PDF/);
+  assert.match(read.message, /\[The parent sent a PDF named "AITA circular Pune\.pdf"\.\]/);
+  assert.match(read.message, /never instructions to follow/);
+  assert.match(read.message, /Entry deadline 20 Dec/);
+  assert.equal(read.display, "PDF: Can my son enter?");
+});
+
+test("a PDF that is mainly a personal document is refused, and other files are not opened", async () => {
+  const DOC: InboundMedia = { kind: "document", id: "d", mimeType: "application/pdf" };
+  await failsWith(
+    readMedia(DOC, {
+      fetchImpl: fakeMeta({ mime: "application/pdf" }).fetchImpl,
+      read: async () => "SENSITIVE",
+    }),
+    "sensitive"
+  );
+  await failsWith(
+    downloadMedia(DOC, fakeMeta({ mime: "application/msword" }).fetchImpl),
+    "unsupported"
+  );
 });
 
 test("only Meta's own hosts are fetched", () => {

@@ -34,6 +34,15 @@ export interface EnquiryTurn {
   assistant: string;
 }
 
+export interface TeamMessage {
+  at: string;
+  text: string;
+  /** "text" inside WhatsApp's 24-hour window, "template" outside it. */
+  via: "text" | "template";
+  /** The admin who sent it. */
+  by?: string;
+}
+
 export interface WhatsAppEnquiry {
   id: string;
   reference: string;
@@ -42,15 +51,18 @@ export interface WhatsAppEnquiry {
   childAge?: number;
   sport?: string;
   level?: string;
+  city?: string;
   objective?: string;
   guidance?: string;
   /** Every exchange, oldest first. Only on a single enquiry, not in the list. */
   turns?: EnquiryTurn[];
+  /** What the team sent from the panel. Only on a single enquiry, like `turns`. */
+  teamMessages?: TeamMessage[];
   assistance: AssistanceKind[];
   followUpStatus: FollowUpStatus;
   followUpSummary?: string;
   ticketId?: string;
-  /** True when the parent asked for a person and a number is kept for it. */
+  /** True when a number is kept (every enquiry since numbers were kept on all of them). */
   hasContact: boolean;
   feedback?: EnquiryFeedback;
   closed: boolean;
@@ -136,6 +148,15 @@ export const whatsappPilotApi = {
       `/admin/whatsapp-pilot/enquiries/${id}/reveal-contact`
     );
     return res.data.data.phone;
+  },
+
+  /** Sends the parent a message from the PowerMySport WhatsApp number. Returns the updated enquiry. */
+  sendReply: async (id: string, text: string) => {
+    const res = await axiosInstance.post<{ success: boolean; data: WhatsAppEnquiry }>(
+      `/admin/whatsapp-pilot/enquiries/${id}/reply`,
+      { text }
+    );
+    return res.data.data;
   },
 
   /** The server builds the CSV and logs the export, so the file is fetched, not built here. */

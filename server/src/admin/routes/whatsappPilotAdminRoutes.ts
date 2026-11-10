@@ -12,6 +12,7 @@ import {
   getWhatsAppEnquirySummary,
   listWhatsAppEnquiries,
   revealWhatsAppEnquiryContact,
+  replyToWhatsAppEnquiry,
   updateWhatsAppEnquiry,
 } from "../controllers/whatsappEnquiryAdminController";
 import { adminMiddleware, authMiddleware, requirePermission } from "../../middleware/auth";
@@ -45,6 +46,11 @@ router.post(
   "/enquiries/:id/reveal-contact",
   requirePermission("notifications:manage"),
   revealWhatsAppEnquiryContact
+);
+router.post(
+  "/enquiries/:id/reply",
+  requirePermission("notifications:manage"),
+  replyToWhatsAppEnquiry
 );
 
 export default router;

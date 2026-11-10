@@ -246,6 +246,18 @@ export function fixtureFor(tool: string, args: Record<string, unknown>): unknown
         instruction:
           "Tell the parent you are about to shortlist AITA CS7 (Pune) in Pune, Maharashtra, starting 2026-11-14, on Aarav's season plan. Say that this only shortlists it; entering is done on the website. Ask them to reply YES to go ahead. It is NOT added yet. Do NOT call confirm_pending_action until they have replied.",
       };
+    case "prepare_expert_booking":
+      return {
+        ready: true,
+        expert: "Asha Verma",
+        when: "28 Oct 2026, 6:00 PM",
+        feePerSessionRupees: 800,
+        sessionMinutes: 45,
+        mode: "online",
+        forChild: "Aarav",
+        instruction:
+          "Say back the booking in two or three short lines: Asha Verma, 28 Oct 2026, 6:00 PM (Indian time), 45 minutes online, ₹800, for Aarav. Say that if they reply YES you will send a payment link, the time is held for 15 minutes while they pay, and it is booked once the payment goes through. Nothing is booked yet. Do NOT call confirm_pending_action until they reply.",
+      };
     case "confirm_pending_action":
       return {
         done: true,

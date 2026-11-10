@@ -215,30 +215,43 @@ describe("asking the team to follow up on WhatsApp", () => {
   const talk = () =>
     answer(msg("My son is 12 and plays tennis. What should we do next?"), stub("Here is advice."));
 
-  it("tapping 'Find a coach or academy' records the request, with no model call", async () => {
+  it("tapping 'Find a coach or academy' starts the intake instead of a dead end, with no model call", async () => {
     await talk();
     const calls: Call[] = [];
     const reply = await answer(msg("Find a coach or academy", "next_coach"), neverCalled(calls));
 
     assert.equal(calls.length, 0);
-    assert.match(reply.reply, /We have noted that you are looking for a coach or academy/);
+    assert.match(reply.reply, /our team can find good options near you/);
+    assert.match(reply.reply, /How old is your child/);
+    const enquiry = await WhatsAppEnquiry.findOne({}).lean();
+    assert.equal(enquiry.followUpStatus, "none", "forwarded only once the details are in");
+    assert.equal(enquiry.intake.step, "age");
+  });
+
+  it("tapping 'Speak to a sports expert' records the request, with no model call", async () => {
+    await talk();
+    const calls: Call[] = [];
+    const reply = await answer(msg("Speak to a sports expert", "next_expert"), neverCalled(calls));
+
+    assert.equal(calls.length, 0);
+    assert.match(reply.reply, /We have noted that you would like to speak to a sports expert/);
     assert.match(reply.reply, /get back to you here on WhatsApp/);
     const enquiry = await WhatsAppEnquiry.findOne({}).lean();
     assert.equal(enquiry.followUpStatus, "new");
-    assert.ok(enquiry.assistance.includes("coach"));
+    assert.ok(enquiry.assistance.includes("expert"));
     assert.ok(reply.reply.includes(enquiry.reference), "the parent is given the reference");
   });
 
   it("the confirmation the parent got is on the enquiry, and the advice before it is not overwritten", async () => {
     await talk();
     const before = await WhatsAppEnquiry.findOne({}).lean();
-    await answer(msg("Find a coach or academy", "next_coach"), neverCalled([]));
+    await answer(msg("Speak to a sports expert", "next_expert"), neverCalled([]));
 
     const after = await WhatsAppEnquiry.findOne({}).lean();
     assert.equal(after.guidance, before.guidance, "the latest advice is still the advice");
     const last = after.turns.at(-1);
     assert.match(last.assistant, /Your reference: PMS-/);
-    assert.equal(last.parent, "I'd like help finding a coach or academy for my child.");
+    assert.equal(last.parent, "I'd like to speak to a sports expert.");
   });
 
   it("keeps the parent's number, encrypted, so the team can answer here", async () => {
@@ -252,8 +265,8 @@ describe("asking the team to follow up on WhatsApp", () => {
 
   it("tapping twice is one request with one reference", async () => {
     await talk();
-    const first = await answer(msg("Find a coach or academy", "next_coach"), neverCalled([]));
-    const second = await answer(msg("Find a coach or academy", "next_coach"), neverCalled([]));
+    const first = await answer(msg("Speak to a sports expert", "next_expert"), neverCalled([]));
+    const second = await answer(msg("Speak to a sports expert", "next_expert"), neverCalled([]));
 
     assert.match(second.reply, /already with our team/);
     assert.equal(await WhatsAppEnquiry.countDocuments({}), 1);
@@ -270,7 +283,7 @@ describe("asking the team to follow up on WhatsApp", () => {
   });
 
   it("works with no earlier conversation, and does not use up a daily message", async () => {
-    const reply = await answer(msg("Find a coach or academy", "next_coach"), neverCalled([]));
+    const reply = await answer(msg("Speak to a sports expert", "next_expert"), neverCalled([]));
     assert.match(reply.reply, /Your reference: PMS-/);
     assert.equal(await WhatsAppEnquiry.countDocuments({ followUpStatus: "new" }), 1);
   });
@@ -485,7 +498,7 @@ describe("voice notes and photos", () => {
       { id: "wamid.x", from: PHONE, type: "video", text: null, replyId: null },
       neverCalled([])
     );
-    assert.match(answer.reply, /text, voice notes and photos/);
+    assert.match(answer.reply, /text, voice notes, photos and PDFs/);
   });
 });
 

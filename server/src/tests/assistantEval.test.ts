@@ -67,7 +67,7 @@ describe("the system prompt and the registry", () => {
       section,
       /search_experts: Its results are 1:1 expert consultations, not regular coaching/
     );
-    assert.match(section, /regular coaching is coming soon/);
+    assert.match(section, /does not list coaches or academies yet/);
     assert.match(section, /never to \/booking/);
   });
 

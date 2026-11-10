@@ -16,10 +16,16 @@ import { forgetAllNotes, formatNotesForPrompt, getNotes } from "./whatsappNotes"
 import { decrementDailyMessageCount, checkChatRateLimit } from "./chatRateLimitService";
 import { retrieveRelevantChunks } from "./knowledgeRetrievalService";
 import { withdrawConsentForPhone } from "./whatsappConsent";
-import { OPT_OUT_REPLY, isOptOutMessage } from "./whatsappPilot";
+import {
+  OPT_OUT_REPLY,
+  PILOT_PASSED_ON_REPLY,
+  PILOT_REPLY,
+  isOptOutMessage,
+} from "./whatsappPilot";
 import {
   addExchange,
   attachContactNumber,
+  noteParentReply,
   closeLatestEnquiry,
   requestFollowUp,
   forgetAllEnquiries,
@@ -36,6 +42,18 @@ import {
   wantsMenu,
 } from "./whatsappInteractive";
 import { clipReply, formatForWhatsApp } from "./whatsappFormat";
+import {
+  INTAKE_CANCELLED,
+  activeIntake,
+  answerIntake,
+  cancelIntake,
+  isCancel,
+  startIntake,
+  type IntakeReply,
+} from "./whatsappAcademyIntake";
+import { ASK_TEAM_BUTTON, ASK_TEAM_ID, type ReplyButton } from "./whatsappInteractive";
+import { slotTapText } from "./whatsappExpertBooking";
+import { TEAM_THREAD_MS, WhatsAppEnquiry } from "../../client/models/WhatsAppEnquiry";
 import { MEDIA_FAILURE_REPLY, MediaError, readMedia, type MediaDeps } from "./whatsappMedia";
 import type { InboundWhatsAppMessage } from "./whatsappService";
 import { log as __rootLog } from "../../utils/logger";
@@ -64,7 +82,8 @@ You are replying inside WhatsApp, not on the website. Adjust everything above to
 - You are an AI assistant. If asked whether you are a person or a bot, say you are an AI assistant.
 - Never ask for a child's medical details, ID numbers, payment details or passwords, and tell a parent not to send them here.
 - Write fees in rupees with the symbol and the unit, for example ₹1,000 per session, never a bare number.
-- If a parent wants to talk to a person, or wants help you cannot give from here (a coach or academy, for instance), offer to have the PowerMySport team get back to them here on WhatsApp. You never need their email or phone number: this chat is how the team reaches them. Also give https://powermysport.com/contact if they ask how else to reach the team.
+- A chat message starting "(Message from the PowerMySport team" was written by a person on the team, not by you. When the parent answers it, tell them in one short sentence that their reply has gone to the team, who will get back to them here; answer anything they ask you as usual, but never answer for the team or make promises on its behalf.
+- If a parent wants to talk to a person, or wants help you cannot give from here, offer to have the PowerMySport team get back to them here on WhatsApp. You never need their email or phone number: this chat is how the team reaches them. Also give https://powermysport.com/contact if they ask how else to reach the team.
 
 ## How to behave
 - Never explain how you work inside: do not say which tool you used or "a different tool". If an earlier answer of yours was wrong or incomplete, say so in one short sentence, give the corrected answer, and move on.
@@ -98,7 +117,10 @@ This WhatsApp number belongs to a PowerMySport account. This replaces what the i
 export const UNKNOWN_NUMBER_ADDENDUM = `
 
 ## This parent is not identified
-This WhatsApp number is not tied to a single PowerMySport account, so your tools return public data only and you cannot see anyone's children or rankings. If they ask for their child's ranking or a list made for their child, say plainly that this number is not linked to an account, and that signing in at https://powermysport.com/planner shows it. Do not claim the information is private or that you are unable to look it up.`;
+This WhatsApp number is not tied to a single PowerMySport account, so your tools return public data only and you cannot see anyone's children or rankings. If they ask for their child's ranking or a list made for their child, say plainly that this number is not linked to an account, and that signing in at https://powermysport.com/planner shows it. Do not claim the information is private or that you are unable to look it up.
+- Answer as much as you can here first. Only point to a page that needs an account (the planner, a development plan, the assessment) for the part you cannot do from this chat.
+- When you do, and they have told you about a child, offer the profile link (create_profile_link) in the same reply, so they do not have to type it all again when they sign up. Offer it once; do not repeat it if they decline or ignore it.
+- If they would rather not sign up, offer to have the PowerMySport team help them here instead.`;
 
 /** How notes work for a number with no account: it is often a new parent. */
 const NOTES_RULES = `
@@ -154,11 +176,11 @@ You can shortlist an upcoming tournament on a child's season plan, in two steps.
 - Only one thing waits for a yes at a time. If they ask for something else before replying, set that up instead and say the earlier one is dropped.`;
 
 const FALLBACK_REPLY =
-  "Sorry, I couldn't put an answer together just now. Please try again in a minute, or ask on https://powermysport.com/ask";
+  "Sorry, I couldn't put an answer together just now. Please try again in a minute, or tap below and someone from our team will get back to you here.";
 const UNSUPPORTED_REPLY =
-  "I can read text, voice notes and photos for now. Could you send your question as one of those?";
+  "I can read text, voice notes, photos and PDFs for now. Could you send your question as one of those?";
 const DAILY_LIMIT_REPLY =
-  "You've reached today's limit of messages here. Please message again tomorrow, or keep going on https://powermysport.com/ask";
+  "You've reached today's limit of messages with me. Please message again tomorrow, or tap below and someone from our team will get back to you here.";
 
 /**
  * Keyed hash of a phone number, used as the conversation key. HMAC with a
@@ -318,6 +340,36 @@ export interface WhatsAppAnswer {
   nextSteps?: boolean;
   /** Send the topic menu under the reply: the parent's message asked for nothing specific. */
   topicMenu?: boolean;
+  /** Send the reply with these reply buttons (an intake question with fixed answers). */
+  buttons?: ReplyButton[];
+  /** Send an expert's open times as a tappable list under the reply. */
+  slotPicker?: { expertName: string; rows: Array<{ id: string; title: string }> };
+  /** Send a payment button under the reply. */
+  payLink?: { url: string; label: string };
+}
+
+/** Records one intake exchange like any other and turns it into the answer to send. */
+async function intakeAnswer(
+  phoneHash: string,
+  phone: string,
+  parentText: string,
+  step: IntakeReply
+): Promise<WhatsAppAnswer> {
+  const now = new Date();
+  await appendTurn(phoneHash, parentText, step.reply, now).catch((err) =>
+    log.error("could not store the intake turn", err)
+  );
+  await addExchange(phoneHash, parentText, step.reply, now).catch((err) =>
+    log.error("could not record the intake exchange", err)
+  );
+  await attachContactNumber(phoneHash, phone).catch((err) =>
+    log.error("could not keep the contact number", err)
+  );
+  return {
+    reply: step.reply,
+    firstContact: false,
+    ...(step.buttons ? { buttons: step.buttons } : {}),
+  };
 }
 
 /** Stores one exchange in the rolling conversation. One atomic update, so two messages arriving
@@ -367,7 +419,9 @@ export async function answerWhatsAppMessage(
   // assistant can act on, and two (finishing, feedback) are decided here without the model.
   const intent = intentForReply(message.replyId);
   const tapped = intent?.kind === "ask" || intent?.kind === "followup";
-  let userMessage = (tapped ? intent.text : (text ?? "")).slice(0, MAX_INBOUND_CHARS);
+  // A tapped time in the booking picker, put as a sentence naming the expert and the time.
+  const slotTap = slotTapText(message.replyId);
+  let userMessage = (tapped ? intent.text : (slotTap ?? text ?? "")).slice(0, MAX_INBOUND_CHARS);
 
   // "STOP" and the like delete the chat. Checked before the daily limit so a parent
   // who has used their messages can still take their data back.
@@ -386,6 +440,14 @@ export async function answerWhatsAppMessage(
     return { reply: OPT_OUT_REPLY, firstContact: false };
   }
 
+  // A message after the team wrote to them is (likely) an answer to the team. The assistant still
+  // replies, but the team is told and the enquiry goes back to waiting, or the answer is lost.
+  if (intent?.kind !== "done" && intent?.kind !== "feedback") {
+    await noteParentReply(phoneHash, text ?? userMessage).catch((err) =>
+      log.error("could not note the reply to the team", err)
+    );
+  }
+
   // Finishing and feedback cost no model call, so they do not use up the parent's daily messages
   // and still work when the daily limit has been reached.
   if (intent?.kind === "done") {
@@ -397,6 +459,45 @@ export async function answerWhatsAppMessage(
       ? { reply: FEEDBACK_BODY, firstContact: false, feedbackPrompt: true }
       : { reply: FEEDBACK_THANKS_HELPFUL, firstContact: false };
   }
+  // The coach/academy intake asks its questions in code. While one is running, the parent's
+  // message is the answer, unless they cancel, tap something else or send a photo or voice note.
+  const intake = await activeIntake(phoneHash).catch((err) => {
+    log.error("could not read the intake", err);
+    return null;
+  });
+  if (intake) {
+    const intakeTap = Boolean(message.replyId?.startsWith("intake_"));
+    if (
+      (intent && !intakeTap) ||
+      media ||
+      (message.replyId && !intakeTap) ||
+      (text && wantsMenu(text))
+    ) {
+      await cancelIntake(phoneHash).catch((err) => log.error("could not cancel the intake", err));
+    } else if (text && isCancel(text)) {
+      await cancelIntake(phoneHash).catch((err) => log.error("could not cancel the intake", err));
+      return intakeAnswer(phoneHash, message.from, text, { reply: INTAKE_CANCELLED });
+    } else if (text) {
+      try {
+        const step = await answerIntake(intake, text, message.replyId);
+        return intakeAnswer(phoneHash, message.from, text, step);
+      } catch (err) {
+        log.error("could not take the intake answer", err);
+        return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
+      }
+    }
+  }
+
+  if (intent?.kind === "followup" && intent.assistance === "coach") {
+    // No coaches or academies are listed yet, so the team matches by hand: collect what it needs.
+    try {
+      const step = await startIntake(phoneHash, userMessage);
+      return intakeAnswer(phoneHash, message.from, userMessage, step);
+    } catch (err) {
+      log.error("could not start the coach intake", err);
+      return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
+    }
+  }
   if (intent?.kind === "followup") {
     // The tap is the request: record it for the team and give the reference, no model involved.
     try {
@@ -406,14 +507,14 @@ export async function answerWhatsAppMessage(
       await addExchange(phoneHash, userMessage, reply).catch((err) =>
         log.error("could not record the follow-up exchange", err)
       );
-      // The number is kept so the team can answer here; it is only ever kept for a request like this.
+      // The number is kept so the team can answer here.
       await attachContactNumber(phoneHash, message.from).catch((err) =>
         log.error("could not keep the contact number", err)
       );
       return { reply, firstContact: false };
     } catch (err) {
       log.error("could not record the follow-up request", err);
-      return { reply: FALLBACK_REPLY, firstContact: false };
+      return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
     }
   }
   if (intent?.kind === "feedback") {
@@ -423,6 +524,7 @@ export async function answerWhatsAppMessage(
     return {
       reply: intent.value === "helpful" ? FEEDBACK_THANKS_HELPFUL : FEEDBACK_THANKS_NOT_HELPFUL,
       firstContact: false,
+      ...(intent.value === "not_helpful" ? { buttons: [ASK_TEAM_BUTTON] } : {}),
     };
   }
 
@@ -454,7 +556,9 @@ export async function answerWhatsAppMessage(
     dailyReached: DAILY_LIMIT_REPLY,
     lifetimeReached: DAILY_LIMIT_REPLY,
   });
-  if (!limit.ok) return { reply: limit.message, firstContact: false };
+  if (!limit.ok) {
+    return { reply: limit.message, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
+  }
 
   // A voice note or photo becomes the text the assistant answers. `modelMessage` is what it is
   // given; `userMessage` stays the short form that the enquiry record and the tools see.
@@ -529,12 +633,73 @@ export async function answerWhatsAppMessage(
       known: Boolean(toolContext.userId),
       ...(toolContext.outbound?.nextSteps ? { nextSteps: true } : {}),
       ...(toolContext.outbound?.topicMenu ? { topicMenu: true } : {}),
+      ...(toolContext.outbound?.slotPicker ? { slotPicker: toolContext.outbound.slotPicker } : {}),
+      ...(toolContext.outbound?.payLink ? { payLink: toolContext.outbound.payLink } : {}),
     };
   } catch (err) {
     log.error("could not produce a reply", err);
     await decrementDailyMessageCount(limiterKey);
-    return { reply: FALLBACK_REPLY, firstContact: false };
+    return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
   }
+}
+
+/**
+ * A number outside the pilot list. The assistant does not answer it, but the parent is never left
+ * with nowhere to go: one tap asks the team, and once they are talking to the team their messages
+ * reach it. Nothing is stored until they tap, and STOP removes what was.
+ */
+export async function answerOutsidePilot(message: InboundWhatsAppMessage): Promise<WhatsAppAnswer> {
+  const phoneHash = hashPhone(message.from);
+  const text = message.text?.trim();
+  const pilot: WhatsAppAnswer = {
+    reply: PILOT_REPLY,
+    firstContact: false,
+    buttons: [ASK_TEAM_BUTTON],
+  };
+  try {
+    if (text && isOptOutMessage(text)) {
+      await forgetAllEnquiries(phoneHash);
+      await WhatsAppConversation.deleteOne({ phoneHash });
+      return { reply: OPT_OUT_REPLY, firstContact: false };
+    }
+
+    if (message.replyId === ASK_TEAM_ID) {
+      const ask = "I'd like to talk to someone from the PowerMySport team.";
+      const result = await requestFollowUp(phoneHash, ask, {
+        kind: "team",
+        summary:
+          "Messaged the WhatsApp number while not on the pilot list and asked for someone from the team.",
+      });
+      const reply = followUpReply("team", result.reference, result.alreadyRequested);
+      await addExchange(phoneHash, ask, reply);
+      await attachContactNumber(phoneHash, message.from);
+      return { reply, firstContact: false };
+    }
+
+    // Already talking to the team: what they write goes to the team, not to a pilot notice.
+    const thread = await WhatsAppEnquiry.exists({
+      phoneHash,
+      followUpStatus: { $in: ["new", "contacted"] },
+      $or: [
+        { lastMessageAt: { $gte: new Date(Date.now() - TEAM_THREAD_MS) } },
+        { lastTeamMessageAt: { $gte: new Date(Date.now() - TEAM_THREAD_MS) } },
+      ],
+    });
+    if (thread && (text || message.media)) {
+      const said =
+        text ||
+        { audio: "(a voice note)", image: "(a photo)", document: "(a PDF)" }[
+          message.media?.kind ?? "image"
+        ];
+      await noteParentReply(phoneHash, said);
+      await addExchange(phoneHash, said, PILOT_PASSED_ON_REPLY);
+      await attachContactNumber(phoneHash, message.from);
+      return { reply: PILOT_PASSED_ON_REPLY, firstContact: false };
+    }
+  } catch (err) {
+    log.error("could not handle a message from outside the pilot", err);
+  }
+  return pilot;
 }
 
 /** The reply text alone, for callers that do not need to know whether this was a first message. */

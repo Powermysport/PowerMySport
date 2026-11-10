@@ -149,21 +149,20 @@ describe("asking for a person", () => {
     assert.equal(stored.ticketId, "t1");
   });
 
-  it("keeps the number encrypted, only on a topic with a follow-up request", async () => {
+  it("keeps the number encrypted on every topic, so the team can reach any parent", async () => {
     await record({ sport: "Tennis" });
+    await enquiries.attachContactNumber(HASH, PHONE);
+    const stored = await WhatsAppEnquiry.findOne({}).lean();
+    assert.ok(stored.contactPhoneEnc, "kept without a follow-up request");
+    assert.ok(!JSON.stringify(stored).includes(PHONE));
+    assert.equal(decryptValue(stored.contactPhoneEnc), PHONE);
+
+    // Encrypted once: a second call leaves the stored value alone.
     await enquiries.attachContactNumber(HASH, PHONE);
     assert.equal(
       (await WhatsAppEnquiry.findOne({}).lean()).contactPhoneEnc,
-      undefined,
-      "no request, so no number kept"
+      stored.contactPhoneEnc
     );
-
-    await enquiries.markFollowUpRequested(HASH, "help", { summary: "call me" });
-    await enquiries.attachContactNumber(HASH, PHONE);
-    const stored = await WhatsAppEnquiry.findOne({}).lean();
-    assert.ok(stored.contactPhoneEnc);
-    assert.ok(!JSON.stringify(stored).includes(PHONE));
-    assert.equal(decryptValue(stored.contactPhoneEnc), PHONE);
   });
 });
 
@@ -356,7 +355,10 @@ describe("every exchange is kept", () => {
 
   it("is promised to the parent in the first message, in both versions, and the promise matches the retention", () => {
     for (const notice of [FIRST_CONTACT_NOTICE, FIRST_CONTACT_NOTICE_MEMBER]) {
-      assert.match(notice, /Our team can read your questions and my answers for up to 6 months/);
+      assert.match(
+        notice,
+        /Our team can read your questions and my answers, with your number, for up to 6 months/
+      );
       assert.match(notice, /improve PowerMySport/);
       assert.match(notice, /STOP/);
       assert.ok(!notice.includes("—"), "no em dashes in copy");

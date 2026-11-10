@@ -4,12 +4,14 @@ import {
   ENQUIRY_FEEDBACK,
   MAX_ENQUIRY_TURNS,
   ENQUIRY_IDLE_MS,
+  TEAM_THREAD_MS,
   WhatsAppEnquiry,
   type AssistanceKind,
   type EnquiryFeedback,
   type WhatsAppEnquiryDocument,
 } from "../../client/models/WhatsAppEnquiry";
 import { encryptValue } from "../utils/encryption";
+import { queueFollowUpAlert, queueParentReplyAlert } from "./whatsappTeamAlert";
 
 /**
  * Keeping a record of each parent question for the pilot review.
@@ -23,7 +25,7 @@ const MAX_QUESTION = 500;
 const MAX_GUIDANCE = 2000;
 
 /** Plain words only: no links, markup, line breaks or runs of spaces. */
-function plain(value: unknown, max: number): string | undefined {
+export function plain(value: unknown, max: number): string | undefined {
   if (typeof value !== "string") return undefined;
   const text = value
     .replace(/https?:\/\/\S+/gi, " ")
@@ -80,6 +82,8 @@ export async function currentEnquiry(
     phoneHash,
     $or: [
       { closed: false, lastMessageAt: { $gte: idleCutoff } },
+      // A parent answering the team's message carries on that enquiry, open or not.
+      { lastTeamMessageAt: { $gte: new Date(now.getTime() - TEAM_THREAD_MS) } },
       ...(touchedSince ? [{ lastMessageAt: { $gte: touchedSince } }] : []),
     ],
   }).sort({ lastMessageAt: -1 });
@@ -98,6 +102,7 @@ export interface EnquiryFields {
   childAge?: unknown;
   sport?: unknown;
   level?: unknown;
+  city?: unknown;
   objective?: unknown;
   assistance?: unknown;
   feedback?: unknown;
@@ -122,6 +127,8 @@ export async function updateEnquiry(
   if (sport) enquiry.sport = sport;
   const level = plain(fields.level, 60);
   if (level) enquiry.level = level;
+  const city = plain(fields.city, 60);
+  if (city) enquiry.city = city;
   const objective = plain(fields.objective, 240);
   if (objective) enquiry.objective = objective;
 
@@ -240,28 +247,63 @@ export async function requestFollowUp(
   if (summary) enquiry.followUpSummary = summary;
   enquiry.lastMessageAt = new Date();
   await enquiry.save();
+  // Someone has to hear about it, or "the team will get back to you" is a promise nobody sees.
+  await queueFollowUpAlert(enquiry);
   return { reference: enquiry.reference, alreadyRequested: false };
 }
 
 /**
- * Keeps the number, encrypted, on the topic where the parent asked for a person, so the team can
- * reach them. Called by the webhook layer, which has the number; the model never does. Does
- * nothing for a topic with no follow-up request, so the number is not kept for anyone else.
+ * Keeps the number, encrypted, on the topic the parent is on, so the team can reach them about
+ * it. Called by the webhook layer, which has the number; the model never does. Encrypted once per
+ * enquiry: a topic that already has it is left alone.
  */
 export async function attachContactNumber(phoneHash: string, phone: string): Promise<void> {
   const filter = {
     phoneHash,
-    followUpStatus: "new",
     contactPhoneEnc: { $exists: false },
     lastMessageAt: { $gte: new Date(Date.now() - ENQUIRY_IDLE_MS) },
   };
-  // Checked first, so the number is only ever encrypted for a topic that asked for a person.
-  const waiting = await WhatsAppEnquiry.findOne(filter).sort({ lastMessageAt: -1 }).select("_id");
-  if (!waiting) return;
+  const latest = await WhatsAppEnquiry.findOne(filter).sort({ lastMessageAt: -1 }).select("_id");
+  if (!latest) return;
   await WhatsAppEnquiry.updateOne(
-    { _id: waiting._id, contactPhoneEnc: { $exists: false } },
+    { _id: latest._id, contactPhoneEnc: { $exists: false } },
     { $set: { contactPhoneEnc: encryptValue(phone) } }
   );
+}
+
+/**
+ * The parent wrote after the team messaged them. Their message is answered by the assistant like
+ * any other, so without this the team would never know: the enquiry goes back to waiting and the
+ * team is emailed, once per team message. Returns true when it was such a reply.
+ */
+export async function noteParentReply(
+  phoneHash: string,
+  text: string,
+  now: Date = new Date()
+): Promise<boolean> {
+  const since = new Date(now.getTime() - TEAM_THREAD_MS);
+  const enquiry = await WhatsAppEnquiry.findOne({
+    phoneHash,
+    lastTeamMessageAt: { $gte: since, $lte: now },
+  }).sort({ lastTeamMessageAt: -1 });
+  if (!enquiry?.lastTeamMessageAt) return false;
+  if (enquiry.parentRepliedAt && enquiry.parentRepliedAt >= enquiry.lastTeamMessageAt) return false;
+
+  // Claimed atomically, so two quick messages send one email.
+  const claimed = await WhatsAppEnquiry.findOneAndUpdate(
+    {
+      _id: enquiry._id,
+      $or: [
+        { parentRepliedAt: { $exists: false } },
+        { parentRepliedAt: { $lt: enquiry.lastTeamMessageAt } },
+      ],
+    },
+    { $set: { parentRepliedAt: now, followUpStatus: "new" } },
+    { new: true }
+  );
+  if (!claimed) return false;
+  await queueParentReplyAlert(claimed, plain(text, MAX_QUESTION) ?? "(a photo or voice note)");
+  return true;
 }
 
 /** Removes every enquiry for this number. Used by STOP, with the chat and the notes. */

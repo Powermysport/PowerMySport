@@ -130,6 +130,7 @@ export function extractInboundMessages(payload: unknown): InboundWhatsAppMessage
           text?: { body?: string };
           audio?: { id?: string; mime_type?: string };
           image?: { id?: string; mime_type?: string; caption?: string };
+          document?: { id?: string; mime_type?: string; caption?: string; filename?: string };
           interactive?: {
             button_reply?: { id?: string; title?: string };
             list_reply?: { id?: string; title?: string };
@@ -142,6 +143,7 @@ export function extractInboundMessages(payload: unknown): InboundWhatsAppMessage
           m.interactive?.list_reply?.title ??
           // A photo's caption is the parent's own words; the photo itself is in `media`.
           m.image?.caption ??
+          m.document?.caption ??
           null;
         const replyId = m.interactive?.button_reply?.id ?? m.interactive?.list_reply?.id ?? null;
         const media: InboundMedia | undefined =
@@ -154,7 +156,15 @@ export function extractInboundMessages(payload: unknown): InboundWhatsAppMessage
                   mimeType: m.image.mime_type,
                   caption: m.image.caption ?? null,
                 }
-              : undefined;
+              : m.type === "document" && m.document?.id
+                ? {
+                    kind: "document",
+                    id: m.document.id,
+                    mimeType: m.document.mime_type,
+                    caption: m.document.caption ?? null,
+                    filename: m.document.filename ?? null,
+                  }
+                : undefined;
         out.push({
           id: m.id,
           from: m.from,

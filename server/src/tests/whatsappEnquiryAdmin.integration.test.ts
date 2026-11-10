@@ -274,7 +274,7 @@ describe("the CSV", () => {
     const [header, row] = res.text.replace(/^﻿/, "").split("\r\n");
     assert.equal(
       header,
-      "Reference,Date,Parent,Question,Child age,Sport,Level,Objective,Guidance provided,Assistance required,Follow-up status,Parent feedback,Closed,Messages,Team note"
+      "Reference,Date,Parent,Question,Child age,Sport,Level,City / area,Objective,Guidance provided,Assistance required,Follow-up status,Parent feedback,Closed,Messages,Team note"
     );
     assert.ok(row.includes("Tennis"));
     assert.equal(

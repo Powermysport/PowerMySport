@@ -69,7 +69,15 @@ export const FEEDBACK_BUTTONS: ReplyButton[] = [
 export const FEEDBACK_THANKS_HELPFUL =
   "Thank you! Message me any time you have another question about your child's sport.";
 export const FEEDBACK_THANKS_NOT_HELPFUL =
-  "Sorry that didn't help. I've noted it so we can improve. You can ask me again in your own words, or reach the team at https://powermysport.com/contact";
+  "Sorry that didn't help. I've noted it so we can improve. You can ask me again in your own words, or tap below and someone from our team will get back to you here.";
+
+/**
+ * The way to a person, offered wherever the assistant cannot help: after "Not really", at the
+ * daily limit, after an error. A tap is recorded for the team in code, with no model call, so it
+ * works even when the model is down or the day's messages are used up.
+ */
+export const ASK_TEAM_ID = "ask_team";
+export const ASK_TEAM_BUTTON: ReplyButton = { id: ASK_TEAM_ID, title: "Talk to our team" };
 
 /**
  * What a tap means. Most taps are a question for the assistant, sent in a sentence it can act on
@@ -78,7 +86,7 @@ export const FEEDBACK_THANKS_NOT_HELPFUL =
  */
 export type Intent =
   | { kind: "ask"; text: string }
-  | { kind: "followup"; assistance: "coach" | "expert"; text: string }
+  | { kind: "followup"; assistance: "coach" | "expert" | "team"; text: string }
   | { kind: "done" }
   | { kind: "feedback"; value: "helpful" | "not_helpful" };
 
@@ -104,6 +112,13 @@ export function intentForReply(replyId: string | null | undefined): Intent | nul
       kind: "followup",
       assistance: "coach",
       text: "I'd like help finding a coach or academy for my child.",
+    };
+  }
+  if (replyId === ASK_TEAM_ID) {
+    return {
+      kind: "followup",
+      assistance: "team",
+      text: "I'd like to talk to someone from the PowerMySport team.",
     };
   }
   if (replyId === "next_expert") {
@@ -139,7 +154,7 @@ export function wantsMenu(text: string): boolean {
 const FOLLOW_UP_WHAT = {
   coach: "that you are looking for a coach or academy",
   expert: "that you would like to speak to a sports expert",
-  team: "your request",
+  team: "that you would like to talk to someone from our team",
   tournaments: "that you want help with tournaments",
   other: "your request",
 } as const;

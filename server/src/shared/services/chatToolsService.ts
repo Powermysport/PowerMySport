@@ -26,6 +26,8 @@ import {
   saveChildNote,
 } from "./whatsappNotes";
 import { markFollowUpRequested, requestFollowUp, updateEnquiry } from "./whatsappEnquiries";
+import { startIntake } from "./whatsappAcademyIntake";
+import { bookingToolEnabled, prepareExpertBooking } from "./whatsappExpertBooking";
 import { followUpReply } from "./whatsappInteractive";
 import { getChildrenDetail, getSeasonPlans } from "./parentContext";
 import { findEditionsForChat, getUpcomingEditions } from "./tournamentEditionQueries";
@@ -54,7 +56,15 @@ export interface ChatToolContext {
    * Things a tool wants done AFTER the reply is sent, set by the WhatsApp service and read back by
    * it. A tool cannot send a message itself, so it leaves a request here. Absent on the website.
    */
-  outbound?: { nextSteps?: boolean; topicMenu?: boolean; menuTapped?: boolean };
+  outbound?: {
+    nextSteps?: boolean;
+    topicMenu?: boolean;
+    menuTapped?: boolean;
+    /** Open times to pick from, sent as a tappable list under the reply. */
+    slotPicker?: { expertName: string; rows: Array<{ id: string; title: string }> };
+    /** A payment to make, sent as a button under the reply. The model never sees the link. */
+    payLink?: { url: string; label: string };
+  };
 }
 
 export interface ChatToolDefinition {
@@ -82,11 +92,11 @@ const searchExpertsTool: ChatToolDefinition = {
   name: "search_experts",
   summary:
     "find verified sports experts for one-to-one consultations by sport and city, with their fee per session and rating",
-  example: "find me a badminton coach in Bangalore",
+  example: "find me a badminton expert in Bangalore for a one-off session",
   promptNote:
-    "Its results are 1:1 expert consultations, not regular coaching: point to https://powermysport.com/experts for more, never to /booking. A parent who asks for a coach is not asking for a consultation: tell them plainly that regular coaching is coming soon, then offer an expert consultation as the closest option for now. Give the profileUrl of any expert the parent shows interest in, on its own line; for fuller detail and open times use get_expert_details. Booking and payment are on the website: you cannot book.",
+    "Its results are 1:1 expert consultations, not regular coaching: point to https://powermysport.com/experts for more, never to /booking. A parent who asks for a coach or an academy is not asking for a consultation, so do not search: PowerMySport does not list coaches or academies yet, but its team finds good options near the family. On WhatsApp call request_whatsapp_followup with kind coach at once (it asks the parent the details itself); on the website offer to pass the request to the team. Mention an expert consultation only as a separate option, if they ask what else there is. Give the profileUrl of any expert the parent shows interest in, on its own line; for fuller detail and open times use get_expert_details. Booking and payment are on the website: you cannot book.",
   description:
-    "Search PowerMySport's verified sports experts by sport and/or free-text (city, expertise, style). Experts give one-to-one consultations (guidance sessions, online or in person); they are NOT coaches for regular training, and regular coaching on PowerMySport is coming soon. Returns up to 5 matches with fee per session, rating, and city. Use when a parent asks for an expert or consultation, or asks for a coach: in that case say first that regular coaching is coming soon, then offer these as the closest option for now.",
+    "Search PowerMySport's verified sports experts by sport and/or free-text (city, expertise, style). Experts give one-to-one consultations (guidance sessions, online or in person); they are NOT coaches or academies for regular training. Returns up to 5 matches with fee per session, rating, and city. Use when a parent asks for an expert or a consultation. Do not use it when they ask for a coach or an academy: the team finds those by hand (see request_whatsapp_followup on WhatsApp).",
   parametersJsonSchema: {
     type: "object",
     properties: {
@@ -132,7 +142,7 @@ const getExpertDetailsTool: ChatToolDefinition = {
     "tell a parent more about one expert (what they help with, fee per session, languages, next open times) and give the link to book",
   example: "tell me more about Asha Verma and how do I book her",
   promptNote:
-    "Give the expert's profile link on its own line: booking and payment happen on the website, and you cannot book, hold a slot or take a payment. Open times are open now but not held. These are one-to-one consultations, not regular coaching.",
+    "Give the expert's profile link on its own line. Open times are open now but not held. If the parent wants to book and prepare_expert_booking is available, use it; otherwise booking and payment happen on the website. These are one-to-one consultations, not regular coaching.",
   description:
     "Look up one expert's public listing: their bio, expertise, fee per session in rupees, session length, online or in person, languages, city, rating and the next open times in Indian time, with the profile link where the parent books. Pass the expert's name as the parent said it, or the id from an earlier search. Use when a parent asks about a specific expert, their availability or how to book. If several experts match it returns them for you to ask which. It cannot book anything.",
   parametersJsonSchema: {
@@ -146,7 +156,18 @@ const getExpertDetailsTool: ChatToolDefinition = {
     },
     required: ["expert"],
   },
-  execute: async (args) => getExpertDetailsForChat(args),
+  execute: async (args, context) => {
+    const result = (await getExpertDetailsForChat(args)) as Record<string, unknown>;
+    // A parent with an account can book here when booking is on: say so instead of "you cannot".
+    if (result?.found === true && bookingToolEnabled() && context?.userId && context.phoneHash) {
+      return {
+        ...result,
+        instruction:
+          "Summarise the expert in a few short lines: who they are, what they help with, the fee as ₹ per session with the session length, online or in person, and the rating only if there are reviews. Do not list the open times: if they want to book, call prepare_expert_booking, which shows them as a list to pick from. Give the profile link on its own line too. This is a one-to-one consultation, not regular coaching.",
+      };
+    }
+    return result;
+  },
 };
 
 // ─── get_pathway_stage ─────────────────────────────────────────────────────────
@@ -311,7 +332,7 @@ const getChildRankingTool: ChatToolDefinition = {
         linked: false,
         reason: "number_not_linked",
         instruction:
-          "This WhatsApp number is not tied to a PowerMySport account, so no ranking can be read. Say that plainly (not that it is private), and that signing in at https://powermysport.com/planner shows and links a child's ranking.",
+          "This WhatsApp number is not tied to a PowerMySport account, so no ranking can be read. Say that plainly (not that it is private). If they have told you about this child, offer the profile link (create_profile_link) so the child is ready when they sign up, and say that after signing up the planner at https://powermysport.com/planner links the ranking. Otherwise just give the planner link.",
       };
     }
 
@@ -794,6 +815,32 @@ const prepareSeasonPlanEntryTool: ChatToolDefinition = {
   execute: async (args, context) => prepareSeasonEntry(context, args),
 };
 
+const prepareExpertBookingTool: ChatToolDefinition = {
+  name: "prepare_expert_booking",
+  summary:
+    "book a session with an expert for a parent with an account: show the open times, set it up, then send a payment link once they say YES",
+  example: "book a session with Asha Verma",
+  promptNote:
+    "Use it when the parent wants to book an expert. Without a time it shows the open times as a list under your reply: do not list them yourself. With a time it only prepares: say back the booking and ask for YES. Never say it is booked; after YES, confirm_pending_action holds the time and a payment button is sent, and it is booked when they pay.",
+  description:
+    "Book a one-to-one session with an expert, in two steps. Pass the expert's name as the parent said it, or the id from a search or a tapped time. Leave slot out to show the open times; pass slot (the time exactly as shown, for example 15 Nov 2026, 10:00 AM) once they chose one. childName when they say who it is for, and mode IN_PERSON only when the expert offers both and they asked for in person. It never charges anything: after the parent's YES, confirm_pending_action holds the time for 15 minutes and a payment button is sent.",
+  parametersJsonSchema: {
+    type: "object",
+    properties: {
+      expert: { type: "string", description: "The expert's name, or their id." },
+      slot: {
+        type: "string",
+        description: "The chosen time exactly as shown, only once the parent has picked one.",
+      },
+      childName: { type: "string", description: "First name of the child, when named." },
+      mode: { type: "string", enum: ["ONLINE", "IN_PERSON"], description: "Only if asked for." },
+      sport: { type: "string", description: "Sport to narrow a name search, only if known." },
+    },
+    required: ["expert"],
+  },
+  execute: async (args, context) => prepareExpertBooking(context, args),
+};
+
 const confirmPendingActionTool: ChatToolDefinition = {
   name: "confirm_pending_action",
   summary: "carry out what you set up for the parent, once they have replied YES",
@@ -801,9 +848,20 @@ const confirmPendingActionTool: ChatToolDefinition = {
   promptNote:
     "Call it only in your reply to the parent's YES, never in the same reply that set the action up. If it says the message was not a clear yes, ask again and do nothing. Say what was done in a few short lines; never claim anything was done until it says so.",
   description:
-    "Do the action that a prepare tool (prepare_guidance_plan or prepare_season_plan_entry) set up and the parent has since agreed to. Call it only after the parent has replied with a clear yes to your question. It checks their message itself and refuses otherwise, so do not call it to find out. What it does depends on what was set up: for a development plan it makes and saves the plan (about half a minute, using the daily plan allowance) and returns a short summary and the link to the full plan; for a season-plan entry it shortlists the tournament and returns the link to the planner. Only one action waits at a time.",
+    "Do the action that a prepare tool (prepare_guidance_plan, prepare_season_plan_entry or prepare_expert_booking) set up and the parent has since agreed to. Call it only after the parent has replied with a clear yes to your question. It checks their message itself and refuses otherwise, so do not call it to find out. What it does depends on what was set up: for a development plan it makes and saves the plan (about half a minute, using the daily plan allowance) and returns a short summary and the link to the full plan; for a season-plan entry it shortlists the tournament and returns the link to the planner. Only one action waits at a time.",
   parametersJsonSchema: { type: "object", properties: {} },
-  execute: async (_args, context) => confirmPendingAction(context),
+  execute: async (_args, context) => {
+    const result = (await confirmPendingAction(context)) as Record<string, unknown> | null;
+    // A payment link goes to the parent as a button, never through the model's words, so it
+    // cannot be mistyped, shortened or invented.
+    const payment = result?.payment as { url?: unknown; label?: unknown } | undefined;
+    if (payment && typeof payment.url === "string" && typeof payment.label === "string") {
+      if (context?.outbound) context.outbound.payLink = { url: payment.url, label: payment.label };
+      const { payment: _hidden, ...rest } = result!;
+      return rest;
+    }
+    return result;
+  },
 };
 
 // ─── get_tournament_details ─────────────────────────────────────────────────────
@@ -984,6 +1042,10 @@ const recordEnquiryTool: ChatToolDefinition = {
       childAge: { type: "number", description: "The child's age in years, only if stated." },
       sport: { type: "string", description: "The sport, in one or two words." },
       level: { type: "string", description: "The child's level, only if stated." },
+      city: {
+        type: "string",
+        description: "The family's city and area, only if stated (for example Pune, Baner).",
+      },
       objective: {
         type: "string",
         description: "What the parent wants, in a short phrase of their words.",
@@ -1008,6 +1070,7 @@ const recordEnquiryTool: ChatToolDefinition = {
         childAge: args.childAge,
         sport: args.sport,
         level: args.level,
+        city: args.city,
         objective: args.objective,
         assistance: args.assistance,
         feedback: args.feedback,
@@ -1060,7 +1123,7 @@ const requestWhatsappFollowupTool: ChatToolDefinition = {
     "ask the PowerMySport team to get back to the parent here on WhatsApp, for a person to talk to or for help you cannot give from this chat, once the parent has agreed",
   example: "can someone from your team talk to me about academies",
   promptNote:
-    "When the parent wants to talk to a person, or wants help you cannot give here, first ask in one short sentence whether they would like the team to get back to them here on WhatsApp, and wait for a clear yes. Never ask for an email address, a phone number or any other detail, and never call it on a vague request. When it works, tell them the team will get back to them here on WhatsApp and give the reference. Do not promise a time.",
+    "When the parent asks for a coach or an academy, call it at once with kind coach and parentAgreed false: it asks them the child's details one at a time, so reply with exactly the text it returns. For anything else, when the parent wants to talk to a person or wants help you cannot give here, first ask in one short sentence whether they would like the team to get back to them here on WhatsApp, and wait for a clear yes. Never ask for an email address, a phone number or any other detail, and never call it on a vague request. When it works, tell them the team will get back to them here on WhatsApp and give the reference. Do not promise a time.",
   description:
     "Ask the PowerMySport team to follow up with this parent on this WhatsApp chat. Call it ONLY after the parent has clearly agreed to have the team get back to them here. kind is what they need: coach (a coach or academy), expert (an expert consultation), tournaments, team (a person to talk to) or other. summary says what they want in one or two plain sentences, in English, without any medical, ID or payment details. It cannot be undone and it reaches a real person. Asking again for the same help on the same topic changes nothing and returns the same reference.",
   parametersJsonSchema: {
@@ -1093,7 +1156,9 @@ const requestWhatsappFollowupTool: ChatToolDefinition = {
       };
     }
     // A model decides when to call this, so the agreement is checked here and not trusted to it.
-    if (args.parentAgreed !== true) {
+    // A coach request is the exception: it only starts a few questions, which the parent can
+    // ignore or cancel, and nothing reaches the team until they have answered them.
+    if (args.parentAgreed !== true && args.kind !== "coach") {
       return {
         sent: false,
         instruction:
@@ -1102,6 +1167,28 @@ const requestWhatsappFollowupTool: ChatToolDefinition = {
     }
     const kinds = ["coach", "expert", "tournaments", "team", "other"] as const;
     const kind = kinds.find((k) => k === args.kind) ?? "team";
+    if (kind === "coach") {
+      // The team matches coaches and academies by hand, so it first needs the child's details.
+      // The intake asks for them one at a time, in code, from the parent's next message on.
+      try {
+        const step = await startIntake(context.phoneHash, context.userMessage ?? "");
+        if (step.forwarded) {
+          return {
+            sent: true,
+            instruction: `Passed on with the details already given. Reply with exactly this text and nothing else:
+${step.reply}`,
+          };
+        }
+        return {
+          sent: false,
+          collecting: true,
+          instruction: `Not passed on yet: the team first needs a few details, asked one at a time. Reply with exactly this text and nothing else:
+${step.reply}`,
+        };
+      } catch (error) {
+        log.error("could not start the coach intake", error);
+      }
+    }
     try {
       const result = await requestFollowUp(context.phoneHash, context.userMessage ?? "", {
         kind,
@@ -1174,6 +1261,7 @@ export const ASSISTANT_CHAT_TOOLS: ChatToolDefinition[] = [
   getMySessionsTool,
   prepareGuidancePlanTool,
   prepareSeasonPlanEntryTool,
+  prepareExpertBookingTool,
   confirmPendingActionTool,
   noteChildDetailsTool,
   createProfileLinkTool,
@@ -1193,6 +1281,8 @@ const WHATSAPP_ONLY_TOOLS = new Set([
   "offer_next_steps",
   "request_whatsapp_followup",
   "show_topic_menu",
+  // The website has its own booking page; this is the chat's way to it.
+  "prepare_expert_booking",
 ]);
 
 /**

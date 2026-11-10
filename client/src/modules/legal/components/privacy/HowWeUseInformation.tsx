@@ -30,12 +30,13 @@ export function HowWeUseInformation() {
       </p>
       <p className="mb-4 leading-relaxed text-slate-600">
         If you message our WhatsApp number yourself, an AI assistant replies. It tells you it is an
-        AI and asks you not to share medical, identity or payment details. You can type, send a
-        voice note or send a photo. A voice note or photo is sent to the AI provider described under
-        AI Features and Model Providers and turned into text (what was said, or a short description
-        of what the photo shows and any text that matters, such as a tournament circular). We do not
-        keep the audio or the image, only that text. Please do not send a photo of an identity,
-        medical or bank document; the assistant will not read a photo that is mainly one.
+        AI and asks you not to share medical, identity or payment details. You can type, or send a
+        voice note, a photo or a PDF. A voice note, photo or PDF is sent to the AI provider
+        described under AI Features and Model Providers and turned into text (what was said, or a
+        short description of what the photo or PDF shows and any text that matters, such as a
+        tournament circular). We do not keep the audio, the image or the file, only that text.
+        Please do not send a photo or PDF of an identity, medical or bank document; the assistant
+        will not read one that is mainly such a document.
       </p>
       <p className="mb-4 leading-relaxed text-slate-600">
         What we keep from these chats, and for how long:
@@ -54,18 +55,17 @@ export function HowWeUseInformation() {
         </li>
         <li>
           <span className="font-semibold">A record of each question</span>: what you asked, what the
-          assistant answered, what the child&apos;s age, sport and level were, and how it ended. Our
-          team can read these records for up to 6 months to review and improve PowerMySport. The
-          team sees a short reference for you, not your phone number.
+          assistant answered, what the child&apos;s age, sport, level and your city were, and how it
+          ended. Our team can read these records for up to 6 months to review and improve
+          PowerMySport and to follow up with you about your question.
         </li>
         <li>
-          <span className="font-semibold">
-            Your phone number, only if you ask our team to get back to you on WhatsApp.
-          </span>{" "}
-          We then keep it, encrypted, with that one request so the team can reply. Staff can see it
-          only by asking the system to show it, and each time is logged. In every other case we
-          store your number only as a one-way hash, which we use to recognise you in the next
-          message and cannot turn back into a number.
+          <span className="font-semibold">Your phone number, with each question record</span>,
+          encrypted, so our team can reply to you on WhatsApp, for example with coaches or academies
+          near you. Staff can see it only by asking the system to show it or by sending you a
+          message from the admin panel, and each time is logged. It is deleted with the record after
+          6 months. To recognise you in the next message we also keep a one-way hash of the number,
+          which cannot be turned back into a number.
         </li>
       </ul>
       <p className="leading-relaxed text-slate-600">

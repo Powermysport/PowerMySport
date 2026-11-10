@@ -7,6 +7,7 @@ import {
   getEnquiry,
   listEnquiries,
   revealContact,
+  sendTeamMessage,
   updateEnquiryByTeam,
   type EnquiryFilters,
 } from "../services/WhatsAppEnquiryAdminService";
@@ -115,5 +116,16 @@ export const revealWhatsAppEnquiryContact = asyncHandler(
     // Logged after the number is read, so the log never claims a reveal that failed.
     audit(req, "whatsapp-pilot.enquiries.reveal-contact", undefined, id);
     res.set("Cache-Control", "no-store").json({ success: true, data: { phone } });
+  }
+);
+
+// POST /api/admin/whatsapp-pilot/enquiries/:id/reply   { text }
+export const replyToWhatsAppEnquiry = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.params.id);
+    const { row, via } = await sendTeamMessage(id, req.body?.text, req.user?.email);
+    // Logged after it was sent, and without the words: the enquiry keeps those.
+    audit(req, "whatsapp-pilot.enquiries.reply", { via }, id);
+    res.json({ success: true, data: row });
   }
 );

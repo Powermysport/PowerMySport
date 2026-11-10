@@ -306,9 +306,13 @@ describe("get_expert_details: the hand-off to the website", () => {
     assert.equal(out.found, true);
   });
 
-  it("is registered and described to the model as unable to book", () => {
+  it("is registered as unable to book itself, and points to the booking tool or the website", () => {
     assert.ok(tool("get_expert_details"));
     assert.match(tool("get_expert_details").description, /cannot book anything/);
-    assert.match(tool("get_expert_details").promptNote, /you cannot book/);
+    assert.match(tool("get_expert_details").promptNote, /prepare_expert_booking/);
+    assert.match(
+      tool("get_expert_details").promptNote,
+      /booking and payment happen on the website/
+    );
   });
 });
