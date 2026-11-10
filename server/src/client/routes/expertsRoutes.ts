@@ -7,6 +7,13 @@ import { cacheControl } from "../../middleware/cacheControl";
 
 const router = Router();
 
+const whatsappReturnLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Payment-initiating and profile-mutating expert endpoints had no throttle at
 // all — a gap on its own, and one that compounds every other fix in this
 // file (e.g. repeatedly hammering session initiation or profile updates).
@@ -72,6 +79,12 @@ router.post("/me/review", expertMutationRateLimiter, authMiddleware, expert.subm
 router.get("/sessions/mine", authMiddleware, expert.mySessions);
 router.get("/sessions/expert", authMiddleware, expert.expertSessions);
 router.post("/sessions/:sessionId/reconcile", authMiddleware, expert.reconcileSession);
+// PhonePe's return after a parent paid from WhatsApp: no sign-in, a signed link instead.
+router.get(
+  "/sessions/:sessionId/whatsapp-return",
+  whatsappReturnLimiter,
+  expert.whatsappPaymentReturn
+);
 router.get("/sessions/:sessionId", authMiddleware, expert.getSession);
 router.get("/sessions/:sessionId/player-detail", authMiddleware, expert.getSessionPlayerDetail);
 router.get("/sessions/:sessionId/invoice/pdf", authMiddleware, expert.downloadSessionInvoicePdf);

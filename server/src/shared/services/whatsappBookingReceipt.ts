@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { User } from "../../client/models/User";
 import { Expert } from "../../client/models/ExpertProfile";
 import type { ExpertSessionDocument } from "../../client/models/ExpertBooking";
@@ -21,6 +22,34 @@ export const whatsappBusinessNumber = (): string =>
 
 /** Where PhonePe sends a parent who paid from WhatsApp: back into the chat. */
 export const whatsappChatUrl = (): string => `https://wa.me/${whatsappBusinessNumber()}`;
+
+/** This server's public address, which PhonePe sends the parent to after paying. */
+export const publicApiUrl = (): string =>
+  (process.env.PUBLIC_API_URL || "https://api.powermysport.com").replace(/\/+$/, "");
+
+/** A signature on the session id, so only PhonePe's return (not a guessed id) runs the check. */
+export function returnSignature(sessionId: string): string {
+  const key = process.env.JWT_SECRET || "";
+  return crypto
+    .createHmac("sha256", key)
+    .update(`whatsapp-payment-return:${sessionId}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+export function isValidReturnSignature(sessionId: string, signature: unknown): boolean {
+  if (typeof signature !== "string" || signature.length !== 32) return false;
+  const expected = Buffer.from(returnSignature(sessionId), "utf8");
+  return crypto.timingSafeEqual(expected, Buffer.from(signature, "utf8"));
+}
+
+/**
+ * Where PhonePe sends a parent who paid from WhatsApp. The server checks the payment with PhonePe
+ * right then, exactly as the website's session page does, sends the receipt, and forwards the
+ * parent into the chat. Without this, a WhatsApp booking was confirmed only by the hourly job.
+ */
+export const paymentReturnUrl = (sessionId: string): string =>
+  `${publicApiUrl()}/api/experts/sessions/${sessionId}/whatsapp-return?sig=${returnSignature(sessionId)}`;
 
 export function bookingReceiptText(details: {
   expertName: string;

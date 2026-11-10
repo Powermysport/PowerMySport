@@ -631,16 +631,16 @@ describe("reviewing a session", () => {
 
 // ───────────────── hold expiry ─────────────────
 describe("unpaid hold expiry", () => {
-  const expire = async (sessionId: string) =>
+  const expire = async (sessionId: string, agoMs = 60_000) =>
     ExpertSession.collection.updateOne(
       { _id: new mongoose.Types.ObjectId(sessionId) },
-      { $set: { holdExpiresAt: new Date(Date.now() - 60_000) } }
+      { $set: { holdExpiresAt: new Date(Date.now() - agoMs) } }
     );
 
-  it("cancels a lapsed unpaid hold with the exact system reason", async () => {
+  it("cancels a lapsed unpaid hold with the exact system reason once PhonePe says it failed", async () => {
     const { sessionId } = await createSession();
     await expire(sessionId);
-    phonepeStatus = { state: "PENDING" };
+    phonepeStatus = { state: "FAILED" };
 
     assert.equal(await ExpertsService.expireUnpaidExpertHolds(), 1);
 
@@ -664,6 +664,44 @@ describe("unpaid hold expiry", () => {
     const session = await load(sessionId);
     assert.equal(session.paymentStatus, "COMPLETED");
     assert.notEqual(session.status, "CANCELLED");
+  });
+
+  it("gives a payment PhonePe is still finishing 30 minutes, then cancels", async () => {
+    const { sessionId } = await createSession();
+    phonepeStatus = { state: "PENDING" };
+    await expire(sessionId, 5 * 60_000);
+    assert.equal(await ExpertsService.expireUnpaidExpertHolds(), 0);
+    assert.equal((await load(sessionId)).status, "PENDING_PAYMENT");
+
+    await expire(sessionId, 31 * 60_000);
+    assert.equal(await ExpertsService.expireUnpaidExpertHolds(), 1);
+    assert.equal((await load(sessionId)).status, "CANCELLED");
+  });
+
+  it("does not cancel on an empty answer from PhonePe for two hours", async () => {
+    // 2026-11-10: an empty status answer cancelled a booking the parent believed they had paid.
+    const { sessionId } = await createSession();
+    phonepeStatus = { raw: "" };
+    await expire(sessionId, 60 * 60_000);
+    assert.equal(await ExpertsService.expireUnpaidExpertHolds(), 0);
+    assert.equal((await load(sessionId)).status, "PENDING_PAYMENT");
+
+    await expire(sessionId, 121 * 60_000);
+    assert.equal(await ExpertsService.expireUnpaidExpertHolds(), 1);
+  });
+
+  it("a payment that lands after the hold was cancelled is marked for refund, not lost", async () => {
+    const { sessionId } = await createSession();
+    await expire(sessionId);
+    phonepeStatus = { state: "FAILED" };
+    await ExpertsService.expireUnpaidExpertHolds();
+
+    const late = await ExpertSession.findById(sessionId);
+    await ExpertsService.applyExpertPaymentSuccess(late);
+    const session = await load(sessionId);
+    assert.equal(session.status, "CANCELLED", "not booked into a slot that may be gone");
+    assert.equal(session.paymentStatus, "COMPLETED");
+    assert.equal(session.refundStatus, "REQUIRED");
   });
 
   it("leaves a hold that has not lapsed", async () => {

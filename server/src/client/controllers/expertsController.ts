@@ -1,5 +1,9 @@
 import { Request, Response } from "express";
 import {
+  isValidReturnSignature,
+  whatsappChatUrl,
+} from "../../shared/services/whatsappBookingReceipt";
+import {
   createExpertByAdmin,
   listExpertsForAdmin,
   listActiveExperts,
@@ -8,6 +12,7 @@ import {
   getExpertOpenSlots,
   initiateExpertSession,
   reconcileExpertSession,
+  reconcileWhatsAppReturn,
   scheduleExpertSession,
   completeExpertSession,
   updateExpertSessionMom,
@@ -196,6 +201,16 @@ export const initiateSession = async (req: Request, res: Response): Promise<void
   } catch (e) {
     fail(res, e);
   }
+};
+
+// GET /api/experts/sessions/:sessionId/whatsapp-return?sig=...
+// Where PhonePe sends a parent who paid from WhatsApp. Always ends in WhatsApp; the check runs first.
+export const whatsappPaymentReturn = async (req: Request, res: Response): Promise<void> => {
+  const sessionId = String(req.params.sessionId);
+  if (isValidReturnSignature(sessionId, req.query.sig)) {
+    await reconcileWhatsAppReturn(sessionId);
+  }
+  res.redirect(302, whatsappChatUrl());
 };
 
 export const reconcileSession = async (req: Request, res: Response): Promise<void> => {

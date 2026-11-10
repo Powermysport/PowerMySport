@@ -12,12 +12,13 @@ import {
 import { recordExpertSessionEvent } from "../BookingEventService";
 import {
   sendWhatsAppBookingReceipt,
-  whatsappChatUrl,
+  paymentReturnUrl,
 } from "../../../shared/services/whatsappBookingReceipt";
 import type { BookingEventChannel } from "../../models/BookingEvent";
 import { assertSlotBookable } from "../ExpertAvailabilityService";
 import {
   toObjectId,
+  log,
   frontendUrl,
   toPaise,
   notify,
@@ -221,7 +222,7 @@ export const initiateExpertSession = async (params: {
     // page needs them signed in on that browser. The webhook and the cron confirm the payment.
     redirectUrl:
       channel === "WHATSAPP"
-        ? whatsappChatUrl()
+        ? paymentReturnUrl(String(session._id))
         : `${frontendUrl()}/experts/sessions/${session._id}`,
     ...(params.userPhone ? { userPhone: params.userPhone } : {}),
   });
@@ -272,6 +273,39 @@ export const applyExpertPaymentSuccess = async (
   );
   const wasPaid = !claimed;
   const statusBefore = session.status;
+
+  // The money arrived after the session was cancelled (the hold ran out first). It is not lost and
+  // not silently booked into a slot that may be gone: it is marked for a refund, which the team
+  // sees on the refunds page, and the parent is told.
+  if (!wasPaid && session.status === "CANCELLED") {
+    session.paymentStatus = "COMPLETED";
+    session.paidAt = new Date();
+    session.refundStatus = "REQUIRED";
+    await session.save();
+    await recordExpertSessionEvent(session, {
+      type: "PAYMENT_CONFIRMED",
+      fromStatus: statusBefore,
+      toStatus: session.status,
+      actorType: "GATEWAY",
+      ...(source.actorUserId ? { actorUserId: source.actorUserId } : {}),
+      channel: source.channel,
+      amountPaise: toPaise(session.amount),
+      summary: "Payment arrived after the session was cancelled: refund required",
+      metadata: { merchantOrderId: session.merchantOrderId, refundRequired: true },
+    });
+    log.error(
+      `[applyExpertPaymentSuccess] late payment on cancelled session ${session._id}: refund required`
+    );
+    notify(
+      session.userId,
+      "PAYMENT_CONFIRMED",
+      "Payment received after the time was released",
+      `Your payment of ₹${session.amount} reached us after the held time had been released, so the session was not booked. We will refund it in full.`,
+      { sessionId: session._id.toString(), amount: session.amount },
+      true
+    );
+    return session;
+  }
   session.paymentStatus = "COMPLETED";
   if (claimed) session.paidAt = new Date();
   session.set("holdExpiresAt", undefined);
@@ -340,6 +374,30 @@ export const applyExpertPaymentSuccess = async (
     }
   }
   return session;
+};
+
+/**
+ * PhonePe's return for a parent who paid from WhatsApp: check the payment now, as the website's
+ * page does, so the receipt arrives in the chat straight away. Never throws: the parent is always
+ * forwarded to WhatsApp, and the hourly job still checks anything this misses.
+ */
+export const reconcileWhatsAppReturn = async (sessionId: string): Promise<void> => {
+  try {
+    if (!mongoose.isValidObjectId(sessionId)) return;
+    const session = await ExpertSession.findById(sessionId);
+    if (!session || session.bookedVia !== "WHATSAPP" || session.paymentStatus === "COMPLETED") {
+      return;
+    }
+    const status = await getPhonePeOrderStatus(session.merchantOrderId);
+    const state = (status.state || "").toUpperCase();
+    if (["COMPLETED", "SUCCESS", "PAYMENT_SUCCESS"].includes(state)) {
+      await applyExpertPaymentSuccess(session, { channel: "WHATSAPP" });
+    } else {
+      log.info(`[whatsapp-return] session ${sessionId}: PhonePe says "${state || "nothing"}"`);
+    }
+  } catch (err) {
+    log.error(`[whatsapp-return] could not check session ${sessionId}`, err);
+  }
 };
 
 export const reconcileExpertSession = async (params: {

@@ -193,7 +193,43 @@ describe("booking an expert from WhatsApp", () => {
     assert.equal(session.bookedVia, "WHATSAPP");
     // After paying, PhonePe sends the parent back to the chat, not to a page that needs a sign-in.
     const pay = PhonePeService.initiatePhonePePayment.mock.calls.at(-1).arguments[0];
-    assert.equal(pay.redirectUrl, "https://wa.me/918968582443");
+    const { isValidReturnSignature } = require("../shared/services/whatsappBookingReceipt");
+    const url = new URL(pay.redirectUrl);
+    assert.equal(url.origin, "https://api.powermysport.com");
+    assert.equal(url.pathname, `/api/experts/sessions/${session._id}/whatsapp-return`);
+    assert.ok(isValidReturnSignature(String(session._id), url.searchParams.get("sig")));
+    assert.ok(
+      !isValidReturnSignature(String(session._id), "0".repeat(32)),
+      "a guessed link does nothing"
+    );
+  });
+
+  it("PhonePe's return checks the payment at once and books it, before forwarding to WhatsApp", async () => {
+    const expertId = await seedExpert();
+    const userId = await seedParent();
+    const picker = ctx(userId);
+    await tool("prepare_expert_booking").execute({ expert: expertId }, picker);
+    await tool("prepare_expert_booking").execute(
+      { expert: expertId, slot: picker.outbound.slotPicker.rows[0].title },
+      ctx(userId)
+    );
+    await nextMessage();
+    await tool("confirm_pending_action").execute({}, ctx(userId, "yes"));
+    const session = await ExpertSession.findOne({}).lean();
+
+    const { reconcileWhatsAppReturn } = require("../client/services/ExpertsService");
+    const status = mock.method(PhonePeService, "getPhonePeOrderStatus", async () => ({
+      state: "PENDING",
+    }));
+    await reconcileWhatsAppReturn(String(session._id));
+    assert.equal((await ExpertSession.findById(session._id).lean()).paymentStatus, "PENDING");
+
+    status.mock.mockImplementation(async () => ({ state: "COMPLETED" }));
+    await reconcileWhatsAppReturn(String(session._id));
+    const paid = await ExpertSession.findById(session._id).lean();
+    assert.equal(paid.paymentStatus, "COMPLETED");
+    assert.equal(paid.status, "SCHEDULED");
+    status.mock.restore();
   });
 
   it("when the payment lands, the parent gets a receipt in the chat and the assistant knows", async () => {

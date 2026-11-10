@@ -68,6 +68,11 @@ export const reconcileExpertSessionPaymentFromWebhookPayload = async (
 
 // ── Background maintenance (called by scheduledJobs) ──────────────────────────
 
+/** PhonePe can still be finishing a payment when the hold runs out; it gets this long. */
+export const PENDING_PAYMENT_GRACE_MS = 30 * 60_000;
+/** An answer from PhonePe that says nothing (empty, unknown state) is retried for this long. */
+export const UNCLEAR_STATUS_GIVE_UP_MS = 2 * 60 * 60_000;
+
 /** Expire unpaid holds so their slot frees up. */
 export const expireUnpaidExpertHolds = async (): Promise<number> => {
   const now = new Date();
@@ -87,6 +92,20 @@ export const expireUnpaidExpertHolds = async (): Promise<number> => {
       if (["COMPLETED", "SUCCESS", "PAYMENT_SUCCESS"].includes(state)) {
         await applyExpertPaymentSuccess(session, { channel: "CRON" });
         continue;
+      }
+      // Only a clear "it failed" or "nothing happened" may cancel a hold. A payment PhonePe is still
+      // finishing gets a grace period, and an empty or unknown answer is asked again on the next
+      // run: on 2026-11-10 an empty answer cancelled a booking whose parent believed they had paid.
+      const overdueMs = now.getTime() - (session.holdExpiresAt?.getTime() ?? now.getTime());
+      const failed = ["FAILED", "PAYMENT_ERROR", "PAYMENT_DECLINED"].includes(state);
+      if (!failed) {
+        const waitFor = state === "PENDING" ? PENDING_PAYMENT_GRACE_MS : UNCLEAR_STATUS_GIVE_UP_MS;
+        if (overdueMs < waitFor) {
+          log.warn(
+            `[expireUnpaidExpertHolds] session ${session._id} not cancelled yet: PhonePe says "${state || "nothing"}"`
+          );
+          continue;
+        }
       }
     } catch (err) {
       log.error(
