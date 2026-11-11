@@ -151,7 +151,8 @@ export function intakeSummary(
   e: WhatsAppEnquiryDocument,
   needs?: string,
   childName?: string,
-  wants: Wants = "either"
+  wants: Wants = "either",
+  topic?: Topic
 ): string {
   const child = [
     e.childAge !== undefined ? `${e.childAge} years old` : null,
@@ -159,7 +160,9 @@ export function intakeSummary(
     e.level,
   ].filter(Boolean);
   return [
-    `Looking for ${WANT_WORDS[wants].one}.`,
+    topic === "start"
+      ? "Wants help getting started or improving in a sport."
+      : `Looking for ${WANT_WORDS[wants].one}.`,
     child.length || childName
       ? `Child: ${[childName, ...child].filter(Boolean).join(", ")}.`
       : null,
@@ -190,8 +193,8 @@ export async function cancelIntake(phoneHash: string): Promise<void> {
 
 async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<IntakeReply> {
   const wants = e.intake?.wants ?? "either";
-  const summary = intakeSummary(e, needs, e.intake?.childName, wants);
   const topic = e.intake?.topic;
+  const summary = intakeSummary(e, needs, e.intake?.childName, wants, topic);
   if (topic && topic !== "start") {
     // The details are captured on this enquiry; the parent asked to be helped with this, so the
     // assistant now answers it, with what they just told us.
@@ -208,7 +211,7 @@ async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<Intak
     await e.save();
     return {
       reply: "",
-      continueWith: `${TOPIC_ASK[topic]}${childName ? ` The child is ${childName}.` : ""} Details I gave: ${known.join(", ") || "none"}.`,
+      continueWith: `${TOPIC_ASK[topic]}${childName ? ` The child is ${childName}.` : ""} Details I gave: ${known.join(", ") || "none"}. These are already saved, so do not save or repeat them back; just answer.`,
     };
   }
   // Saved as the newest topic, so the follow-up below lands on this same enquiry.
@@ -227,7 +230,9 @@ async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<Intak
       "coach",
       result.reference,
       result.alreadyRequested,
-      `that you are looking for ${WANT_WORDS[wants].one}`
+      topic === "start"
+        ? "that you want help getting started or improving in a sport"
+        : `that you are looking for ${WANT_WORDS[wants].one}`
     ),
     forwarded: true,
   };
@@ -273,7 +278,9 @@ export async function accountChildren(
       ...(level ? { level } : {}),
     };
   });
-  const city = plain((user as { city?: string } | null)?.city, 60);
+  const city = plain((user as { city?: string } | null)?.city, 60)
+    ?.replace(/^['"\s]+|['"\s]+$/g, "")
+    .trim();
   return { children, ...(city ? { city } : {}) };
 }
 
@@ -284,20 +291,57 @@ function namedIn(text: string, children: AccountChild[]): AccountChild | undefin
   return hits.length === 1 ? hits[0] : undefined;
 }
 
-/** Writes the profile's details on the enquiry and says, in a line, what was taken from it. */
-function useChild(e: WhatsAppEnquiryDocument, child: AccountChild, city?: string): string {
+const REMEMBER_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Writes the profile's details on the enquiry and says, in a line, what was taken from it. What
+ * the parent told us about this same child in an earlier enquiry (their level, and the city when
+ * the profile has none) fills the gaps, so the same question is never asked twice.
+ */
+async function useChild(
+  e: WhatsAppEnquiryDocument,
+  child: AccountChild,
+  city?: string
+): Promise<string> {
+  e.childName = child.name;
   if (child.age !== undefined) e.childAge = child.age;
   if (child.sport) e.sport = child.sport;
   if (child.level) e.level = child.level;
   if (city && !e.city) e.city = city;
+  let remembered = false;
+  if (!e.level || !e.city) {
+    const earlier = await WhatsAppEnquiry.findOne({
+      phoneHash: e.phoneHash,
+      _id: { $ne: e._id },
+      childName: child.name,
+      lastMessageAt: { $gte: new Date(Date.now() - REMEMBER_MS) },
+      $or: [{ level: { $exists: true } }, { city: { $exists: true } }],
+    })
+      .sort({ lastMessageAt: -1 })
+      .select("level city")
+      .lean();
+    if (earlier) {
+      if (!e.level && earlier.level) {
+        e.level = earlier.level;
+        remembered = true;
+      }
+      if (!e.city && earlier.city) {
+        e.city = earlier.city;
+        remembered = true;
+      }
+    }
+  }
   const known = [
     child.age !== undefined ? `${child.age} years old` : null,
-    child.sport,
-    child.level,
+    e.sport,
+    e.level,
   ].filter(Boolean);
   const where = e.city ? ` Area: ${e.city}.` : "";
   if (!known.length && !where) return "";
-  return `From ${child.name}'s profile: ${known.join(", ") || "no details yet"}.${where} I'll pass these on.`;
+  const source = remembered
+    ? `${child.name}'s profile and what you told us before`
+    : `${child.name}'s profile`;
+  return `From ${source}: ${known.join(", ") || "no details yet"}.${where} I'll pass these on.`;
 }
 
 const CHILD_ID = "intake_child_";
@@ -333,7 +377,7 @@ export async function startIntake(
     const kids = account?.children ?? [];
     const child = namedIn(question, kids) ?? (kids.length === 1 ? kids[0] : undefined);
     if (child) {
-      from = useChild(enquiry, child, account?.city);
+      from = await useChild(enquiry, child, account?.city);
       childName = child.name;
     } else if (kids.length > 1) {
       enquiry.intake = {
@@ -434,7 +478,7 @@ export async function answerIntake(
       await enquiry.save();
       return { reply: RETRY.child!, buttons: childButtons(kids) };
     }
-    const from = child ? useChild(enquiry, child, account?.city) : "";
+    const from = child ? await useChild(enquiry, child, account?.city) : "";
     const next = nextStep(enquiry, "child") ?? "needs";
     enquiry.intake = {
       step: next,

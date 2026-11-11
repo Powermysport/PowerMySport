@@ -506,6 +506,25 @@ describe("the coach questions for a parent with an account", () => {
     assert.match(start.reply, /From Ansh's profile: 9 years old/);
     assert.match(start.reply, /Which sport is it for/);
   });
+
+  it("does not ask a child's level again in a later enquiry, even after the first was closed", async () => {
+    // 2026-11-12: the parent answered "Plays regularly" for Jatin, tapped "I'm good for now" (which
+    // closes the enquiry), and three minutes later was asked "Where is your child at?" again.
+    await seedFamily([{ name: "Jatin Sharma", dob: years(14), chosenSport: "Tennis" }]);
+    const first = await say("Find a coach or academy", "next_coach");
+    assert.match(first.reply, /Where is your child at/);
+    await say("Plays regularly", "intake_level_regular");
+    await say("Nothing more", "intake_skip");
+    await say("I'm good for now", "next_done");
+
+    const again = await say("Find a coach or academy", "next_coach");
+    assert.doesNotMatch(again.reply, /Where is your child at/, "the level is already known");
+    assert.match(
+      again.reply,
+      /Jatin's profile and what you told us before: 14 years old, Tennis, plays regularly/
+    );
+    assert.match(again.reply, /Anything else/);
+  });
 });
 
 describe("the coach questions follow what the parent asked for", () => {

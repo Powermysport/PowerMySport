@@ -123,6 +123,24 @@ describe("the welcome menu", () => {
     assert.equal(enquiry.sport, "Cricket");
   });
 
+  it("start or improve ends with the team and says so, not 'a coach or academy'", async () => {
+    await answerWhatsAppMessage(msg("Start or improve a sport", "menu_start"), neverCalled([]));
+    await answerWhatsAppMessage(msg("12"), neverCalled([]));
+    await answerWhatsAppMessage(msg("Tennis"), neverCalled([]));
+    await answerWhatsAppMessage(msg("Pune, Baner"), neverCalled([]));
+    await answerWhatsAppMessage(msg("Just starting", "intake_level_beginner"), neverCalled([]));
+    const calls: Call[] = [];
+    const answer = await answerWhatsAppMessage(
+      msg("Nothing more", "intake_skip"),
+      neverCalled(calls)
+    );
+    assert.equal(calls.length, 0, "the team follows up; the model is not asked");
+    assert.match(answer.reply, /getting started or improving/);
+    assert.doesNotMatch(answer.reply, /coach or academy/);
+    const enquiry = await WhatsAppEnquiry.findOne({}).lean();
+    assert.match(enquiry.followUpSummary, /^Wants help getting started or improving/);
+  });
+
   it("treats an unknown id as the text the parent saw", async () => {
     const calls: Call[] = [];
     await answerWhatsAppMessage(msg("Some old button", "stale_id"), stub("Ok.", calls));

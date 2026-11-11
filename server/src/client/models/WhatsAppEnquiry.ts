@@ -88,6 +88,8 @@ export interface WhatsAppEnquiryDocument extends Document {
   /** The parent's first message on this topic. */
   question: string;
   childAge?: number;
+  /** The account child this is about, by first name, so later questions can reuse what was said. */
+  childName?: string;
   sport?: string;
   level?: string;
   /** City and area, asked when the parent wants a coach or academy. */
@@ -130,6 +132,7 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     reference: { type: String, required: true, unique: true },
     question: { type: String, required: true, maxlength: 500 },
     childAge: { type: Number, min: 3, max: 21 },
+    childName: { type: String, maxlength: 60 },
     sport: { type: String, maxlength: 40 },
     level: { type: String, maxlength: 60 },
     city: { type: String, maxlength: 60 },
