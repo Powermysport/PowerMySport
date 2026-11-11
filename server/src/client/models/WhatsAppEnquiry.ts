@@ -90,6 +90,8 @@ export interface WhatsAppEnquiryDocument extends Document {
   childAge?: number;
   /** The account child this is about, by first name, so later questions can reuse what was said. */
   childName?: string;
+  /** That child's profile id, so an answer can be saved to the profile. */
+  childId?: string;
   sport?: string;
   level?: string;
   /** City and area, asked when the parent wants a coach or academy. */
@@ -133,6 +135,7 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     question: { type: String, required: true, maxlength: 500 },
     childAge: { type: Number, min: 3, max: 21 },
     childName: { type: String, maxlength: 60 },
+    childId: { type: String, maxlength: 40 },
     sport: { type: String, maxlength: 40 },
     level: { type: String, maxlength: 60 },
     city: { type: String, maxlength: 60 },

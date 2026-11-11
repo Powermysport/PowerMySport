@@ -11,6 +11,7 @@ import { primarySport } from "@powermysport/shared-types";
 import { Player } from "../../client/models/Player";
 import { User } from "../../client/models/User";
 import { ageOf, firstName } from "./parentContext";
+import { updateDependent } from "./AuthService/dependents";
 
 /**
  * Finding a coach or academy for a parent, while none are listed on PowerMySport yet.
@@ -291,6 +292,58 @@ function namedIn(text: string, children: AccountChild[]): AccountChild | undefin
   return hits.length === 1 ? hits[0] : undefined;
 }
 
+type ProfileLevel = "beginner" | "intermediate" | "competitive";
+const PROFILE_LEVEL_FOR_ID: Record<string, ProfileLevel> = {
+  intake_level_beginner: "beginner",
+  intake_level_regular: "intermediate",
+  intake_level_competes: "competitive",
+};
+
+/** The profile's level for what the parent tapped or typed, or undefined when it is unclear. */
+export function profileLevelFor(
+  replyId: string | null | undefined,
+  text: string
+): ProfileLevel | undefined {
+  if (replyId && PROFILE_LEVEL_FOR_ID[replyId]) return PROFILE_LEVEL_FOR_ID[replyId];
+  if (/\b(compet\w*|tournaments?|national|professional)\b/i.test(text)) return "competitive";
+  if (/\b(intermediate|regular\w*)\b/i.test(text)) return "intermediate";
+  if (/\b(beginner|just start\w*|never played|new to)\b/i.test(text)) return "beginner";
+  return undefined;
+}
+
+/**
+ * Saves what the parent just said to the child's profile, so it is the same on the website and in
+ * the app. Only into a field that is still empty: a parent's earlier answer is never overwritten
+ * from a chat. Returns true when the profile was changed.
+ */
+async function saveToProfile(
+  e: WhatsAppEnquiryDocument,
+  fields: { experienceLevel?: ProfileLevel; city?: string }
+): Promise<boolean> {
+  if (!e.childId) return false;
+  try {
+    const player = await Player.findById(e.childId).select("userId experienceLevel").lean();
+    if (!player) return false;
+    const userId = String(player.userId);
+    let changed = false;
+    if (fields.experienceLevel && !player.experienceLevel) {
+      await updateDependent(userId, e.childId, { experienceLevel: fields.experienceLevel });
+      changed = true;
+    }
+    if (fields.city) {
+      const set = await User.updateOne(
+        { _id: userId, $or: [{ city: { $exists: false } }, { city: "" }, { city: null }] },
+        { $set: { city: fields.city } }
+      );
+      if (set.modifiedCount > 0) changed = true;
+    }
+    return changed;
+  } catch {
+    // The chat carries on; the answer is still on the enquiry for the team.
+    return false;
+  }
+}
+
 const REMEMBER_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
@@ -304,6 +357,7 @@ async function useChild(
   city?: string
 ): Promise<string> {
   e.childName = child.name;
+  e.childId = child.id;
   if (child.age !== undefined) e.childAge = child.age;
   if (child.sport) e.sport = child.sport;
   if (child.level) e.level = child.level;
@@ -459,6 +513,7 @@ export async function answerIntake(
   const step = intake.step;
   const answer = text.trim();
   const skipped = replyId === INTAKE_SKIP_ID || SKIP.test(answer);
+  let saved = false;
 
   if (step === "child") {
     const options = intake.childOptions ?? [];
@@ -525,10 +580,16 @@ export async function answerIntake(
         }
       } else {
         enquiry.city = city;
+        saved = await saveToProfile(enquiry, { city });
       }
     } else if (step === "level") {
       const level = plain((replyId && LEVEL_FOR_ID[replyId]) || answer, 60);
-      if (level) enquiry.level = level;
+      if (level) {
+        enquiry.level = level;
+        const profileLevel = profileLevelFor(replyId, answer);
+        if (profileLevel)
+          saved = (await saveToProfile(enquiry, { experienceLevel: profileLevel })) || saved;
+      }
     } else if (step === "needs") {
       const needs = plain(answer, 240);
       if (needs) intake.needs = needs;
@@ -550,5 +611,10 @@ export async function answerIntake(
   };
   fresh.lastMessageAt = now;
   await fresh.save();
-  return ask(next);
+  return ask(
+    next,
+    saved
+      ? `Saved to ${fresh.childName ? `${fresh.childName}'s` : "your child's"} profile, so it is the same on the website and in the app.`
+      : undefined
+  );
 }

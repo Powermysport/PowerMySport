@@ -519,11 +519,43 @@ describe("the coach questions for a parent with an account", () => {
 
     const again = await say("Find a coach or academy", "next_coach");
     assert.doesNotMatch(again.reply, /Where is your child at/, "the level is already known");
-    assert.match(
-      again.reply,
-      /Jatin's profile and what you told us before: 14 years old, Tennis, plays regularly/
-    );
+    assert.match(again.reply, /From Jatin's profile: 14 years old, Tennis, plays regularly/);
     assert.match(again.reply, /Anything else/);
+  });
+
+  it("saves the level and a missing city to the profile, and never overwrites what is there", async () => {
+    // The answer is the parent's, so it must be the same on the website and in the app, not only
+    // remembered by the chat.
+    const userId = await seedFamily([
+      { name: "Jatin Sharma", dob: years(14), chosenSport: "Tennis" },
+      { name: "Ansh Sharma", dob: years(9), chosenSport: "Badminton", experienceLevel: "beginner" },
+    ]);
+    await User.collection.updateOne({ _id: userId }, { $unset: { city: 1 } });
+    const start = await say("Find a coach or academy", "next_coach");
+    const jatin = start.buttons[0].id;
+    const askCity = await say("Jatin", jatin);
+    assert.match(askCity.reply, /Which city and area/);
+    const askLevel = await say("Pune, Baner");
+    assert.match(askLevel.reply, /Saved to Jatin's profile/);
+    const afterLevel = await say("Plays regularly", "intake_level_regular");
+    assert.match(afterLevel.reply, /Saved to Jatin's profile/);
+
+    const jatinDoc = await Player.findOne({ name: "Jatin Sharma" }).lean();
+    assert.equal(jatinDoc.experienceLevel, "intermediate");
+    assert.equal((await User.findById(userId).lean()).city, "Pune, Baner");
+
+    // A level already on the profile is not replaced by a chat answer.
+    await say("Nothing more", "intake_skip");
+    await say("I'm good for now", "next_done");
+    await Player.updateOne({ name: "Jatin Sharma" }, { $unset: { experienceLevel: 1 } });
+    await Player.updateOne({ name: "Jatin Sharma" }, { $set: { experienceLevel: "competitive" } });
+    const again = await say("Find a coach or academy", "next_coach");
+    const second = await say("Jatin", again.buttons[0].id);
+    assert.match(second.reply, /competes in tournaments/, "the profile's own level is used");
+    assert.equal(
+      (await Player.findOne({ name: "Jatin Sharma" }).lean()).experienceLevel,
+      "competitive"
+    );
   });
 });
 
