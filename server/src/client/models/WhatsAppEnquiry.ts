@@ -72,6 +72,8 @@ export interface EnquiryIntake {
   childName?: string;
   /** What the parent asked for, in their words: an academy, a coach, or either. */
   wants?: "academy" | "coach" | "either";
+  /** What the parent picked from the menu. Absent means the coach/academy request. */
+  topic?: "sport" | "start" | "tournaments" | "pathway";
   /** The account's children to choose from, by id, while the "child" step is open. */
   childOptions?: string[];
 }
@@ -176,6 +178,7 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
           needs: { type: String, maxlength: 240 },
           childName: { type: String, maxlength: 60 },
           wants: { type: String, enum: ["academy", "coach", "either"] },
+          topic: { type: String, enum: ["sport", "start", "tournaments", "pathway"] },
           childOptions: { type: [String], default: undefined },
         },
         { _id: false }

@@ -1,6 +1,7 @@
 import {
   INTAKE_STEPS,
   WhatsAppEnquiry,
+  type EnquiryIntake,
   type IntakeStep,
   type WhatsAppEnquiryDocument,
 } from "../../client/models/WhatsAppEnquiry";
@@ -63,6 +64,34 @@ const WANT_WORDS: Record<Wants, { one: string; many: string }> = {
 export const introFor = (wants: Wants): string =>
   `We don't list ${WANT_WORDS[wants].many} on PowerMySport yet, but our team can find good options near you. A few quick questions so they know what to look for (type cancel to stop).`;
 
+export type Topic = NonNullable<EnquiryIntake["topic"]>;
+
+/** The menu rows that open the questions first, and what each is. */
+export const TOPIC_FOR_REPLY: Record<string, Topic> = {
+  menu_sport: "sport",
+  menu_start: "start",
+  menu_tournaments: "tournaments",
+  menu_pathway: "pathway",
+};
+
+const TOPIC_LEAD: Record<Topic, string> = {
+  sport: "Happy to help you choose the right sport.",
+  start: "Happy to help your child get started or improve.",
+  tournaments: "Happy to help with tournaments.",
+  pathway: "Happy to help with the pathway.",
+};
+
+/** The request put in a sentence, with the captured details added, once the questions are done. */
+const TOPIC_ASK: Record<Topic, string> = {
+  sport: "Help me choose the right sport for my child.",
+  start: "Help my child get started or improve in a sport.",
+  tournaments: "Help me with tournaments and rankings for my child.",
+  pathway: "Show me the sports career pathway for my child.",
+};
+
+export const topicIntro = (topic: Topic): string =>
+  `${TOPIC_LEAD[topic]} A few quick questions first so the answer fits your child (type cancel to stop).`;
+
 export const INTAKE_INTRO = introFor("either");
 export const INTAKE_CANCELLED =
   "No problem, I've stopped there. Ask me anything else, or tap Find a coach or academy again any time.";
@@ -87,6 +116,8 @@ export interface IntakeReply {
   buttons?: ReplyButton[];
   /** True once the details went to the team. */
   forwarded?: boolean;
+  /** The questions are done and the request is now a sentence for the assistant to answer. */
+  continueWith?: string;
 }
 
 const has = (e: WhatsAppEnquiryDocument, step: IntakeStep): boolean => {
@@ -160,6 +191,26 @@ export async function cancelIntake(phoneHash: string): Promise<void> {
 async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<IntakeReply> {
   const wants = e.intake?.wants ?? "either";
   const summary = intakeSummary(e, needs, e.intake?.childName, wants);
+  const topic = e.intake?.topic;
+  if (topic && topic !== "start") {
+    // The details are captured on this enquiry; the parent asked to be helped with this, so the
+    // assistant now answers it, with what they just told us.
+    const childName = e.intake?.childName;
+    const known = [
+      e.childAge !== undefined ? `${e.childAge} years old` : null,
+      e.sport,
+      e.level,
+      e.city ? `lives in ${e.city}` : null,
+      needs ? `also: ${needs}` : null,
+    ].filter(Boolean);
+    e.set("intake", undefined);
+    e.lastMessageAt = new Date();
+    await e.save();
+    return {
+      reply: "",
+      continueWith: `${TOPIC_ASK[topic]}${childName ? ` The child is ${childName}.` : ""} Details I gave: ${known.join(", ") || "none"}.`,
+    };
+  }
   // Saved as the newest topic, so the follow-up below lands on this same enquiry.
   e.set("intake", undefined);
   e.lastMessageAt = new Date();
@@ -262,7 +313,8 @@ export async function startIntake(
   phoneHash: string,
   question: string,
   now = new Date(),
-  userId?: string
+  userId?: string,
+  topic?: Topic
 ): Promise<IntakeReply> {
   const current = await currentEnquiry(phoneHash, question, now);
   // Only details given on this same, fresh topic are reused. A topic the team already handled, or
@@ -273,7 +325,7 @@ export async function startIntake(
   const enquiry = reusable ? current : await newEnquiry(phoneHash, question, now);
 
   const wants = wantsFrom(question);
-  const intro = introFor(wants);
+  const intro = topic ? topicIntro(topic) : introFor(wants);
   let from = "";
   let childName: string | undefined;
   if (userId) {
@@ -290,6 +342,7 @@ export async function startIntake(
         retries: 0,
         childOptions: kids.map((k) => k.id),
         wants,
+        ...(topic ? { topic } : {}),
       };
       enquiry.lastMessageAt = now;
       await enquiry.save();
@@ -306,6 +359,7 @@ export async function startIntake(
     startedAt: now,
     retries: 0,
     wants,
+    ...(topic ? { topic } : {}),
     ...(childName ? { childName } : {}),
   };
   enquiry.lastMessageAt = now;
@@ -387,6 +441,7 @@ export async function answerIntake(
       startedAt: intake.startedAt,
       retries: 0,
       ...(intake.wants ? { wants: intake.wants } : {}),
+      ...(intake.topic ? { topic: intake.topic } : {}),
       ...(child ? { childName: child.name } : {}),
     };
     enquiry.lastMessageAt = now;
@@ -447,6 +502,7 @@ export async function answerIntake(
     ...(intake.needs ? { needs: intake.needs } : {}),
     ...(intake.childName ? { childName: intake.childName } : {}),
     ...(intake.wants ? { wants: intake.wants } : {}),
+    ...(intake.topic ? { topic: intake.topic } : {}),
   };
   fresh.lastMessageAt = now;
   await fresh.save();

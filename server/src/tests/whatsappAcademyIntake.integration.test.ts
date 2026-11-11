@@ -135,13 +135,10 @@ describe("the coach/academy intake", () => {
 
     await say("Find a coach or academy", "next_coach");
     let modelCalled = false;
-    await answerWhatsAppMessage(
-      msg("Tournaments & rankings", "menu_tournaments"),
-      async function* () {
-        modelCalled = true;
-        yield "Here is how rankings work.";
-      }
-    );
+    await answerWhatsAppMessage(msg("Something else", "menu_other"), async function* () {
+      modelCalled = true;
+      yield "Here is how rankings work.";
+    });
     assert.ok(modelCalled, "the tap went to the assistant, not into the age step");
     assert.equal((await enquiry()).intake, undefined);
   });

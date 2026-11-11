@@ -89,15 +89,38 @@ describe("the welcome menu", () => {
     assert.equal(calls.length, 1);
   });
 
-  it("turns a tapped menu row into a sentence the assistant can act on", async () => {
+  it("asks its questions first when a topic is tapped, and does not call the model", async () => {
     const calls: Call[] = [];
-    await answerWhatsAppMessage(
+    const answer = await answerWhatsAppMessage(
       msg("Choosing the right sport", "menu_sport"),
-      stub("Tell me about your child.", calls)
+      neverCalled(calls)
     );
-    assert.equal(calls[0]!.userMessage, "I need help choosing the right sport for my child.");
+    assert.equal(calls.length, 0);
+    assert.match(answer.reply, /A few quick questions first/);
+    assert.match(answer.reply, /How old is your child/);
     const enquiry = await WhatsAppEnquiry.findOne({}).lean();
     assert.equal(enquiry.question, "I need help choosing the right sport for my child.");
+    assert.equal(enquiry.intake.topic, "sport");
+  });
+
+  it("answers the request only after the questions, using what the parent said", async () => {
+    const calls: Call[] = [];
+    await answerWhatsAppMessage(msg("Show me the pathway", "menu_pathway"), neverCalled([]));
+    await answerWhatsAppMessage(msg("10"), neverCalled([]));
+    await answerWhatsAppMessage(msg("Cricket"), neverCalled([]));
+    await answerWhatsAppMessage(msg("Chandigarh, New Chandigarh"), neverCalled([]));
+    await answerWhatsAppMessage(msg("Just starting", "intake_level_beginner"), neverCalled([]));
+    const answer = await answerWhatsAppMessage(
+      msg("Nothing more", "intake_skip"),
+      stub("Here is the pathway.", calls)
+    );
+    assert.equal(calls.length, 1, "the model answers once, at the end");
+    assert.match(calls[0]!.userMessage, /sports career pathway/);
+    assert.match(calls[0]!.userMessage, /10 years old, Cricket, beginner, lives in Chandigarh/);
+    assert.equal(answer.reply, "Here is the pathway.");
+    const enquiry = await WhatsAppEnquiry.findOne({}).lean();
+    assert.equal(enquiry.intake, undefined);
+    assert.equal(enquiry.sport, "Cricket");
   });
 
   it("treats an unknown id as the text the parent saw", async () => {
@@ -567,7 +590,7 @@ describe("a topic the parent chose is not answered with the menu again", () => {
   it("refuses the menu on a tap from the menu, and tells the model to ask one question", async () => {
     let result: any;
     const answer = await answerWhatsAppMessage(
-      msg("Start or improve a sport", "menu_start"),
+      msg("Something else", "menu_other"),
       stub("Which child and which sport?", [], async (ctx) => {
         result = await menuTool.execute({}, ctx);
       })
@@ -578,7 +601,7 @@ describe("a topic the parent chose is not answered with the menu again", () => {
   });
 
   it("does the same for every topic row", async () => {
-    for (const row of WELCOME_ROWS) {
+    for (const row of WELCOME_ROWS.filter((r: { id: string }) => r.id === "menu_other")) {
       await WhatsAppConversation.deleteMany({});
       const answer = await answerWhatsAppMessage(
         msg(row.title, row.id),

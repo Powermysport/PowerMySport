@@ -49,6 +49,7 @@ import {
   cancelIntake,
   isCancel,
   startIntake,
+  TOPIC_FOR_REPLY,
   type IntakeReply,
 } from "./whatsappAcademyIntake";
 import { ASK_TEAM_BUTTON, ASK_TEAM_ID, type ReplyButton } from "./whatsappInteractive";
@@ -422,6 +423,8 @@ export async function answerWhatsAppMessage(
   // A tapped time in the booking picker, put as a sentence naming the expert and the time.
   const slotTap = slotTapText(message.replyId);
   let userMessage = (tapped ? intent.text : (slotTap ?? text ?? "")).slice(0, MAX_INBOUND_CHARS);
+  // Set when the questions have just been answered: the request then goes to the assistant.
+  let continued = false;
 
   // "STOP" and the like delete the chat. Checked before the daily limit so a parent
   // who has used their messages can still take their data back.
@@ -472,7 +475,12 @@ export async function answerWhatsAppMessage(
     } else if (text) {
       try {
         const step = await answerIntake(intake, text, message.replyId);
-        return intakeAnswer(phoneHash, message.from, text, step);
+        if (step.continueWith) {
+          continued = true;
+          userMessage = step.continueWith.slice(0, MAX_INBOUND_CHARS);
+        } else {
+          return intakeAnswer(phoneHash, message.from, text, step);
+        }
       } catch (err) {
         log.error("could not take the intake answer", err);
         return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
@@ -483,10 +491,29 @@ export async function answerWhatsAppMessage(
   // A message typed after the team wrote to them is (likely) an answer to the team. The assistant
   // still replies, but the team is told and the enquiry goes back to waiting, or the answer is
   // lost. A tap, or an answer to the coach questions above, is not a reply to the team.
-  if (!message.replyId && !intent) {
+  if (!message.replyId && !intent && !continued) {
     await noteParentReply(phoneHash, text ?? userMessage).catch((err) =>
       log.error("could not note the reply to the team", err)
     );
+  }
+
+  // A topic from the menu starts with questions, not with an answer nobody asked for yet.
+  const topic = message.replyId ? TOPIC_FOR_REPLY[message.replyId] : undefined;
+  if (topic && intent?.kind === "ask") {
+    try {
+      const userId = await findUserIdByPhone(message.from).catch(() => undefined);
+      const step = await startIntake(
+        phoneHash,
+        userMessage,
+        new Date(),
+        userId ?? undefined,
+        topic
+      );
+      return intakeAnswer(phoneHash, message.from, userMessage, step);
+    } catch (err) {
+      log.error("could not start the topic questions", err);
+      return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
+    }
   }
 
   if (intent?.kind === "followup" && intent.assistance === "coach") {
@@ -532,7 +559,7 @@ export async function answerWhatsAppMessage(
   }
 
   // A greeting is not a question: show the menu instead of asking the model to invent one.
-  if (!intent && !media && text && wantsMenu(text)) {
+  if (!intent && !media && !continued && text && wantsMenu(text)) {
     try {
       const conversation = await WhatsAppConversation.findOne({ phoneHash }).select("_id").lean();
       const { toolContext } = await identify(message.from, phoneHash, userMessage);
