@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { MetricStrip, Panel } from "@/modules/shared/ui/Panel";
 import { ErrorNotice, SkeletonBlock } from "@/modules/shared/ui/States";
 import { toast } from "@/lib/toast";
-import { EnquirySummary, whatsappPilotApi } from "@/lib/api/whatsappPilotApi";
+import { EnquirySummary, FollowUpStatus, whatsappPilotApi } from "@/lib/api/whatsappPilotApi";
+import { ANSWERED_BY_LABEL, CATEGORY_LABEL, FOLLOW_UP_LABEL } from "../utils/enquiryLabels";
 
 const ASSISTANCE_LABEL: Record<string, string> = {
   coach: "A coach or academy",
@@ -12,13 +13,6 @@ const ASSISTANCE_LABEL: Record<string, string> = {
   expert: "An expert",
   team: "The PowerMySport team",
   other: "Something else",
-};
-
-const FOLLOW_UP_LABEL: Record<string, string> = {
-  none: "No follow-up needed",
-  new: "Waiting for the team",
-  contacted: "Contacted",
-  done: "Done",
 };
 
 function Breakdown({
@@ -95,7 +89,12 @@ export function SummaryTab() {
           {
             label: "Waiting for the team",
             value: String(summary.needsFollowUp),
-            detail: "Asked for a person, not yet contacted",
+            detail: "New or under review, not yet responded to",
+          },
+          {
+            label: "Past 24 hours",
+            value: String(summary.overdue),
+            detail: "Waiting longer than the team promised",
           },
           {
             label: "Said it helped",
@@ -118,9 +117,23 @@ export function SummaryTab() {
           }))}
         />
         <Breakdown
-          title="Follow-up"
+          title="Topics"
+          rows={Object.entries(summary.byCategory).map(([category, count]) => ({
+            label: CATEGORY_LABEL[category as keyof typeof CATEGORY_LABEL] ?? category,
+            count,
+          }))}
+        />
+        <Breakdown
+          title="Answered by"
+          rows={Object.entries(summary.byAnsweredBy).map(([who, count]) => ({
+            label: ANSWERED_BY_LABEL[who as keyof typeof ANSWERED_BY_LABEL] ?? who,
+            count,
+          }))}
+        />
+        <Breakdown
+          title="Status"
           rows={Object.entries(summary.byFollowUp).map(([status, count]) => ({
-            label: FOLLOW_UP_LABEL[status] ?? status,
+            label: FOLLOW_UP_LABEL[status as FollowUpStatus] ?? status,
             count,
           }))}
         />

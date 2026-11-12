@@ -1,8 +1,11 @@
 import mongoose from "mongoose";
 import {
+  ANSWERED_BY,
   ASSISTANCE_KINDS,
+  ENQUIRY_CATEGORIES,
   ENQUIRY_FEEDBACK,
   FOLLOW_UP_STATUSES,
+  TEAM_REPLY_PROMISE_MS,
   WhatsAppEnquiry,
   type FollowUpStatus,
   type WhatsAppEnquiryDocument,
@@ -29,6 +32,8 @@ export interface EnquiryFilters {
   status?: string;
   sport?: string;
   assistance?: string;
+  category?: string;
+  answeredBy?: string;
   feedback?: string;
   from?: string;
   to?: string;
@@ -45,6 +50,14 @@ export interface EnquiryRow {
   level?: string;
   city?: string;
   objective?: string;
+  playingContext?: string;
+  /** What the request is about. Absent on enquiries from before the adaptive questions. */
+  category?: string;
+  /** Who answered it: the assistant or the team. */
+  answeredBy?: string;
+  confirmedAt?: Date;
+  /** When the team's reply is due: 24 hours after the parent confirmed, while it is still waiting. */
+  replyDueAt?: Date;
   guidance?: string;
   /** Every exchange on the topic. Present on a single enquiry and in the export, not in the list. */
   turns?: Array<{ at: Date; parent: string; assistant: string }>;
@@ -83,6 +96,12 @@ export function buildFilter(filters: EnquiryFilters): Record<string, unknown> {
   if (filters.assistance && (ASSISTANCE_KINDS as readonly string[]).includes(filters.assistance)) {
     filter.assistance = filters.assistance;
   }
+  if (filters.category && (ENQUIRY_CATEGORIES as readonly string[]).includes(filters.category)) {
+    filter.category = filters.category;
+  }
+  if (filters.answeredBy && (ANSWERED_BY as readonly string[]).includes(filters.answeredBy)) {
+    filter.answeredBy = filters.answeredBy;
+  }
   if (filters.feedback && (ENQUIRY_FEEDBACK as readonly string[]).includes(filters.feedback)) {
     filter.feedback = filters.feedback;
   }
@@ -104,6 +123,15 @@ export function buildFilter(filters: EnquiryFilters): Record<string, unknown> {
   return filter;
 }
 
+/** Statuses where the team still owes the parent a reply. */
+const WAITING_STATUSES: FollowUpStatus[] = ["new", "reviewing"];
+
+/** When the team's reply is due: a day after the parent confirmed, for as long as it is waiting. */
+const replyDueOf = (doc: WhatsAppEnquiryDocument): Date | undefined =>
+  doc.answeredBy === "team" && doc.confirmedAt && WAITING_STATUSES.includes(doc.followUpStatus)
+    ? new Date(doc.confirmedAt.getTime() + TEAM_REPLY_PROMISE_MS)
+    : undefined;
+
 const present = (doc: WhatsAppEnquiryDocument, withTurns = false): EnquiryRow => ({
   id: String(doc._id),
   reference: doc.reference,
@@ -114,6 +142,11 @@ const present = (doc: WhatsAppEnquiryDocument, withTurns = false): EnquiryRow =>
   ...(doc.level ? { level: doc.level } : {}),
   ...(doc.city ? { city: doc.city } : {}),
   ...(doc.objective ? { objective: doc.objective } : {}),
+  ...(doc.playingContext ? { playingContext: doc.playingContext } : {}),
+  ...(doc.category ? { category: doc.category } : {}),
+  ...(doc.answeredBy ? { answeredBy: doc.answeredBy } : {}),
+  ...(doc.confirmedAt ? { confirmedAt: doc.confirmedAt } : {}),
+  ...(replyDueOf(doc) ? { replyDueAt: replyDueOf(doc) as Date } : {}),
   ...(doc.guidance ? { guidance: doc.guidance } : {}),
   ...(withTurns
     ? {
@@ -307,7 +340,11 @@ export async function sendTeamMessage(
     { $unset: { intake: 1 } }
   );
   doc.lastTeamMessageAt = now;
-  if (doc.followUpStatus === "none" || doc.followUpStatus === "new") {
+  if (
+    doc.followUpStatus === "none" ||
+    doc.followUpStatus === "new" ||
+    doc.followUpStatus === "reviewing"
+  ) {
     doc.followUpStatus = "contacted";
   }
   await doc.save();
@@ -340,31 +377,49 @@ export async function enquirySummary(): Promise<{
   needsFollowUp: number;
   asksForTeam: number;
   feedback: { helpful: number; notHelpful: number };
+  /** Waiting for the team for more than the 24 hours promised. */
+  overdue: number;
   byFollowUp: Record<string, number>;
   byAssistance: Record<string, number>;
+  byCategory: Record<string, number>;
+  byAnsweredBy: Record<string, number>;
   bySport: Array<{ sport: string; count: number }>;
 }> {
-  const [totals, byFollowUp, byAssistance, bySport, byFeedback] = await Promise.all([
-    WhatsAppEnquiry.aggregate([
-      { $group: { _id: null, enquiries: { $sum: 1 }, parents: { $addToSet: "$parentRef" } } },
-      { $project: { enquiries: 1, parents: { $size: "$parents" } } },
-    ]),
-    WhatsAppEnquiry.aggregate([{ $group: { _id: "$followUpStatus", count: { $sum: 1 } } }]),
-    WhatsAppEnquiry.aggregate([
-      { $unwind: "$assistance" },
-      { $group: { _id: "$assistance", count: { $sum: 1 } } },
-    ]),
-    WhatsAppEnquiry.aggregate([
-      { $match: { sport: { $exists: true } } },
-      { $group: { _id: { $toLower: "$sport" }, count: { $sum: 1 } } },
-      { $sort: { count: -1, _id: 1 } },
-      { $limit: 15 },
-    ]),
-    WhatsAppEnquiry.aggregate([
-      { $match: { feedback: { $exists: true } } },
-      { $group: { _id: "$feedback", count: { $sum: 1 } } },
-    ]),
-  ]);
+  const [totals, byFollowUp, byAssistance, bySport, byFeedback, byCategory, byAnsweredBy, overdue] =
+    await Promise.all([
+      WhatsAppEnquiry.aggregate([
+        { $group: { _id: null, enquiries: { $sum: 1 }, parents: { $addToSet: "$parentRef" } } },
+        { $project: { enquiries: 1, parents: { $size: "$parents" } } },
+      ]),
+      WhatsAppEnquiry.aggregate([{ $group: { _id: "$followUpStatus", count: { $sum: 1 } } }]),
+      WhatsAppEnquiry.aggregate([
+        { $unwind: "$assistance" },
+        { $group: { _id: "$assistance", count: { $sum: 1 } } },
+      ]),
+      WhatsAppEnquiry.aggregate([
+        { $match: { sport: { $exists: true } } },
+        { $group: { _id: { $toLower: "$sport" }, count: { $sum: 1 } } },
+        { $sort: { count: -1, _id: 1 } },
+        { $limit: 15 },
+      ]),
+      WhatsAppEnquiry.aggregate([
+        { $match: { feedback: { $exists: true } } },
+        { $group: { _id: "$feedback", count: { $sum: 1 } } },
+      ]),
+      WhatsAppEnquiry.aggregate([
+        { $match: { category: { $exists: true } } },
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+      ]),
+      WhatsAppEnquiry.aggregate([
+        { $match: { answeredBy: { $exists: true } } },
+        { $group: { _id: "$answeredBy", count: { $sum: 1 } } },
+      ]),
+      WhatsAppEnquiry.countDocuments({
+        answeredBy: "team",
+        followUpStatus: { $in: WAITING_STATUSES },
+        confirmedAt: { $lt: new Date(Date.now() - TEAM_REPLY_PROMISE_MS) },
+      }),
+    ]);
 
   const toMap = (rows: Array<{ _id: string; count: number }>) =>
     Object.fromEntries(rows.map((r) => [r._id, r.count]));
@@ -375,11 +430,14 @@ export async function enquirySummary(): Promise<{
   return {
     enquiries: totals[0]?.enquiries ?? 0,
     parents: totals[0]?.parents ?? 0,
-    needsFollowUp: followUp.new ?? 0,
+    needsFollowUp: (followUp.new ?? 0) + (followUp.reviewing ?? 0),
     asksForTeam: assistance.team ?? 0,
     feedback: { helpful: feedback.helpful ?? 0, notHelpful: feedback.not_helpful ?? 0 },
+    overdue,
     byFollowUp: followUp,
     byAssistance: assistance,
+    byCategory: toMap(byCategory),
+    byAnsweredBy: toMap(byAnsweredBy),
     bySport: bySport.map((r) => ({ sport: r._id as string, count: r.count })),
   };
 }
@@ -423,6 +481,11 @@ const CSV_COLUMNS: Array<[string, (r: EnquiryRow) => unknown]> = [
   ["Closed", (r) => (r.closed ? "yes" : "no")],
   ["Messages", (r) => r.turnCount],
   ["Team note", (r) => r.teamNote],
+  ["Category", (r) => r.category],
+  ["Answered by", (r) => r.answeredBy],
+  ["Playing context", (r) => r.playingContext],
+  ["Confirmed at", (r) => r.confirmedAt?.toISOString()],
+  ["Reply due", (r) => r.replyDueAt?.toISOString()],
 ];
 
 export async function exportEnquiriesCsv(

@@ -17,31 +17,19 @@ import {
   WhatsAppEnquiry,
   whatsappPilotApi,
 } from "@/lib/api/whatsappPilotApi";
+import {
+  ANSWERED_BY_LABEL,
+  ASSISTANCE_LABEL,
+  CATEGORY_LABEL,
+  FOLLOW_UP_LABEL,
+  SETTABLE_STATUSES,
+  replyDue,
+  statusBadge,
+  topicOf,
+} from "../utils/enquiryLabels";
 
 const errorMessage = (err: unknown, fallback: string) =>
   (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
-
-const ASSISTANCE_LABEL: Record<string, string> = {
-  coach: "Coach or academy",
-  tournaments: "Tournaments",
-  expert: "Expert",
-  team: "Team",
-  other: "Other",
-};
-
-const FOLLOW_UP_LABEL: Record<FollowUpStatus, string> = {
-  none: "None",
-  new: "Waiting",
-  contacted: "Contacted",
-  done: "Done",
-};
-
-const FOLLOW_UP_TONE: Record<FollowUpStatus, "slate" | "amber" | "blue" | "green"> = {
-  none: "slate",
-  new: "amber",
-  contacted: "blue",
-  done: "green",
-};
 
 const FEEDBACK_LABEL = { helpful: "Helpful", not_helpful: "Not helpful" } as const;
 
@@ -72,6 +60,19 @@ const timeline = (turns: EnquiryTurn[], team: TeamMessage[]): TimelineItem[] =>
     ...turns.map((turn): TimelineItem => ({ kind: "turn", at: turn.at, turn })),
     ...team.map((message): TimelineItem => ({ kind: "team", at: message.at, message })),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+/** When the team's reply is due, in red once it has passed. Nothing when no reply is owed. */
+function ReplyDue({ enquiry }: { enquiry: WhatsAppEnquiry }) {
+  const due = replyDue(enquiry);
+  if (!due) return <span className="text-slate-500">—</span>;
+  return (
+    <span
+      className={`whitespace-nowrap text-sm ${due.overdue ? "font-medium text-red-700" : "text-slate-700"}`}
+    >
+      {due.label}
+    </span>
+  );
+}
 
 export function EnquiriesTab() {
   const [filters, setFilters] = useState<EnquiryFilters>({});
@@ -154,27 +155,35 @@ export function EnquiriesTab() {
       render: (e) => <span className="text-slate-700">{child(e)}</span>,
     },
     {
-      key: "assistance",
-      header: "Help asked",
+      key: "topic",
+      header: "Topic",
+      render: (e) => <span className="text-slate-700">{topicOf(e) ?? "—"}</span>,
+    },
+    {
+      key: "answeredBy",
+      header: "Answered by",
       render: (e) => (
         <span className="text-slate-700">
-          {e.assistance.length ? e.assistance.map((a) => ASSISTANCE_LABEL[a] ?? a).join(", ") : "—"}
+          {e.answeredBy ? ANSWERED_BY_LABEL[e.answeredBy] : "—"}
         </span>
       ),
     },
     {
       key: "status",
-      header: "Follow-up",
-      render: (e) =>
-        e.followUpStatus === "none" ? (
-          <span className="text-slate-500">—</span>
+      header: "Status",
+      render: (e) => {
+        const badge = statusBadge(e);
+        return badge ? (
+          <StatusBadge status={badge.label} tone={badge.tone} size="sm" />
         ) : (
-          <StatusBadge
-            status={FOLLOW_UP_LABEL[e.followUpStatus]}
-            tone={FOLLOW_UP_TONE[e.followUpStatus]}
-            size="sm"
-          />
-        ),
+          <span className="text-slate-500">—</span>
+        );
+      },
+    },
+    {
+      key: "due",
+      header: "Reply due",
+      render: (e) => <ReplyDue enquiry={e} />,
     },
     {
       key: "feedback",
@@ -189,16 +198,40 @@ export function EnquiriesTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <select
-          aria-label="Follow-up status"
+          aria-label="Status"
           className={selectClass}
           value={filters.status ?? ""}
           onChange={(e) => setFilter("status", e.target.value)}
         >
-          <option value="">Any follow-up</option>
-          <option value="new">Waiting for the team</option>
-          <option value="contacted">Contacted</option>
-          <option value="done">Done</option>
-          <option value="none">No follow-up</option>
+          <option value="">Any status</option>
+          {(["new", "reviewing", "contacted", "done", "none"] as const).map((status) => (
+            <option key={status} value={status}>
+              {FOLLOW_UP_LABEL[status]}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Topic"
+          className={selectClass}
+          value={filters.category ?? ""}
+          onChange={(e) => setFilter("category", e.target.value)}
+        >
+          <option value="">Any topic</option>
+          {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Answered by"
+          className={selectClass}
+          value={filters.answeredBy ?? ""}
+          onChange={(e) => setFilter("answeredBy", e.target.value)}
+        >
+          <option value="">Anyone</option>
+          <option value="assistant">{ANSWERED_BY_LABEL.assistant}</option>
+          <option value="team">{ANSWERED_BY_LABEL.team}</option>
         </select>
         <select
           aria-label="Help asked for"
@@ -377,6 +410,7 @@ function EnquiryDrawer({
   };
 
   const windowOpen = replyWindowOpen(enquiry.lastMessageAt);
+  const badge = statusBadge(enquiry);
 
   return (
     <DetailDrawer
@@ -387,13 +421,7 @@ function EnquiryDrawer({
         enquiry.turnCount === 1 ? "message" : "messages"
       }`}
       headerExtra={
-        enquiry.followUpStatus !== "none" ? (
-          <StatusBadge
-            status={FOLLOW_UP_LABEL[enquiry.followUpStatus]}
-            tone={FOLLOW_UP_TONE[enquiry.followUpStatus]}
-            size="sm"
-          />
-        ) : undefined
+        badge ? <StatusBadge status={badge.label} tone={badge.tone} size="sm" /> : undefined
       }
       widthClass="max-w-xl"
     >
@@ -406,8 +434,34 @@ function EnquiryDrawer({
         <DetailRow label="Sport" value={enquiry.sport ?? "—"} />
         <DetailRow label="Level" value={enquiry.level ?? "—"} />
         <DetailRow label="City / area" value={enquiry.city ?? "—"} />
+        <DetailRow label="Playing context" value={enquiry.playingContext ?? "—"} />
         <DetailRow label="Objective" value={enquiry.objective ?? "—"} />
       </DetailSection>
+
+      {(enquiry.category || enquiry.answeredBy) && (
+        <DetailSection title="Request">
+          <DetailRow label="Topic" value={topicOf(enquiry) ?? "—"} />
+          <DetailRow
+            label="Answered by"
+            value={enquiry.answeredBy ? ANSWERED_BY_LABEL[enquiry.answeredBy] : "—"}
+          />
+          <DetailRow
+            label="Confirmed by the parent"
+            value={enquiry.confirmedAt ? when(enquiry.confirmedAt) : "Not confirmed"}
+          />
+          {enquiry.replyDueAt && (
+            <DetailRow
+              label="Team reply due"
+              value={
+                <span className="flex flex-wrap items-center gap-2">
+                  {when(enquiry.replyDueAt)}
+                  <ReplyDue enquiry={enquiry} />
+                </span>
+              }
+            />
+          )}
+        </DetailSection>
+      )}
 
       <DetailSection title="Conversation">
         {turnsFailed ? (
@@ -479,7 +533,7 @@ function EnquiryDrawer({
       {enquiry.followUpStatus !== "none" && (
         <DetailSection title="Follow-up">
           <div className="flex flex-wrap gap-2">
-            {(["new", "contacted", "done"] as const).map((status) => (
+            {SETTABLE_STATUSES.map((status) => (
               <Button
                 key={status}
                 size="sm"

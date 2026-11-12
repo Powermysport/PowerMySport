@@ -70,6 +70,14 @@ const signedInAdmin = async (permissions: string[]) => {
   return generateToken({ id: adminId.toString(), email, role: "OPERATIONS_ADMIN" });
 };
 
+/** Waits for the audit entry the controller writes without awaiting it, up to about a second. */
+const auditWritten = async (action: string) => {
+  for (let tries = 0; tries < 20; tries += 1) {
+    if (await AdminAuditLog.countDocuments({ action })) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
+
 const call = (method: string, path: string, token?: string, body?: unknown) => {
   const req = (request(app) as any)[method](path);
   if (token) req.set("Authorization", `Bearer ${token}`);
@@ -215,9 +223,37 @@ describe("changing an enquiry", () => {
     assert.equal(res.body.data.followUpStatus, "contacted");
     assert.equal(res.body.data.teamNote, "Called, will send academies");
 
+    await auditWritten("whatsapp-pilot.enquiries.update");
     const log = await AdminAuditLog.findOne({ action: "whatsapp-pilot.enquiries.update" }).lean();
     assert.ok(log);
     assert.ok(!JSON.stringify(log).includes("academies"));
+  });
+
+  it("accepts under review as a status, and filters the list by it", async () => {
+    const doc = await seed(HASH, { sport: "Tennis" });
+    const token = await signedInAdmin(["notifications:manage"]);
+    const res = await call("patch", `${BASE}/${doc._id}`, token, { followUpStatus: "reviewing" });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.followUpStatus, "reviewing");
+    const list = await call("get", `${BASE}?status=reviewing`, token);
+    assert.equal(list.status, 200);
+    assert.equal(list.body.data.total, 1);
+  });
+
+  it("stores the category, who answered and when it was confirmed, and refuses unknown ones", async () => {
+    const doc = await seed(HASH, { sport: "Tennis" });
+    await WhatsAppEnquiry.updateOne(
+      { _id: doc._id },
+      { $set: { category: "scholarships", answeredBy: "team", confirmedAt: new Date() } }
+    );
+    const stored = await WhatsAppEnquiry.findById(doc._id).lean();
+    assert.equal(stored.category, "scholarships");
+    assert.equal(stored.answeredBy, "team");
+    assert.ok(stored.confirmedAt instanceof Date);
+
+    const bad = await WhatsAppEnquiry.findById(doc._id);
+    bad.category = "nonsense";
+    await assert.rejects(bad.save(), /category/);
   });
 
   it("refuses an unknown status and an empty change", async () => {
@@ -243,6 +279,7 @@ describe("revealing the number", () => {
     assert.equal(res.body.data.phone, PHONE);
     assert.equal(res.headers["cache-control"], "no-store");
 
+    await auditWritten("whatsapp-pilot.enquiries.reveal-contact");
     const log = await AdminAuditLog.findOne({
       action: "whatsapp-pilot.enquiries.reveal-contact",
     }).lean();
@@ -274,9 +311,10 @@ describe("the CSV", () => {
     const [header, row] = res.text.replace(/^﻿/, "").split("\r\n");
     assert.equal(
       header,
-      "Reference,Date,Parent,Question,Child age,Sport,Level,City / area,Objective,Guidance provided,Assistance required,Follow-up status,Parent feedback,Closed,Messages,Team note"
+      "Reference,Date,Parent,Question,Child age,Sport,Level,City / area,Objective,Guidance provided,Assistance required,Follow-up status,Parent feedback,Closed,Messages,Team note,Category,Answered by,Playing context,Confirmed at,Reply due"
     );
     assert.ok(row.includes("Tennis"));
+    await auditWritten("whatsapp-pilot.enquiries.export");
     assert.equal(
       await AdminAuditLog.countDocuments({ action: "whatsapp-pilot.enquiries.export" }),
       1
@@ -380,5 +418,108 @@ describe("the full conversation", () => {
     const token = await signedInAdmin(["notifications:manage"]);
     const res = await call("patch", `${BASE}/${doc._id}`, token, { teamNote: "called" });
     assert.equal(res.body.data.turns, undefined);
+  });
+});
+
+describe("category, who answered, and when the team's reply is due", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  /** An enquiry the adaptive questions confirmed `hoursAgo` hours ago. */
+  const confirmed = async (hash: string, hoursAgo: number, extra: Record<string, unknown> = {}) => {
+    const doc = await seed(hash, { sport: "Tennis" });
+    await WhatsAppEnquiry.updateOne(
+      { _id: doc._id },
+      {
+        $set: {
+          category: "tournaments",
+          answeredBy: "team",
+          followUpStatus: "new",
+          confirmedAt: new Date(Date.now() - hoursAgo * HOUR),
+          playingContext: "Plays club tournaments",
+          ...extra,
+        },
+      }
+    );
+    return String(doc._id);
+  };
+
+  it("shows each enquiry's category, who answered it, and a reply due 24 hours after it was confirmed", async () => {
+    const id = await confirmed("hash-due-1", 3);
+    const token = await signedInAdmin(["notifications:view"]);
+    const res = await call("get", `${BASE}/${id}`, token);
+    assert.equal(res.status, 200);
+    const row = res.body.data;
+    assert.equal(row.category, "tournaments");
+    assert.equal(row.answeredBy, "team");
+    assert.equal(row.playingContext, "Plays club tournaments");
+    const confirmedAt = new Date(row.confirmedAt).getTime();
+    assert.equal(new Date(row.replyDueAt).getTime() - confirmedAt, 24 * HOUR);
+  });
+
+  it("stops showing a due time once the team has replied, closed it, or never owed one", async () => {
+    const token = await signedInAdmin(["notifications:view"]);
+    const reviewing = await confirmed("hash-due-2", 3, { followUpStatus: "reviewing" });
+    const responded = await confirmed("hash-due-3", 3, { followUpStatus: "contacted" });
+    const closed = await confirmed("hash-due-4", 3, { followUpStatus: "done" });
+    const byAssistant = await confirmed("hash-due-5", 3, {
+      answeredBy: "assistant",
+      followUpStatus: "none",
+    });
+
+    const due = async (id: string) =>
+      (await call("get", `${BASE}/${id}`, token)).body.data.replyDueAt;
+    assert.ok(await due(reviewing), "under review is still owed a reply");
+    for (const id of [responded, closed, byAssistant]) {
+      assert.equal(await due(id), undefined, "no reply is owed");
+    }
+  });
+
+  it("filters the list by category and by who answered, and ignores values it does not know", async () => {
+    await confirmed("hash-f-1", 1);
+    await confirmed("hash-f-2", 1, { category: "scholarships" });
+    await confirmed("hash-f-3", 1, { answeredBy: "assistant", followUpStatus: "none" });
+    const token = await signedInAdmin(["notifications:view"]);
+    const total = async (qs: string) => (await call("get", `${BASE}?${qs}`, token)).body.data.total;
+
+    assert.equal(await total("category=scholarships"), 1);
+    assert.equal(await total("category=tournaments"), 2);
+    assert.equal(await total("answeredBy=assistant"), 1);
+    assert.equal(await total("answeredBy=team&category=tournaments"), 1);
+    assert.equal(await total("category=nonsense"), 3, "an unknown category is not a filter");
+    assert.equal(
+      await total("answeredBy[$ne]=x&category[$gt]="),
+      3,
+      "operator objects are ignored"
+    );
+  });
+
+  it("counts under review as waiting, and counts the requests past their 24 hours", async () => {
+    await confirmed("hash-s-1", 30); // waiting, overdue
+    await confirmed("hash-s-2", 30, { followUpStatus: "reviewing" }); // under review, overdue
+    await confirmed("hash-s-3", 2); // waiting, not yet due
+    await confirmed("hash-s-4", 30, { followUpStatus: "contacted" }); // answered, not overdue
+    await confirmed("hash-s-5", 30, { answeredBy: "assistant", followUpStatus: "none" });
+    const token = await signedInAdmin(["notifications:view"]);
+
+    const res = await call("get", `${BASE}/summary`, token);
+    assert.equal(res.status, 200);
+    const s = res.body.data;
+    assert.equal(s.needsFollowUp, 3, "new plus under review");
+    assert.equal(s.overdue, 2);
+    assert.deepEqual(s.byAnsweredBy, { team: 4, assistant: 1 });
+    assert.equal(s.byCategory.tournaments, 5);
+  });
+
+  it("puts the category, who answered and the due time in the export", async () => {
+    await confirmed("hash-x-1", 3);
+    const token = await signedInAdmin(["notifications:view"]);
+    const res = await call("get", `${BASE}/export.csv`, token);
+    const [header, row] = res.text.replace(/^﻿/, "").split("\r\n");
+    const columns = header.split(",");
+    const cells = row.split(",");
+    const cell = (name: string) => cells[columns.indexOf(name)];
+    assert.equal(cell("Category"), "tournaments");
+    assert.equal(cell("Answered by"), "team");
+    assert.ok(cell("Reply due").endsWith("Z"), "an ISO time");
   });
 });

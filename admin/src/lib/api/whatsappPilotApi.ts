@@ -22,8 +22,19 @@ export interface AddNumbersResult {
   invalid: string[];
 }
 
-export type FollowUpStatus = "none" | "new" | "contacted" | "done";
+export type FollowUpStatus = "none" | "new" | "reviewing" | "contacted" | "done";
 export type AssistanceKind = "coach" | "tournaments" | "expert" | "team" | "other";
+export type EnquiryCategory =
+  | "sport"
+  | "start"
+  | "coaching"
+  | "tournaments"
+  | "pathway"
+  | "scholarships"
+  | "admissions"
+  | "fitness"
+  | "other";
+export type AnsweredBy = "assistant" | "team" | "pending";
 export type EnquiryFeedback = "helpful" | "not_helpful";
 
 export interface EnquiryTurn {
@@ -53,6 +64,15 @@ export interface WhatsAppEnquiry {
   level?: string;
   city?: string;
   objective?: string;
+  playingContext?: string;
+  /** What the request is about. Absent on enquiries from before the adaptive questions. */
+  category?: EnquiryCategory;
+  /** Who answered it: the assistant or the team. */
+  answeredBy?: AnsweredBy;
+  /** When the parent confirmed the summary. */
+  confirmedAt?: string;
+  /** When the team's reply is due: 24 hours after confirming, while it is still waiting. */
+  replyDueAt?: string;
   guidance?: string;
   /** Every exchange, oldest first. Only on a single enquiry, not in the list. */
   turns?: EnquiryTurn[];
@@ -76,6 +96,8 @@ export interface EnquiryFilters {
   status?: string;
   sport?: string;
   assistance?: string;
+  category?: string;
+  answeredBy?: string;
   feedback?: string;
   from?: string;
   to?: string;
@@ -94,9 +116,13 @@ export interface EnquirySummary {
   parents: number;
   needsFollowUp: number;
   asksForTeam: number;
+  /** Waiting for the team for more than the 24 hours promised. */
+  overdue: number;
   feedback: { helpful: number; notHelpful: number };
   byFollowUp: Record<string, number>;
   byAssistance: Record<string, number>;
+  byCategory: Record<string, number>;
+  byAnsweredBy: Record<string, number>;
   bySport: Array<{ sport: string; count: number }>;
 }
 

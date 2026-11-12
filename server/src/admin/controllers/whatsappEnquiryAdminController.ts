@@ -39,7 +39,17 @@ const str = (value: unknown): string | undefined =>
 
 const filtersFrom = (query: Request["query"]): EnquiryFilters => {
   const out: EnquiryFilters = {};
-  for (const key of ["status", "sport", "assistance", "feedback", "from", "to", "q"] as const) {
+  for (const key of [
+    "status",
+    "sport",
+    "assistance",
+    "category",
+    "answeredBy",
+    "feedback",
+    "from",
+    "to",
+    "q",
+  ] as const) {
     const value = str(query[key]);
     if (value) out[key] = value;
   }

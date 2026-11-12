@@ -250,6 +250,13 @@ describe("the team's reply from the admin panel", () => {
     assert.match(chat.messages.at(-1).content, /Message from the PowerMySport team/);
   });
 
+  it("an enquiry the team is reviewing becomes contacted when they reply", async () => {
+    const id = await seed(new Date());
+    await WhatsAppEnquiry.updateOne({ _id: id }, { $set: { followUpStatus: "reviewing" } });
+    const { row } = await sendTeamMessage(id, "We found two academies in Baner.", "a@pms.in");
+    assert.equal(row.followUpStatus, "contacted");
+  });
+
   it("outside 24 hours uses the approved template, or refuses when there is none", async () => {
     const id = await seed(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000));
     sent.length = 0;
