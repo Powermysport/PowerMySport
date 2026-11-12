@@ -41,8 +41,34 @@ export interface EnquiryTurn {
 export const ASSISTANCE_KINDS = ["coach", "tournaments", "expert", "team", "other"] as const;
 export type AssistanceKind = (typeof ASSISTANCE_KINDS)[number];
 
-export const FOLLOW_UP_STATUSES = ["none", "new", "contacted", "done"] as const;
+/**
+ * Where a request for the team stands. The stored words stay as they were, so no old row changes;
+ * the admin screen shows them as AI only, New, Under review, Responded and Closed.
+ * `reviewing` is set by a person in the admin screen, never by the chat.
+ */
+export const FOLLOW_UP_STATUSES = ["none", "new", "reviewing", "contacted", "done"] as const;
 export type FollowUpStatus = (typeof FOLLOW_UP_STATUSES)[number];
+
+/** What a parent's request is about, for the team's list and filters. */
+export const ENQUIRY_CATEGORIES = [
+  "sport",
+  "start",
+  "coaching",
+  "tournaments",
+  "pathway",
+  "scholarships",
+  "admissions",
+  "fitness",
+  "other",
+] as const;
+export type EnquiryCategory = (typeof ENQUIRY_CATEGORIES)[number];
+
+/** Who answered the request: the assistant, the team, or nobody yet. */
+export const ANSWERED_BY = ["assistant", "team", "pending"] as const;
+export type AnsweredBy = (typeof ANSWERED_BY)[number];
+
+/** The team's promise to a parent once their summary is confirmed. */
+export const TEAM_REPLY_PROMISE_MS = 24 * 60 * 60 * 1000;
 
 export const ENQUIRY_FEEDBACK = ["helpful", "not_helpful"] as const;
 
@@ -61,8 +87,31 @@ export interface TeamMessage {
 export const INTAKE_STEPS = ["child", "age", "sport", "city", "level", "needs"] as const;
 export type IntakeStep = (typeof INTAKE_STEPS)[number];
 
+/** What the adaptive intake is waiting for: one missing detail, the summary check, or a correction. */
+export const ADAPTIVE_ASKING = [
+  "child",
+  "sport",
+  "age",
+  "city",
+  "experience",
+  "goal",
+  "confirm",
+  "fix",
+] as const;
+export type AdaptiveAsking = (typeof ADAPTIVE_ASKING)[number];
+
+/** The state of an adaptive intake. Its presence is what tells it apart from the coach intake. */
+export interface AdaptiveState {
+  asking: AdaptiveAsking;
+  category: EnquiryCategory;
+  /** The questions asked so far: a parent is never asked the same one twice, or more than the cap. */
+  asked: AdaptiveAsking[];
+}
+
 export interface EnquiryIntake {
+  /** Unused by the adaptive intake, which keeps its place in `adaptive.asking`. */
   step: IntakeStep;
+  adaptive?: AdaptiveState;
   startedAt: Date;
   /** Wrong answers to the current step, so a parent is not asked the same thing forever. */
   retries: number;
@@ -97,6 +146,14 @@ export interface WhatsAppEnquiryDocument extends Document {
   /** City and area, asked when the parent wants a coach or academy. */
   city?: string;
   objective?: string;
+  /** What the child has done so far and how they train, in the parent's words. */
+  playingContext?: string;
+  /** What the request is about. Absent on enquiries from before the adaptive questions. */
+  category?: EnquiryCategory;
+  /** Who answered it. Absent on enquiries from before the adaptive questions. */
+  answeredBy?: AnsweredBy;
+  /** When the parent confirmed the summary. The team's reply is due 24 hours after this. */
+  confirmedAt?: Date;
   /** The assistant's latest answer, kept as its own field for lists and quick reading. */
   guidance?: string;
   /** Every exchange on this topic, oldest first, so the team sees all the advice and not just the last. */
@@ -114,6 +171,8 @@ export interface WhatsAppEnquiryDocument extends Document {
   lastTeamMessageAt?: Date;
   /** When the parent last wrote after a team message, so the team is told once per message. */
   parentRepliedAt?: Date;
+  /** When the team was last told the parent added details after confirming, so it is not once per message. */
+  lateInfoAt?: Date;
   /** Set while the coach/academy intake is collecting the child's details. */
   intake?: EnquiryIntake;
   feedback?: EnquiryFeedback;
@@ -140,6 +199,10 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     level: { type: String, maxlength: 60 },
     city: { type: String, maxlength: 60 },
     objective: { type: String, maxlength: 240 },
+    playingContext: { type: String, maxlength: 240 },
+    category: { type: String, enum: ENQUIRY_CATEGORIES },
+    answeredBy: { type: String, enum: ANSWERED_BY },
+    confirmedAt: { type: Date },
     guidance: { type: String, maxlength: 2000 },
     turns: {
       type: [
@@ -175,12 +238,24 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     },
     lastTeamMessageAt: { type: Date },
     parentRepliedAt: { type: Date },
+    lateInfoAt: { type: Date },
     intake: {
       type: new Schema<EnquiryIntake>(
         {
           step: { type: String, enum: INTAKE_STEPS, required: true },
           startedAt: { type: Date, required: true },
           retries: { type: Number, default: 0 },
+          adaptive: {
+            type: new Schema<AdaptiveState>(
+              {
+                asking: { type: String, enum: ADAPTIVE_ASKING, required: true },
+                category: { type: String, enum: ENQUIRY_CATEGORIES, required: true },
+                asked: { type: [{ type: String, enum: ADAPTIVE_ASKING }], default: [] },
+              },
+              { _id: false }
+            ),
+            required: false,
+          },
           needs: { type: String, maxlength: 240 },
           childName: { type: String, maxlength: 60 },
           wants: { type: String, enum: ["academy", "coach", "either"] },

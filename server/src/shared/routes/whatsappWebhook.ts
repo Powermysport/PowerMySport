@@ -33,10 +33,12 @@ import {
   type WhatsAppAnswer,
 } from "../services/whatsappAssistantService";
 import {
+  ASK_TEAM_BUTTON,
   FEEDBACK_BUTTONS,
   NEXT_STEPS_BODY,
   NEXT_STEPS_BUTTON,
   NEXT_STEP_ROWS,
+  TEAM_OFFER_BODY,
   TOPIC_MENU_BODY,
   WELCOME_BUTTON,
   WELCOME_ROWS,
@@ -145,6 +147,9 @@ export async function deliver(to: string, answer: WhatsAppAnswer): Promise<void>
       "See open times",
       answer.slotPicker.rows
     );
+  }
+  if (answer.teamOffer) {
+    await sendWhatsAppButtons(to, TEAM_OFFER_BODY, [ASK_TEAM_BUTTON]);
   }
   if (answer.nextSteps) {
     await sendWhatsAppList(to, NEXT_STEPS_BODY, NEXT_STEPS_BUTTON, NEXT_STEP_ROWS);

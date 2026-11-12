@@ -134,3 +134,37 @@ export async function queueParentReplyAlert(
     log.error("Failed to queue the WhatsApp parent-reply alert", err);
   }
 }
+
+/** The parent added details to a request after confirming it. */
+export function buildLateInfoAlert(
+  enquiry: Pick<WhatsAppEnquiryDocument, "reference">,
+  added: string,
+  adminUrl: string
+): { subject: string; html: string } {
+  const html = renderEmailShell({
+    heading: "A WhatsApp parent added details to their request",
+    intro: `The parent on ${escapeHtml(enquiry.reference)} sent more after confirming their request. It is on the same enquiry, in the conversation.`,
+    bodyHtml: `<p style="margin:0 0 6px;color:#64748b;font-size:13px;">They added:</p><blockquote style="margin:0;padding:8px 12px;border-left:3px solid #e2e8f0;color:#334155;">${escapeHtml(added)}</blockquote>`,
+    ctaLabel: "Open WhatsApp enquiries",
+    ctaUrl: `${adminUrl}/admin/whatsapp-pilot`,
+    footer: "Later details in the next hour are added to the enquiry without another email.",
+  });
+  return { subject: `WhatsApp ${enquiry.reference}: the parent added details`, html };
+}
+
+export async function queueLateInfoAlert(
+  enquiry: WhatsAppEnquiryDocument,
+  added: string
+): Promise<void> {
+  const to = recipients();
+  if (!to) {
+    log.warn("No SUPPORT_NOTIFY_EMAIL or EMAIL_FROM set; WhatsApp late-details alert not sent");
+    return;
+  }
+  try {
+    const alert = buildLateInfoAlert(enquiry, added, resolveAdminAppUrl());
+    await OutboxMessage.create({ type: "send_email", payload: { to, ...alert } });
+  } catch (err) {
+    log.error("Failed to queue the WhatsApp late-details alert", err);
+  }
+}

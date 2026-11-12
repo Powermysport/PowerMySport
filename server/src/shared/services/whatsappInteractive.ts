@@ -40,6 +40,9 @@ export const WELCOME_ROWS: ListRow[] = [
     id: "menu_pathway",
     title: "Sports career pathways",
   },
+  { id: "menu_scholarships", title: "Scholarships & sponsors" },
+  { id: "menu_admissions", title: "School & college entry" },
+  { id: "menu_fitness", title: "Fitness & sports support" },
   { id: "menu_other", title: "Something else" },
 ];
 
@@ -79,6 +82,10 @@ export const FEEDBACK_THANKS_NOT_HELPFUL =
 export const ASK_TEAM_ID = "ask_team";
 export const ASK_TEAM_BUTTON: ReplyButton = { id: ASK_TEAM_ID, title: "Talk to our team" };
 
+/** Under an answer to a request the parent confirmed, for whatever the answer did not cover. */
+export const TEAM_OFFER_BODY =
+  "Is there anything this did not cover? Our team can follow up with you here.";
+
 /**
  * What a tap means. Most taps are a question for the assistant, sent in a sentence it can act on
  * (the bare row title reads as a heading, not a request). Closing and feedback are decided here,
@@ -95,6 +102,9 @@ const ASK: Record<string, string> = {
   menu_start: "I want help getting started or improving in a sport.",
   menu_tournaments: "I have a question about tournaments and rankings.",
   menu_pathway: "I want to understand sports career pathways for my child.",
+  menu_scholarships: "I want help with scholarships and sponsorships for my child.",
+  menu_admissions: "I want help with school and college admissions through sport for my child.",
+  menu_fitness: "I want help with fitness or sports support for my child.",
   menu_other: "I have something else to ask.",
   next_tournaments: "Help me explore tournaments or competitions for my child.",
   next_question: "I have another question.",

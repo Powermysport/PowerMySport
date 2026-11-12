@@ -119,6 +119,8 @@ export interface IntakeReply {
   forwarded?: boolean;
   /** The questions are done and the request is now a sentence for the assistant to answer. */
   continueWith?: string;
+  /** The assistant is about to answer, so the parent is also offered a way to the team afterwards. */
+  offerTeam?: boolean;
 }
 
 const has = (e: WhatsAppEnquiryDocument, step: IntakeStep): boolean => {
@@ -241,7 +243,7 @@ async function finish(e: WhatsAppEnquiryDocument, needs?: string): Promise<Intak
 
 // ─── What the account already knows ─────────────────────────────────────────────
 
-interface AccountChild {
+export interface AccountChild {
   id: string;
   name: string;
   age?: number;
@@ -286,7 +288,7 @@ export async function accountChildren(
 }
 
 /** The child named in what the parent said ("an academy for Ansh"), when exactly one is. */
-function namedIn(text: string, children: AccountChild[]): AccountChild | undefined {
+export function namedIn(text: string, children: AccountChild[]): AccountChild | undefined {
   const words = new Set(text.toLowerCase().match(/[a-z]+/g) ?? []);
   const hits = children.filter((c) => words.has(c.name.toLowerCase()));
   return hits.length === 1 ? hits[0] : undefined;
@@ -398,8 +400,8 @@ async function useChild(
   return `From ${source}: ${known.join(", ") || "no details yet"}.${where} I'll pass these on.`;
 }
 
-const CHILD_ID = "intake_child_";
-const childButtons = (children: AccountChild[]): ReplyButton[] =>
+export const CHILD_ID = "intake_child_";
+export const childButtons = (children: AccountChild[]): ReplyButton[] =>
   children.slice(0, 3).map((c) => ({ id: `${CHILD_ID}${c.id}`, title: c.name.slice(0, 20) }));
 
 /**

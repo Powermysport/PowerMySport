@@ -52,6 +52,16 @@ import {
   TOPIC_FOR_REPLY,
   type IntakeReply,
 } from "./whatsappAcademyIntake";
+import {
+  ADAPTIVE_CATEGORY_FOR_REPLY,
+  ADAPTIVE_YES_ID,
+  acknowledgeAgain,
+  adaptiveIntakeEnabled,
+  answerAdaptive,
+  startAdaptive,
+  startAdaptiveTopic,
+  type AdaptiveDeps,
+} from "./whatsappAdaptiveIntake";
 import { ASK_TEAM_BUTTON, ASK_TEAM_ID, type ReplyButton } from "./whatsappInteractive";
 import { slotTapText } from "./whatsappExpertBooking";
 import { TEAM_THREAD_MS, WhatsAppEnquiry } from "../../client/models/WhatsAppEnquiry";
@@ -347,6 +357,8 @@ export interface WhatsAppAnswer {
   slotPicker?: { expertName: string; rows: Array<{ id: string; title: string }> };
   /** Send a payment button under the reply. */
   payLink?: { url: string; label: string };
+  /** Offer the team under the reply: the assistant answered a request the parent confirmed. */
+  teamOffer?: boolean;
 }
 
 /** Records one intake exchange like any other and turns it into the answer to send. */
@@ -408,7 +420,8 @@ async function appendTurn(
 export async function answerWhatsAppMessage(
   message: InboundWhatsAppMessage,
   generate: ReplyGenerator = defaultGenerator,
-  mediaDeps: MediaDeps = {}
+  mediaDeps: MediaDeps = {},
+  adaptiveDeps: AdaptiveDeps = {}
 ): Promise<WhatsAppAnswer> {
   const text = message.text?.trim();
   // A photo's caption arrives as text, but the photo is the message.
@@ -425,6 +438,8 @@ export async function answerWhatsAppMessage(
   let userMessage = (tapped ? intent.text : (slotTap ?? text ?? "")).slice(0, MAX_INBOUND_CHARS);
   // Set when the questions have just been answered: the request then goes to the assistant.
   let continued = false;
+  // Set when that answer is to a request the parent confirmed, so the team is offered after it.
+  let offerTeam = false;
 
   // "STOP" and the like delete the chat. Checked before the daily limit so a parent
   // who has used their messages can still take their data back.
@@ -460,6 +475,11 @@ export async function answerWhatsAppMessage(
     log.error("could not read the intake", err);
     return null;
   });
+  // A second "Yes, correct" after the summary was confirmed: said again, sent to the team once.
+  if (!intake && message.replyId === ADAPTIVE_YES_ID) {
+    const again = await acknowledgeAgain(phoneHash).catch(() => null);
+    if (again) return intakeAnswer(phoneHash, message.from, text ?? "Yes, correct", again);
+  }
   if (intake) {
     const intakeTap = Boolean(message.replyId?.startsWith("intake_"));
     if (
@@ -474,9 +494,12 @@ export async function answerWhatsAppMessage(
       return intakeAnswer(phoneHash, message.from, text, { reply: INTAKE_CANCELLED });
     } else if (text) {
       try {
-        const step = await answerIntake(intake, text, message.replyId);
+        const step = intake.intake?.adaptive
+          ? await answerAdaptive(intake, text, message.replyId, adaptiveDeps)
+          : await answerIntake(intake, text, message.replyId);
         if (step.continueWith) {
           continued = true;
+          offerTeam = Boolean(step.offerTeam);
           userMessage = step.continueWith.slice(0, MAX_INBOUND_CHARS);
         } else {
           return intakeAnswer(phoneHash, message.from, text, step);
@@ -495,6 +518,46 @@ export async function answerWhatsAppMessage(
     await noteParentReply(phoneHash, text ?? userMessage).catch((err) =>
       log.error("could not note the reply to the team", err)
     );
+  }
+
+  // A new request typed in the parent's own words starts with understanding it and asking only
+  // what is missing, when this is a request the adaptive questions handle. Anything else (and
+  // everything, while the flag is off) carries on below exactly as before.
+  if (!message.replyId && !intent && !media && !continued && text && !wantsMenu(text)) {
+    try {
+      if (adaptiveIntakeEnabled()) {
+        // The account's children fill in what would otherwise be asked.
+        const userId = await findUserIdByPhone(message.from).catch(() => undefined);
+        const started = await startAdaptive(phoneHash, text, userId ?? undefined, adaptiveDeps);
+        if (started) return intakeAnswer(phoneHash, message.from, text, started);
+      }
+    } catch (err) {
+      log.error("could not start the adaptive questions", err);
+    }
+  }
+
+  // A tapped menu row or button, while the adaptive questions are on, starts the same questions.
+  const adaptiveCategory = message.replyId
+    ? ADAPTIVE_CATEGORY_FOR_REPLY[message.replyId]
+    : undefined;
+  if (
+    adaptiveCategory &&
+    adaptiveIntakeEnabled() &&
+    (intent?.kind === "ask" || intent?.kind === "followup")
+  ) {
+    try {
+      const userId = await findUserIdByPhone(message.from).catch(() => undefined);
+      const started = await startAdaptiveTopic(
+        phoneHash,
+        userMessage,
+        adaptiveCategory,
+        userId ?? undefined
+      );
+      if (started) return intakeAnswer(phoneHash, message.from, userMessage, started);
+    } catch (err) {
+      log.error("could not start the adaptive questions from a tap", err);
+      return { reply: FALLBACK_REPLY, firstContact: false, buttons: [ASK_TEAM_BUTTON] };
+    }
   }
 
   // A topic from the menu starts with questions, not with an answer nobody asked for yet.
@@ -665,6 +728,7 @@ export async function answerWhatsAppMessage(
       ...(toolContext.outbound?.topicMenu ? { topicMenu: true } : {}),
       ...(toolContext.outbound?.slotPicker ? { slotPicker: toolContext.outbound.slotPicker } : {}),
       ...(toolContext.outbound?.payLink ? { payLink: toolContext.outbound.payLink } : {}),
+      ...(offerTeam ? { teamOffer: true } : {}),
     };
   } catch (err) {
     log.error("could not produce a reply", err);
@@ -709,7 +773,7 @@ export async function answerOutsidePilot(message: InboundWhatsAppMessage): Promi
     // Already talking to the team: what they write goes to the team, not to a pilot notice.
     const thread = await WhatsAppEnquiry.exists({
       phoneHash,
-      followUpStatus: { $in: ["new", "contacted"] },
+      followUpStatus: { $in: ["new", "reviewing", "contacted"] },
       $or: [
         { lastMessageAt: { $gte: new Date(Date.now() - TEAM_THREAD_MS) } },
         { lastTeamMessageAt: { $gte: new Date(Date.now() - TEAM_THREAD_MS) } },

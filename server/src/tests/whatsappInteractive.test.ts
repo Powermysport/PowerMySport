@@ -283,3 +283,16 @@ test("a topic menu follows the reply on its own, unless next steps are already g
     }
   );
 });
+
+test("an answer to a confirmed request is followed by a way to the team", async () => {
+  await withFetch(
+    () => true,
+    async (sent) => {
+      await deliver("9198", { reply: "Here is guidance.", firstContact: false, teamOffer: true });
+      const kinds = sent.map((s) => s.interactive?.type ?? s.type);
+      assert.deepEqual(kinds, ["text", "button"], "the answer first, then the offer");
+      const button = sent[1]!.interactive.action.buttons[0].reply;
+      assert.equal(button.id, "ask_team");
+    }
+  );
+});
