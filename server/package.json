@@ -89,6 +89,8 @@
     "test:child-history-data": "npm run build && node --test --test-force-exit dist/tests/childHistoryData.integration.test.js dist/tests/childRecordsRegistry.test.js",
     "eval:assistant": "npm run build && node dist/evals/assistant/run.js",
     "eval:assistant:model": "npm run build && node dist/evals/assistant/run.js --model --label model",
+    "eval:adaptive-intake": "npm run build && node dist/evals/adaptiveIntake/run.js",
+    "eval:adaptive-intake:model": "npm run build && node dist/evals/adaptiveIntake/run.js --model --label model",
     "test:season-plan": "npm run build && node --test --test-force-exit dist/tests/seasonPlan.integration.test.js",
     "prune:rankings": "ts-node src/scripts/pruneRankingHistory.ts"
   },
