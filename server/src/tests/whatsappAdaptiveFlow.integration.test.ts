@@ -919,3 +919,120 @@ describe("a parent reporting a problem with their own case", () => {
     assert.match(out.reply, /How old is your child/);
   });
 });
+
+describe("a request that follows an ordinary chat on the same number", () => {
+  const { User } = require("../client/models/User");
+  const { Player } = require("../client/models/Player");
+  const years = (n: number) => {
+    const d = new Date();
+    d.setUTCFullYear(d.getUTCFullYear() - n);
+    d.setUTCMonth(0, 1);
+    return d;
+  };
+  const seedAnuj = async () => {
+    const userId = new mongoose.Types.ObjectId();
+    await User.collection.insertOne({
+      _id: userId,
+      name: "Aarav Sharma",
+      email: `aarav-${userId}@test.com`,
+      phone: `+91 ${PHONE.slice(-10)}`,
+      city: "Chandigarh",
+      role: "Parent",
+      password: "x",
+    });
+    await Player.collection.insertOne({
+      userId,
+      createdAt: new Date(),
+      name: "Anuj Sharma",
+      dob: years(15),
+      chosenSport: "Cricket",
+    });
+  };
+  const OPENER_ANUJ =
+    "My son is anuj plays tennis. I want to know how he can start playing AITA tournaments.";
+  const chat = async function* () {
+    yield "Here is what I have on Anuj.";
+  };
+
+  it("starts a fresh request, keeps the real question, and tells the parent what the profile gave", async () => {
+    await seedAnuj();
+    // An ordinary chat message: the reader finds no request in it, so the usual assistant answers
+    // and an enquiry is opened for it, with the details the assistant noted.
+    await answerWhatsAppMessage(
+      msg("can you tell me what do you have on Anuj"),
+      chat,
+      {},
+      { extract: async () => ({}) }
+    );
+    await WhatsAppEnquiry.updateOne(
+      { phoneHash: hashPhone(PHONE) },
+      { $set: { childAge: 15, sport: "Cricket" } }
+    );
+
+    const { extract } = reader([
+      {
+        category: "tournaments",
+        sport: "tennis",
+        goal: "how he can start playing AITA tournaments",
+      },
+    ]);
+    const out = await answerWhatsAppMessage(msg(OPENER_ANUJ), noModel, {}, { extract });
+
+    assert.match(
+      out.reply,
+      /From Anuj's profile: 15 years old\. Area: Chandigarh\. I'll pass these on\./
+    );
+    assert.doesNotMatch(out.reply, /no other details/);
+    assert.match(out.reply, /competitive tournaments before/);
+
+    assert.equal(await WhatsAppEnquiry.countDocuments({}), 2, "the chat's enquiry was not reused");
+    const request = await WhatsAppEnquiry.findOne({ category: "tournaments" }).lean();
+    assert.equal(request.question, OPENER_ANUJ, "the request keeps the parent's real question");
+    assert.equal(
+      request.sport,
+      "Tennis",
+      "what the parent said wins over the profile and the chat"
+    );
+    assert.equal(request.childAge, 15);
+    const chatEnquiry = await WhatsAppEnquiry.findOne({ category: { $exists: false } }).lean();
+    assert.equal(chatEnquiry.sport, "Cricket", "the chat's enquiry is left as it was");
+  });
+
+  it("does not say there were no other details when the parent gave them all", async () => {
+    await seedAnuj();
+    const { extract } = reader([
+      { category: "tournaments", sport: "tennis", age: 15, goal: "start AITA tournaments" },
+    ]);
+    const out = await answerWhatsAppMessage(
+      msg("My son Anuj is 15 and plays tennis, how does he start AITA tournaments?"),
+      noModel,
+      {},
+      { extract }
+    );
+    assert.match(out.reply, /From Anuj's profile: Area: Chandigarh\. I'll pass these on\./);
+    assert.doesNotMatch(out.reply, /no other details/);
+  });
+
+  it("still picks up the parent's own unfinished request on the same topic", async () => {
+    const noRead = async () => {
+      throw new Error("a tapped topic has nothing to read");
+    };
+    await answerWhatsAppMessage(
+      msg("Tournaments & rankings", "menu_tournaments"),
+      noModel,
+      {},
+      { extract: noRead }
+    );
+    // The questions lapse (the two hours pass), and the parent comes back in their own words.
+    await WhatsAppEnquiry.updateOne({ phoneHash: hashPhone(PHONE) }, { $unset: { intake: 1 } });
+    const { extract } = reader([{ category: "tournaments", age: 12, sport: "tennis" }]);
+    await answerWhatsAppMessage(
+      msg("My son is 12 and plays tennis, how does he play tournaments?"),
+      noModel,
+      {},
+      { extract }
+    );
+    assert.equal(await WhatsAppEnquiry.countDocuments({}), 1, "the same request carried on");
+    assert.equal((await enquiry()).childAge, 12);
+  });
+});

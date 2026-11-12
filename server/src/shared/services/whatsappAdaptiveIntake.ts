@@ -7,7 +7,7 @@ import {
   type EnquiryCategory,
   type WhatsAppEnquiryDocument,
 } from "../../client/models/WhatsAppEnquiry";
-import { currentEnquiry, newEnquiry, plain, requestFollowUp } from "./whatsappEnquiries";
+import { newEnquiry, plain, requestFollowUp } from "./whatsappEnquiries";
 import { PERSONAL_CASE, chooseRoute, type GateDeps } from "./whatsappAnswerGate";
 import { queueLateInfoAlert } from "./whatsappTeamAlert";
 import type { ReplyButton } from "./whatsappInteractive";
@@ -434,7 +434,7 @@ function fillFromProfile(
     area = ` Area: ${city}.`;
   }
   if (!taken.length && !area) return "";
-  return `From ${child.name}'s profile: ${taken.join(", ") || "no other details"}.${area} I'll pass these on.`;
+  return `From ${child.name}'s profile:${taken.length ? ` ${taken.join(", ")}.` : ""}${area} I'll pass these on.`;
 }
 
 /** The first question, behind a line on what it is about and, for an account, what it already knows. */
@@ -458,12 +458,22 @@ async function begin(
   userId: string | undefined,
   now: Date
 ): Promise<IntakeReply> {
-  const current = await currentEnquiry(phoneHash, said, now);
+  // Looked up without creating one: `currentEnquiry` opens an enquiry when there is none, which
+  // would leave an empty one behind every time.
+  const latest = await WhatsAppEnquiry.findOne({
+    phoneHash,
+    closed: false,
+    lastMessageAt: { $gte: new Date(now.getTime() - ENQUIRY_IDLE_MS) },
+  }).sort({ lastMessageAt: -1 });
+  // Only a request this flow itself started on the same topic is picked up again (a parent who
+  // let the questions lapse and came back). An ordinary chat enquiry is never reused: it holds
+  // another question, and whatever the assistant noted on it may be about another child.
   const reusable =
-    current.followUpStatus === "none" &&
-    !current.confirmedAt &&
-    now.getTime() - current.createdAt.getTime() < ENQUIRY_IDLE_MS;
-  const e = reusable ? current : await newEnquiry(phoneHash, said, now);
+    latest !== null &&
+    latest.category === category &&
+    latest.followUpStatus === "none" &&
+    !latest.confirmedAt;
+  const e = reusable && latest ? latest : await newEnquiry(phoneHash, said, now);
   e.category = category;
   apply(e, extracted, "all");
 
