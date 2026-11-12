@@ -33,7 +33,7 @@ Player account:
 - /dashboard/wallet — Wallet & credits
 - /dashboard/saved — Saved venues / coaches
 - /notifications — Notifications
-- /settings — Account settings
+- /dashboard/settings — Account settings
 ${
   process.env.SHOP_IS_LIVE === "true"
     ? `

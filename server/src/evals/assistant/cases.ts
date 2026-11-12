@@ -467,6 +467,27 @@ export const ASSISTANT_CASES: AssistantCase[] = [
     neverCallsTools: ["record_enquiry"],
     why: "A greeting says nothing about a child, so nothing is recorded.",
   },
+  {
+    id: "account-earlier-answer-not-retracted",
+    category: "account-context",
+    channel: "whatsapp",
+    knownParent: true,
+    history: [
+      { role: "user", content: "can you tell me what you have on Aarav" },
+      {
+        role: "assistant",
+        content:
+          "Here's what I have on Aarav:" +
+          " Age 13, Tennis (his chosen sport), level intermediate, state Maharashtra." +
+          " Season plan: AITA CS7 (Pune) entered, AITA CS6 (Mumbai) shortlisted.",
+      },
+    ],
+    message: "can you change his sport to badminton",
+    replyNeverMatches: [
+      /disregard|please ignore|ignore (?:those|that|what I)|weren'?t from|were not from|not from (?:his|the) account|I (?:also )?need to correct (?:my|what)/i,
+    ],
+    why: "The saved chat keeps only words, not what a tool returned, so the next turn cannot see where an earlier fact came from. On a real number (2026-11-12) the assistant then told the parent to disregard true lines it had read from the account. Not reproduced on demand: the old prompt also passed both usable live samples, so a pass here is weak evidence and the prompt test in whatsappAssistantPrompt.test.ts is the real guard.",
+  },
 
   // ─── Guidance shape and next steps (WhatsApp) ───────────────────────────────
   {
