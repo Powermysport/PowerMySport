@@ -29,8 +29,19 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { sport } = await params;
   const guide = await fetchPathwayGuide(sport);
-  const name = guide?.sportName ?? sportFromSlug(sport)?.name;
-  if (!name) return { title: "Sport pathway" };
+
+  // Nothing published: answer with a real HTTP redirect or 404 here. Metadata
+  // resolves before the response starts streaming, so this is a true 307/404.
+  // Thrown from the component instead, Next has already committed a 200 and
+  // degrades to a meta refresh, so Google saw an empty indexable page and
+  // reported it as a Soft 404 (table-tennis, hockey, badminton, volleyball,
+  // swimming in Search Console).
+  if (!guide || guide.stages.length === 0) {
+    if (sportFromSlug(sport)) redirect("/roadmap");
+    notFound();
+  }
+
+  const name = guide.sportName;
 
   // No " | PowerMySport" suffix — the root layout's `%s | PowerMySport`
   // template appends it, and spelling it out here produced it twice.
