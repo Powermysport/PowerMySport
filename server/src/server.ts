@@ -19,6 +19,7 @@ import { startOutboxWorker } from "./shared/services/OutboxService";
 import { initializeScraperScheduler } from "./utils/scraperScheduler";
 import { initializeAitaRankingScheduler } from "./utils/aitaRankingScheduler";
 import { initializeAitaCalendarScheduler } from "./utils/aitaCalendarScheduler";
+import { initializeAicfCalendarScheduler } from "./utils/aicfCalendarScheduler";
 import { initializeAitaAcceptanceScheduler } from "./utils/aitaAcceptanceScheduler";
 import { initializeRankingDigestScheduler } from "./utils/rankingDigestScheduler";
 import { initializeOpportunityWatchScheduler } from "./utils/opportunityWatchScheduler";
@@ -202,6 +203,10 @@ const startServer = async () => {
           // deployed server only (NODE_ENV=production), or locally when
           // AITA_CALENDAR_CRON=on, because it writes to the one database.
           initializeAitaCalendarScheduler();
+
+          // Daily sweep of AICF's events page into the chess editions. Same rule:
+          // deployed server only, or locally when AICF_CALENDAR_CRON=on.
+          initializeAicfCalendarScheduler();
 
           // Wednesday and Saturday capture of who got into finished events (ranks
           // and sizes only). Deployed server only, or AITA_ACCEPTANCE_CRON=on.
