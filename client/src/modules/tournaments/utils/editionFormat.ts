@@ -55,9 +55,14 @@ export function upcomingEditionSnippet(input: {
   ageGroups?: string[] | undefined;
   organiser?: string | undefined;
   entriesCloseLabel?: string | undefined;
+  /** "13 Nov to 15 Nov 2026", when the event runs over several days. */
+  datesLabel?: string | undefined;
+  level?: string | undefined;
 }): string {
   const lead = [
-    `${input.title} starts ${input.startLabel}`,
+    input.datesLabel
+      ? `${input.title}, ${input.datesLabel}`
+      : `${input.title} starts ${input.startLabel}`,
     input.where ? `at ${input.where}` : null,
     input.ageGroups?.length ? `for ${input.ageGroups.join(", ")}` : null,
   ]
@@ -65,6 +70,7 @@ export function upcomingEditionSnippet(input: {
     .join(" ");
   return [
     `${lead}.`,
+    input.level ? `${input.level} level event.` : null,
     input.organiser ? `Organised by ${input.organiser}.` : null,
     input.entriesCloseLabel ? `Entries close ${input.entriesCloseLabel}.` : null,
   ]
@@ -82,7 +88,11 @@ export function editionSnippet(
       ageGroups?: string[] | undefined;
       organiser?: string | undefined;
       registrationDeadlineDate?: string | undefined;
+      endDate?: string | undefined;
+      level?: string | undefined;
     };
+    /** Federation name, used when the edition names no organiser of its own. */
+    federationName?: string | undefined;
     title: string;
     where: string | null;
     finished: boolean;
@@ -107,7 +117,12 @@ export function editionSnippet(
     startLabel: fmt(edition.startDate),
     where,
     ageGroups: edition.ageGroups,
-    organiser: edition.organiser,
+    organiser: edition.organiser || input.federationName,
+    level: edition.level,
+    datesLabel:
+      edition.endDate && new Date(edition.endDate).getTime() > new Date(edition.startDate).getTime()
+        ? `${fmt(edition.startDate)} to ${fmt(edition.endDate)}`
+        : undefined,
     // A deadline that has already passed is not a reason to click; leave it out.
     entriesCloseLabel:
       edition.registrationDeadlineDate && !hasDatePassed(edition.registrationDeadlineDate, now)

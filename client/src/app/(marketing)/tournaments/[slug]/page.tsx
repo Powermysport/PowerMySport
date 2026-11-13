@@ -82,7 +82,14 @@ export async function generateMetadata({
   // Word-boundary clamp: a hard slice used to cut the snippet mid-word.
   const description = clampText(
     editionSnippet(
-      { edition, title, where, finished, nextStartDate: nextInSeries?.startDate },
+      {
+        edition,
+        title,
+        where,
+        finished,
+        nextStartDate: nextInSeries?.startDate,
+        federationName: detail.federation?.name,
+      },
       formatShortDate
     ),
     155
@@ -105,7 +112,10 @@ export async function generateMetadata({
     // finished event, so it earns the slot the city would otherwise take.
     finished && nextInSeries
       ? `Next edition ${formatShortDate(nextInSeries.startDate)}`
-      : edition.city || null,
+      : // Many names already end in "(Chennai)"; repeating it wastes title width.
+        edition.city && !nameLower.includes(edition.city.toLowerCase())
+        ? edition.city
+        : null,
   ]
     .filter(Boolean)
     .join(" | ");
@@ -217,6 +227,8 @@ export default async function TournamentEditionPage({
             organiser: edition.organiser || federation?.name,
             status: edition.status,
             sport: edition.sportSlug,
+            ...(edition.level ? { level: edition.level } : {}),
+            ...(edition.ageGroups?.length ? { ageGroups: edition.ageGroups } : {}),
             ...(edition.registrationDeadlineDate
               ? { registrationDeadlineDate: edition.registrationDeadlineDate }
               : {}),

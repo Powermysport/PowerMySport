@@ -94,3 +94,27 @@ describe("editionSnippet", () => {
     );
   });
 });
+
+describe("upcomingEditionSnippet richer facts", () => {
+  it("states the date range, level and federation fallback", () => {
+    const out = editionSnippet(
+      {
+        edition: {
+          startDate: "2026-11-13",
+          endDate: "2026-11-15",
+          sportSlug: "chess",
+          level: "International",
+          ageGroups: ["Below 1700"],
+        },
+        title: "Eight Square 3rd FIDE Rated",
+        where: "Chennai",
+        finished: false,
+        federationName: "All India Chess Federation",
+      },
+      (d) => d
+    );
+    expect(out).toBe(
+      "Eight Square 3rd FIDE Rated, 2026-11-13 to 2026-11-15 at Chennai for Below 1700. International level event. Organised by All India Chess Federation."
+    );
+  });
+});

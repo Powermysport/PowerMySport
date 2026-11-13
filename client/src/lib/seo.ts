@@ -278,6 +278,8 @@ export function sportsEventJsonLd(input: {
   status?: "announced" | "ongoing" | "completed" | "cancelled";
   sport?: string;
   registrationDeadlineDate?: string;
+  level?: string;
+  ageGroups?: string[];
 }): JsonLdObject {
   const url = absoluteUrl(input.path);
   const locationName = input.venue || input.city;
@@ -296,6 +298,15 @@ export function sportsEventJsonLd(input: {
         : "https://schema.org/EventScheduled",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     ...(input.sport ? { sport: input.sport } : {}),
+    // Event rich results want an image; the site-wide share card is a real
+    // image of the brand, not a claim about the event.
+    image: [absoluteUrl("/opengraph-image")],
+    isAccessibleForFree: true,
+    inLanguage: "en-IN",
+    ...(input.ageGroups?.length
+      ? { audience: { "@type": "PeopleAudience", audienceType: input.ageGroups.join(", ") } }
+      : {}),
+    ...(input.level ? { keywords: `${input.level} ${input.sport ?? ""} tournament`.trim() } : {}),
     ...(locationName
       ? {
           location: {
