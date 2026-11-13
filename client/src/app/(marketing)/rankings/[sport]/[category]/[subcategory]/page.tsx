@@ -244,6 +244,7 @@ export default async function RankingListPage({
           <RankingFilters
             states={meta?.states ?? []}
             dates={dates ?? []}
+            scope={{ sport: sport.slug, category: combo.category, subcategory: combo.subcategory }}
             searchLabel={isJunior ? "Find your child on this list" : "Find a player"}
           />
         </div>
