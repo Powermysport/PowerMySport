@@ -45,8 +45,19 @@ export const answerMinScore = (): number => {
 
 export const aiAnswerEnabled = (): boolean => process.env.WHATSAPP_ADAPTIVE_AI_ANSWER !== "off";
 
-/** Requests the team always handles. Coaches and academies are matched by hand: none are listed. */
-const TEAM_ONLY: ReadonlySet<EnquiryCategory> = new Set<EnquiryCategory>(["coaching"]);
+/**
+ * Requests the team always handles. A coach or academy is matched by hand, because none are
+ * listed. Admissions, scholarships and fitness need a person who can look at this child's case:
+ * the knowledge base holds nothing on them, so a general answer would only say what it does not
+ * know, and the parent is better served by the questions that build the full picture and then the
+ * team's reply within 24 hours.
+ */
+const TEAM_ONLY: ReadonlySet<EnquiryCategory> = new Set<EnquiryCategory>([
+  "coaching",
+  "admissions",
+  "scholarships",
+  "fitness",
+]);
 
 /**
  * A request about the parent's own case is a job for a person with access to it, not for general
@@ -54,6 +65,13 @@ const TEAM_ONLY: ReadonlySet<EnquiryCategory> = new Set<EnquiryCategory>(["coach
  */
 export const PERSONAL_CASE =
   /\b(?:my|our)\s+(?:aita|registration|account|booking|payment|order|refund|ranking\s+points?)\b|\b(?:not working|doesn'?t work|failed|stuck|error|complain\w*|refund\w*|cancel(?:led|lation)?|deducted|wrongly)\b|\bcan'?t\s+(?:log\s?in|register|book|pay)\b|\b(?:talk|speak|connect)\b.{0,20}\b(?:someone|person|human|team|advisor|expert)\b/i;
+
+/**
+ * Finding a coach, an academy or a trial is matched by a person, whichever topic the parent
+ * picked: none are listed, and a general answer would only say so. Said in the request itself
+ * ("a coach for tournaments", "book a trial"), it goes to the team.
+ */
+export const WANTS_A_MATCH = /\b(?:coach(?:es|ing)?|academ(?:y|ies)|trials?|trainers?|tutors?)\b/i;
 
 export async function chooseRoute(
   category: EnquiryCategory,
@@ -67,6 +85,7 @@ export async function chooseRoute(
 
   if (!aiAnswerEnabled()) return decide("team", "switched off");
   if (TEAM_ONLY.has(category)) return decide("team", "team only");
+  if (WANTS_A_MATCH.test(said)) return decide("team", "team only");
   if (PERSONAL_CASE.test(said)) return decide("team", "personal case");
 
   let score = 0;

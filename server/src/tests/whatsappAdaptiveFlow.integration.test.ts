@@ -395,7 +395,7 @@ describe("every kind of request asks only what it needs", () => {
     [
       "next_coach",
       "Find a coach or academy",
-      /find a coach or academy/,
+      /find a coach or book a trial/,
       /Which sport does your child play/,
       "coaching",
     ],
@@ -454,28 +454,6 @@ describe("every kind of request asks only what it needs", () => {
     });
   }
 
-  it("choosing a sport asks age, what they play now, and what is wanted, and never the city", async () => {
-    const { extract, calls } = reader([
-      { age: 12 },
-      { playingContext: "Football and swimming" },
-      { goal: "Pick one to take seriously" },
-    ]);
-    const say = (text: string, replyId?: string) =>
-      answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract });
-
-    assert.match((await say("Choosing the right sport", "menu_sport")).reply, /How old/);
-    assert.match((await say("12")).reply, /Which sports does your child play or enjoy/);
-    assert.match((await say("football and swimming")).reply, /What would you like sport to do/);
-    const summary = await say("pick one to take seriously");
-    assert.match(summary.reply, /Here's what we've captured/);
-    assert.match(summary.reply, /Playing context: Football and swimming/);
-    assert.doesNotMatch(summary.reply, /Which city/);
-    assert.deepEqual(
-      calls.map((c) => c.hint),
-      ["age", "experience", "goal"]
-    );
-  });
-
   it("something else asks only what is wanted, then confirms", async () => {
     const { extract } = reader([{ goal: "Help with a school sports trial" }]);
     const say = (text: string, replyId?: string) =>
@@ -493,13 +471,22 @@ describe("every kind of request asks only what it needs", () => {
   });
 
   it("a coach request reaches the team as a coach request", async () => {
-    const { extract } = reader([{ sport: "tennis" }, { age: 11 }, { city: "Pune" }]);
+    const { extract } = reader([
+      { sport: "tennis" },
+      { age: 11 },
+      { city: "Pune" },
+      { area: "Baner" },
+      { timing: "weekday evenings" },
+    ]);
     const say = (text: string, replyId?: string) =>
       answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract });
     await say("Find a coach or academy", "next_coach");
     await say("tennis");
     await say("11");
     await say("Pune");
+    await say("Baner");
+    await say("weekday evenings");
+    await say("Group", "intake_format_group");
     await say("Yes", "intake_yes");
     const e = await enquiry();
     assert.deepEqual(e.assistance, ["coach"]);
@@ -733,7 +720,13 @@ describe("answered now, or left to the team", () => {
   });
 
   it("always sends a coach or academy request to the team, since none are listed", async () => {
-    const { extract } = reader([{ sport: "tennis" }, { age: 11 }, { city: "Pune" }]);
+    const { extract } = reader([
+      { sport: "tennis" },
+      { age: 11 },
+      { city: "Pune" },
+      { area: "Baner" },
+      { timing: "weekday evenings" },
+    ]);
     const all = { extract, retrieve: async () => [{ score: 0.95 }] };
     const say = (text: string, replyId?: string) =>
       answerWhatsAppMessage(msg(text, replyId), answering, {}, all);
@@ -741,6 +734,9 @@ describe("answered now, or left to the team", () => {
     await say("tennis");
     await say("11");
     await say("Pune");
+    await say("Baner");
+    await say("weekday evenings");
+    await say("Group", "intake_format_group");
     const out = await say("Yes", "intake_yes");
     assert.match(out.reply, /within 24 hours/);
     assert.equal((await enquiry()).answeredBy, "team");
@@ -1034,5 +1030,464 @@ describe("a request that follows an ordinary chat on the same number", () => {
     );
     assert.equal(await WhatsAppEnquiry.countDocuments({}), 1, "the same request carried on");
     assert.equal((await enquiry()).childAge, 12);
+  });
+});
+
+describe("a coach or trial request asks the leading questions the team needs", () => {
+  const COACH_OPENER =
+    "I need a badminton coach for my 10 year old daughter in Mumbai, weekday evenings.";
+  const READ = {
+    category: "coaching",
+    sport: "badminton",
+    age: 10,
+    city: "Mumbai",
+    timing: "weekday evenings",
+    goal: "Badminton coach",
+  };
+  const { FORMAT_BUTTONS } = require("../shared/services/whatsappAdaptiveIntake");
+
+  it("asks where, then group or one-to-one, then the budget, and never what the opener said", async () => {
+    const { extract, calls } = reader([
+      READ,
+      { area: "Andheri West" },
+      { budget: "around 5000 a month" },
+      { playingContext: "Three months of weekend classes" },
+    ]);
+    const say = (text: string, replyId?: string) =>
+      answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract });
+
+    const first = await say(COACH_OPENER);
+    assert.match(first.reply, /Happy to help you find a coach or book a trial/);
+    assert.match(first.reply, /Which area or locality/);
+    assert.doesNotMatch(first.reply, /How old|Which sport|Which city|days and times/);
+
+    const format = await say("Andheri West");
+    assert.match(format.reply, /group sessions or one-to-one/);
+    assert.deepEqual(
+      format.buttons.map((b: { title: string }) => b.title),
+      ["Group", "One-to-one", "Either"]
+    );
+
+    const budget = await say("One-to-one", "intake_format_individual");
+    assert.match(budget.reply, /monthly budget/);
+    assert.deepEqual(
+      budget.buttons.map((b: { title: string }) => b.title),
+      ["Skip"]
+    );
+    assert.equal(calls.length, 2, "a tap on group or one-to-one needs no reading");
+
+    const experience = await say("around 5000 a month");
+    assert.match(experience.reply, /Where is your child at/);
+    const summary = await say("She has just started");
+    assert.match(summary.reply, /Location: Andheri West, Mumbai/);
+    assert.match(summary.reply, /Timing: weekday evenings/);
+    assert.match(summary.reply, /Format: One-to-one/);
+    assert.match(summary.reply, /Budget: around 5000 a month/);
+
+    const done = await say("Yes, correct", "intake_yes");
+    assert.match(done.reply, /within 24 hours/);
+    assert.match(done.reply, /preferred academy/);
+    assert.doesNotMatch(done.reply, /don't list|do not list|can't|cannot/i, "no hedging");
+
+    const e = await enquiry();
+    assert.equal(e.area, "Andheri West");
+    assert.equal(e.timing, "weekday evenings");
+    assert.equal(e.sessionFormat, "individual");
+    assert.equal(e.budget, "around 5000 a month");
+    assert.deepEqual(e.assistance, ["coach"]);
+    assert.match(e.followUpSummary, /^Coach or academy\./);
+    assert.match(e.followUpSummary, /Format: One-to-one/);
+    assert.match(e.followUpSummary, /Timing: weekday evenings/);
+  });
+
+  it("lets the parent skip the budget with a tap, and never asks for it again", async () => {
+    const { extract } = reader([READ, { area: "Baner" }, { playingContext: "Just started" }]);
+    const say = (text: string, replyId?: string) =>
+      answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract });
+
+    await say(COACH_OPENER);
+    await say("Baner");
+    const budget = await say("Group", "intake_format_group");
+    assert.match(budget.reply, /monthly budget/);
+    const next = await say("Skip", "intake_budget_skip");
+    assert.match(next.reply, /Where is your child at/, "the budget is not asked again");
+    const summary = await say("Just started");
+    assert.match(summary.reply, /Format: Group/);
+    assert.doesNotMatch(summary.reply, /Budget:/);
+    assert.equal((await enquiry()).budget, undefined);
+  });
+
+  it("understands typed answers for the area, group or one-to-one, and skipping, when the reader is down", async () => {
+    let first = true;
+    const extract = async () => {
+      if (first) {
+        first = false;
+        return READ;
+      }
+      throw new Error("503 unavailable");
+    };
+    const say = (text: string, replyId?: string) =>
+      answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract });
+
+    assert.match((await say(COACH_OPENER)).reply, /Which area or locality/);
+    assert.match((await say("Powai")).reply, /group sessions or one-to-one/);
+    assert.match((await say("we would like a group batch")).reply, /monthly budget/);
+    assert.match((await say("no")).reply, /Where is your child at/);
+    const summary = await say("beginner");
+    assert.match(summary.reply, /Location: Powai, Mumbai/);
+    assert.match(summary.reply, /Format: Group/);
+    assert.doesNotMatch(summary.reply, /Budget:/);
+  });
+
+  it("recognises one-to-one, private and no preference in a typed answer", async () => {
+    for (const [typed, expected] of [
+      ["one to one please", "One-to-one"],
+      ["private coaching", "One-to-one"],
+      ["either is fine", "Either"],
+    ] as const) {
+      await Promise.all([WhatsAppEnquiry.deleteMany({}), WhatsAppConversation.deleteMany({})]);
+      let first = true;
+      const extract = async () => {
+        if (first) {
+          first = false;
+          return READ;
+        }
+        throw new Error("503 unavailable");
+      };
+      const say = (text: string) => answerWhatsAppMessage(msg(text), noModel, {}, { extract });
+      await say(COACH_OPENER);
+      await say("Powai");
+      await say(typed);
+      await say("skip");
+      const summary = await say("beginner");
+      assert.match(summary.reply, new RegExp(`Format: ${expected}`), typed);
+    }
+  });
+
+  it("may ask up to six questions for a bare coach request, and no more", async () => {
+    const { extract } = reader([
+      { category: "coaching" },
+      { sport: "badminton" },
+      { age: 10 },
+      { city: "Pune" },
+      { area: "Baner" },
+      { timing: "weekends" },
+    ]);
+    const say = (text: string, replyId?: string) =>
+      answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract });
+
+    assert.match((await say("I need a coach")).reply, /Which sport/);
+    assert.match((await say("badminton")).reply, /How old/);
+    assert.match((await say("10")).reply, /Which city/);
+    assert.match((await say("Pune")).reply, /area or locality/);
+    assert.match((await say("Baner")).reply, /days and times/);
+    assert.match((await say("weekends")).reply, /group sessions or one-to-one/);
+    const summary = await say("Group", "intake_format_group");
+    assert.match(summary.reply, /Here's what we've captured/, "a seventh question is not asked");
+    assert.doesNotMatch(summary.reply, /monthly budget/);
+  });
+
+  it("sends a request that mentions a coach to the team, whichever topic it is filed under", async () => {
+    const { extract } = reader([
+      {
+        category: "tournaments",
+        age: 13,
+        sport: "tennis",
+        city: "Pune",
+        playingContext: "Plays club tournaments",
+        goal: "A coach to prepare him for AITA tournaments",
+      },
+    ]);
+    const deps = { extract, retrieve: async () => [{ score: 0.95 }] };
+    await answerWhatsAppMessage(
+      msg("My son is 13, plays tennis in Pune, and needs a coach for AITA tournaments."),
+      noModel,
+      {},
+      deps
+    );
+    const done = await answerWhatsAppMessage(msg("Yes", "intake_yes"), noModel, {}, deps);
+    assert.match(done.reply, /within 24 hours/);
+    assert.equal((await enquiry()).answeredBy, "team");
+  });
+
+  it("keeps its buttons inside WhatsApp's limits", () => {
+    assert.ok(FORMAT_BUTTONS.length <= 3);
+    for (const button of FORMAT_BUTTONS) {
+      assert.ok(button.title.length <= 20, button.title);
+      assert.match(button.id, /^intake_/, "taps stay inside the questions");
+    }
+  });
+});
+
+describe("admissions, scholarships, fitness and choosing a sport ask their own leading questions", () => {
+  const titles = (out: { buttons?: Array<{ title: string }> }) =>
+    (out.buttons ?? []).map((b) => b.title);
+  const sayWith = (extract: unknown) => (text: string, replyId?: string) =>
+    answerWhatsAppMessage(msg(text, replyId), noModel, {}, { extract } as never);
+
+  it("admissions: asks class stated aside, school or college by tap, city, and the institutions, which may be skipped", async () => {
+    const { extract } = reader([
+      {
+        category: "admissions",
+        sport: "tennis",
+        grade: "Class 9, CBSE",
+        playingContext: "Plays at state level",
+        goal: "Admission through a sports quota",
+      },
+      { age: 14 },
+      { city: "Chandigarh" },
+    ]);
+    const say = sayWith(extract);
+
+    const first = await say(
+      "My son is in Class 9 CBSE and plays tennis at state level. We want to know about admissions through a sports quota."
+    );
+    assert.match(first.reply, /Happy to help with school and college admissions through sport/);
+    assert.match(first.reply, /How old is your child/);
+    assert.doesNotMatch(first.reply, /Which class|Which sport/, "class and sport were said");
+
+    const level = await say("14");
+    assert.match(level.reply, /school admission, college admission, or both/);
+    assert.deepEqual(titles(level), ["School", "College", "Both"]);
+
+    const city = await say("School", "intake_admission_school");
+    assert.match(city.reply, /Which city/);
+
+    const targets = await say("Chandigarh");
+    assert.match(targets.reply, /schools or colleges you already have in mind/);
+    assert.deepEqual(titles(targets), ["Skip"]);
+
+    const summary = await say("Skip", "intake_targets_skip");
+    assert.match(summary.reply, /Class and board: Class 9, CBSE/);
+    assert.match(summary.reply, /Admission: School/);
+    assert.match(summary.reply, /Location: Chandigarh/);
+    assert.doesNotMatch(summary.reply, /Institutions in mind/);
+
+    const done = await say("Yes, correct", "intake_yes");
+    assert.match(done.reply, /within 24 hours/);
+    assert.match(done.reply, /report cards, certificates or tournament results/);
+    const e = await enquiry();
+    assert.equal(e.category, "admissions");
+    assert.equal(e.grade, "Class 9, CBSE");
+    assert.equal(e.admission, "school");
+    assert.equal(e.targets, undefined);
+    assert.equal(e.answeredBy, "team");
+    assert.match(e.followUpSummary, /^School and college admissions\./);
+  });
+
+  it("admissions: takes the institutions the parent names, and reads college and both from typed words", async () => {
+    const { extract } = reader([
+      {
+        category: "admissions",
+        sport: "badminton",
+        age: 16,
+        grade: "Class 11, state board",
+        playingContext: "Won district titles",
+        goal: "College admission through sport",
+        city: "Pune",
+      },
+      { admission: "both" },
+      { targets: "Symbiosis and Fergusson College" },
+    ]);
+    const say = sayWith(extract);
+    const first = await say(
+      "My son is 16, Class 11, plays badminton in Pune, wants college admission through sport."
+    );
+    assert.match(
+      first.reply,
+      /school admission, college admission, or both/,
+      "level is still to ask"
+    );
+    const targets = await say("both");
+    assert.match(targets.reply, /schools or colleges you already have in mind/);
+    const summary = await say("Symbiosis and Fergusson College");
+    assert.match(summary.reply, /Admission: School and college/);
+    assert.match(summary.reply, /Institutions in mind: Symbiosis and Fergusson College/);
+  });
+
+  it("scholarships: asks the state and the kind of support, and never the city", async () => {
+    const { extract } = reader([
+      {
+        category: "scholarships",
+        age: 15,
+        sport: "swimming",
+        playingContext: "Swims at state level",
+        goal: "Scholarships she could apply for",
+      },
+      { state: "Maharashtra" },
+    ]);
+    const say = sayWith(extract);
+
+    const first = await say(
+      "My daughter is 15 and swims at state level. Are there any scholarships she could apply for?"
+    );
+    assert.match(first.reply, /Happy to help with scholarships and sponsorships/);
+    assert.match(first.reply, /Which state does your child compete or train in/);
+    assert.doesNotMatch(first.reply, /How old|Which sport|Which city/);
+
+    const support = await say("Maharashtra");
+    assert.match(support.reply, /What kind of support are you looking for/);
+    assert.deepEqual(titles(support), ["Fees", "Kit", "Travel"]);
+
+    const summary = await say("Fees", "intake_support_fees");
+    assert.match(summary.reply, /State: Maharashtra/);
+    assert.match(summary.reply, /Support wanted: fees/);
+    assert.doesNotMatch(summary.reply, /Which city/);
+
+    const done = await say("Yes", "intake_yes");
+    assert.match(done.reply, /achievements, certificates or rankings/);
+    assert.equal((await enquiry()).supportType, "fees");
+  });
+
+  it("scholarships: takes a typed kind of support, and the plain answer when the reader is down", async () => {
+    let first = true;
+    const extract = async () => {
+      if (first) {
+        first = false;
+        return {
+          category: "scholarships",
+          age: 15,
+          sport: "swimming",
+          playingContext: "State level",
+          goal: "Scholarships",
+        };
+      }
+      throw new Error("503 unavailable");
+    };
+    const say = sayWith(extract);
+    await say("Scholarships for my 15 year old state level swimmer?");
+    await say("Karnataka");
+    const summary = await say("fees and travel to meets");
+    assert.match(summary.reply, /State: Karnataka/);
+    assert.match(summary.reply, /Support wanted: fees and travel to meets/);
+  });
+
+  it("fitness: asks the hours a week and the city, and never asks for medical details", async () => {
+    const { extract } = reader([
+      {
+        category: "fitness",
+        age: 14,
+        sport: "football",
+        goal: "Knee pain after training",
+      },
+      { trainingHours: "6 hours a week" },
+      { city: "Pune" },
+    ]);
+    const say = sayWith(extract);
+
+    const first = await say("My 14 year old son plays football and gets knee pain after training.");
+    assert.match(first.reply, /Happy to help with fitness and sports support/);
+    assert.match(first.reply, /How many hours a week does your child train/);
+    assert.doesNotMatch(first.reply, /doctor|medical|diagnos|report/i);
+
+    const city = await say("about 6 hours a week");
+    assert.match(city.reply, /Which city/);
+    assert.doesNotMatch(city.reply, /doctor|medical|diagnos|report/i);
+
+    const summary = await say("Pune");
+    assert.match(summary.reply, /Training hours: 6 hours a week/);
+    assert.match(summary.reply, /Your request: Knee pain after training/);
+    assert.doesNotMatch(summary.reply, /doctor|medical|diagnos|report/i);
+  });
+
+  it("choosing a sport: also asks the hours a week and a budget that may be skipped", async () => {
+    const { extract, calls } = reader([
+      { age: 12 },
+      { playingContext: "Football and swimming" },
+      { goal: "Pick one to take seriously" },
+      { trainingHours: "about 5 hours a week" },
+    ]);
+    const say = sayWith(extract);
+
+    assert.match((await say("Choosing the right sport", "menu_sport")).reply, /How old/);
+    assert.match((await say("12")).reply, /Which sports does your child play or enjoy/);
+    assert.match((await say("football and swimming")).reply, /What would you like sport to do/);
+    assert.match(
+      (await say("pick one to take seriously")).reply,
+      /hours a week could your child give to sport/
+    );
+    const budget = await say("about 5 hours a week");
+    assert.match(budget.reply, /monthly budget for sport/);
+    assert.deepEqual(titles(budget), ["Skip"]);
+    const summary = await say("Skip", "intake_budget_skip");
+    assert.match(summary.reply, /Here's what we've captured/, "a sixth question is not asked");
+    assert.match(summary.reply, /Training hours: about 5 hours a week/);
+    assert.doesNotMatch(summary.reply, /Budget:/);
+    assert.doesNotMatch(summary.reply, /Which city/);
+    assert.deepEqual(
+      calls.map((c) => c.hint),
+      ["age", "experience", "goal", "hours"]
+    );
+  });
+
+  it("asks admissions up to six questions from a bare tap, and then summarises", async () => {
+    const { extract } = reader([
+      { sport: "tennis" },
+      { age: 14 },
+      { grade: "Class 9, CBSE" },
+      { city: "Pune" },
+      { playingContext: "State level" },
+    ]);
+    const say = sayWith(extract);
+    assert.match((await say("School & college entry", "menu_admissions")).reply, /Which sport/);
+    assert.match((await say("tennis")).reply, /How old/);
+    assert.match((await say("14")).reply, /Which class is your child in/);
+    assert.match(
+      (await say("Class 9, CBSE")).reply,
+      /school admission, college admission, or both/
+    );
+    assert.match((await say("Both", "intake_admission_both")).reply, /Which city/);
+    assert.match((await say("Pune")).reply, /What level does your child play at/);
+    const summary = await say("State level");
+    assert.match(summary.reply, /Here's what we've captured/, "a seventh question is not asked");
+    assert.match(summary.reply, /Admission: School and college/);
+    assert.doesNotMatch(summary.reply, /schools or colleges you already have in mind/);
+  });
+
+  it("asks fitness up to five questions from a bare tap, and then summarises", async () => {
+    const { extract } = reader([
+      { age: 13 },
+      { sport: "cricket" },
+      { goal: "Stamina" },
+      { trainingHours: "4 hours" },
+      { city: "Delhi" },
+    ]);
+    const say = sayWith(extract);
+    assert.match((await say("Fitness & sports support", "menu_fitness")).reply, /How old/);
+    assert.match((await say("13")).reply, /Which sport/);
+    assert.match((await say("cricket")).reply, /What would you like help with/);
+    assert.match((await say("stamina")).reply, /How many hours a week does your child train/);
+    assert.match((await say("4 hours")).reply, /Which city/);
+    const summary = await say("Delhi");
+    assert.match(summary.reply, /Here's what we've captured/);
+    assert.match(summary.reply, /Training hours: 4 hours/);
+  });
+
+  it("keeps every button inside WhatsApp's limits", async () => {
+    const { extract } = reader([
+      { category: "admissions" },
+      { sport: "tennis" },
+      { age: 14 },
+      { grade: "Class 9" },
+    ]);
+    const say = sayWith(extract);
+    const seen: Array<Array<{ id: string; title: string }>> = [];
+    for (const [text, replyId] of [
+      ["I need admission help", undefined],
+      ["tennis", undefined],
+      ["14", undefined],
+      ["Class 9", undefined],
+    ] as const) {
+      const out = await say(text, replyId);
+      if (out.buttons) seen.push(out.buttons);
+    }
+    assert.ok(seen.length >= 1, "at least the admission choice has buttons");
+    for (const buttons of seen) {
+      assert.ok(buttons.length <= 3);
+      for (const b of buttons) {
+        assert.ok(b.title.length <= 20, b.title);
+        assert.match(b.id, /^intake_/);
+      }
+    }
   });
 });

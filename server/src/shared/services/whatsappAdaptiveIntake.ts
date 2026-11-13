@@ -5,6 +5,7 @@ import {
   WhatsAppEnquiry,
   type AdaptiveAsking,
   type EnquiryCategory,
+  type SessionFormat,
   type WhatsAppEnquiryDocument,
 } from "../../client/models/WhatsAppEnquiry";
 import { newEnquiry, plain, requestFollowUp } from "./whatsappEnquiries";
@@ -100,6 +101,20 @@ const CONFIRM_BUTTONS: ReplyButton[] = [
 
 /** Follow-up questions asked at most, however much is still missing. */
 export const MAX_FOLLOW_UPS = 3;
+/**
+ * Some requests have more to settle before the team can act (where and when for a coach, the
+ * class and the institutions for admissions), so they may ask more. Every other kind keeps the
+ * lower limit, so a parent is never quizzed for the sake of it.
+ */
+const FOLLOW_UP_CAP: Partial<Record<EnquiryCategory, number>> = {
+  coaching: 6,
+  admissions: 6,
+  scholarships: 5,
+  fitness: 5,
+  sport: 5,
+};
+export const followUpCap = (category: EnquiryCategory): number =>
+  FOLLOW_UP_CAP[category] ?? MAX_FOLLOW_UPS;
 /** How long a half-finished conversation is remembered. Same as the coach questions. */
 export const ADAPTIVE_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -109,6 +124,16 @@ const QUESTION: Record<Field, string> = {
   sport: "Which sport does your child play?",
   age: "How old is your child?",
   city: "Which city are you based in?",
+  area: "Which area or locality would suit for training? For example Sector 22 or Baner.",
+  timing: "What days and times work best? For example weekday evenings or weekend mornings.",
+  format: "Would you prefer group sessions or one-to-one?",
+  budget: "Do you have a monthly budget in mind? You can skip this.",
+  grade: "Which class is your child in, and which board? For example Class 9, CBSE.",
+  admission: "Is this for school admission, college admission, or both?",
+  targets: "Are there any schools or colleges you already have in mind? You can skip this.",
+  state: "Which state does your child compete or train in?",
+  support: "What kind of support are you looking for? For example fees, kit or travel.",
+  hours: "How many hours a week does your child train?",
   experience: "What has your child played or achieved so far, and how do they train?",
   goal: "Is there anything specific you would like us to help with?",
 };
@@ -128,6 +153,8 @@ const QUESTION_FOR: Partial<Record<EnquiryCategory, Partial<Record<Field, string
   sport: {
     experience: "Which sports does your child play or enjoy at the moment?",
     goal: "What would you like sport to do for your child, for example fitness, fun or a competitive path?",
+    hours: "How many hours a week could your child give to sport?",
+    budget: "Do you have a monthly budget for sport in mind? You can skip this.",
   },
   pathway: {
     experience: "How far has your child come in the sport so far?",
@@ -136,9 +163,11 @@ const QUESTION_FOR: Partial<Record<EnquiryCategory, Partial<Record<Field, string
   scholarships: {
     experience:
       "What has your child achieved so far in the sport, such as rankings, medals or state-level play?",
-    goal: "What kind of support are you looking for, for example a scholarship or a sponsor?",
+    goal: "Is there a particular scholarship, sponsor or institution you have in mind?",
   },
   admissions: {
+    experience:
+      "What level does your child play at in the sport, and what have they achieved so far?",
     goal: "What are you looking for, for example admission to a school or college through sport?",
   },
   fitness: {
@@ -155,26 +184,28 @@ const INTRO: Partial<Record<EnquiryCategory, string>> = {
   sport: "Happy to help you choose the right sport.",
   start: "Happy to help your child get started or improve.",
   coaching:
-    "Happy to help you find a coach or academy. Our team matches these by hand, so a few details first.",
+    "Happy to help you find a coach or book a trial. Our team will match you personally, so a few details first.",
   pathway: "Happy to help you understand the sports pathway.",
-  scholarships: "Happy to help with scholarships and sponsorships.",
-  admissions: "Happy to help with school and college admissions through sport.",
+  scholarships:
+    "Happy to help with scholarships and sponsorships. A few details first so our team can look at the right options.",
+  admissions:
+    "Happy to help with school and college admissions through sport. A few details first so our team can guide you properly.",
   fitness: "Happy to help with fitness and sports support.",
 };
 
 /**
  * What to ask for each kind of request, most useful first. Only what that request needs: choosing
- * a sport does not ask where the family lives, and "something else" asks only what is wanted.
+ * a sport does not ask for a class, and "something else" asks only what is wanted.
  */
 const CHECKLIST: Record<EnquiryCategory, Field[]> = {
   tournaments: ["sport", "age", "city", "experience", "goal"],
   start: ["sport", "age", "city", "experience", "goal"],
-  coaching: ["sport", "age", "city", "experience", "goal"],
-  sport: ["age", "experience", "goal"],
+  coaching: ["sport", "age", "city", "area", "timing", "format", "budget", "experience", "goal"],
+  sport: ["age", "experience", "goal", "hours", "budget", "city"],
   pathway: ["sport", "age", "experience", "goal"],
-  scholarships: ["sport", "age", "experience", "city", "goal"],
-  admissions: ["sport", "age", "city", "goal"],
-  fitness: ["age", "sport", "goal"],
+  scholarships: ["sport", "age", "experience", "state", "support", "goal"],
+  admissions: ["sport", "age", "grade", "admission", "city", "experience", "targets", "goal"],
+  fitness: ["age", "sport", "goal", "hours", "city"],
   other: ["goal"],
 };
 
@@ -208,10 +239,14 @@ export const ADAPTIVE_CATEGORY_FOR_REPLY: Record<string, EnquiryCategory> = {
 const FIX_QUESTION = "No problem. What should I change? Tell me in your own words.";
 
 const ACK_EXTRA: Partial<Record<EnquiryCategory, string>> = {
+  coaching:
+    "If you have a preferred academy or any other details you'd like us to consider, you can share them here too.",
   tournaments:
     "If you have any recent tournament results or other details you'd like us to consider, you can share them here too.",
   scholarships:
     "If you have achievements, certificates or rankings you'd like us to consider, you can share them here too.",
+  admissions:
+    "If you have report cards, certificates or tournament results you'd like us to consider, you can share them here too.",
 };
 const ACK_EXTRA_DEFAULT =
   "If there is anything else you'd like us to consider, you can share it here too.";
@@ -219,12 +254,154 @@ const ACK_EXTRA_DEFAULT =
 export const acknowledgement = (reference: string, category?: EnquiryCategory): string =>
   `Thank you for sharing this with PowerMySport! We've captured your request (${reference}). Our team will review the details and get back to you within 24 hours.\n\n${(category && ACK_EXTRA[category]) || ACK_EXTRA_DEFAULT}`;
 
+// ─── The details a request can hold ───────────────────────────────────────────
+// One table, read by the question picker, the saving, the summary and the typed-answer fallbacks,
+// so a new detail is one entry here and not a change in five places.
+
+/** A button that stands for an answer. */
+interface Tap {
+  id: string;
+  title: string;
+  value: string;
+}
+
+/** A detail kept as short text on the enquiry, and read back by the reader under the same name. */
+type TextProp =
+  "area" | "timing" | "budget" | "grade" | "targets" | "state" | "supportType" | "trainingHours";
+interface TextDetail {
+  prop: TextProp;
+  max: number;
+  /** The summary line's label. */
+  label: string;
+  /** A parent may pass it over: a Skip button, or "skip" and "no" typed. */
+  skippable?: boolean;
+  /** Buttons that stand for an answer, next to typing one. */
+  taps?: Tap[];
+}
+
+const SKIP_WORDS = /^(skip|no|none|nothing|na|n\/a|nahi|nahin|not sure|flexible|no budget)[.!]*$/i;
+const skipId = (field: Field): string => `intake_${field}_skip`;
+/** Kept under its old name: the budget's Skip button. */
+export const BUDGET_SKIP_ID = skipId("budget");
+
+const TEXT_DETAILS: Partial<Record<Field, TextDetail>> = {
+  // Shown within the Location line, so its label is not used.
+  area: { prop: "area", max: 80, label: "Area" },
+  timing: { prop: "timing", max: 120, label: "Timing" },
+  budget: { prop: "budget", max: 60, label: "Budget", skippable: true },
+  grade: { prop: "grade", max: 60, label: "Class and board" },
+  targets: { prop: "targets", max: 120, label: "Institutions in mind", skippable: true },
+  state: { prop: "state", max: 40, label: "State" },
+  support: {
+    prop: "supportType",
+    max: 80,
+    label: "Support wanted",
+    taps: [
+      { id: "intake_support_fees", title: "Fees", value: "fees" },
+      { id: "intake_support_kit", title: "Kit", value: "kit" },
+      { id: "intake_support_travel", title: "Travel", value: "travel" },
+    ],
+  },
+  hours: { prop: "trainingHours", max: 40, label: "Training hours" },
+};
+
+/** A detail with a fixed set of answers, each a tap. */
+interface ChoiceDetail {
+  prop: "sessionFormat" | "admission";
+  label: string;
+  taps: Tap[];
+  /** How each stored value reads in the summary. */
+  display: Record<string, string>;
+  /** The answer in a typed reply, when the reader could not be asked. */
+  parse: (said: string) => string | undefined;
+}
+
+/** Group or one-to-one from a typed answer. */
+function formatFrom(said: string): SessionFormat | undefined {
+  if (/\b(either|any|both|no preference|doesn.?t matter)\b/i.test(said)) return "either";
+  if (/\bone[- ]?(to|on)[- ]?one\b|\bindividual\b|\bprivate\b|\bpersonal\b|\bsolo\b/i.test(said))
+    return "individual";
+  if (/\b(group|batch)\b/i.test(said)) return "group";
+  return undefined;
+}
+
+/** School, college or both from a typed answer. */
+function admissionFrom(said: string): "school" | "college" | "both" | undefined {
+  const school = /\bschool\b/i.test(said);
+  const college = /\b(college|university|degree|graduation)\b/i.test(said);
+  if (/\bboth\b/i.test(said) || (school && college)) return "both";
+  if (college) return "college";
+  if (school) return "school";
+  return undefined;
+}
+
+const CHOICE_DETAILS: Partial<Record<Field, ChoiceDetail>> = {
+  format: {
+    prop: "sessionFormat",
+    label: "Format",
+    taps: [
+      { id: "intake_format_group", title: "Group", value: "group" },
+      { id: "intake_format_individual", title: "One-to-one", value: "individual" },
+      { id: "intake_format_either", title: "Either", value: "either" },
+    ],
+    display: { group: "Group", individual: "One-to-one", either: "Either" },
+    parse: formatFrom,
+  },
+  admission: {
+    prop: "admission",
+    label: "Admission",
+    taps: [
+      { id: "intake_admission_school", title: "School", value: "school" },
+      { id: "intake_admission_college", title: "College", value: "college" },
+      { id: "intake_admission_both", title: "Both", value: "both" },
+    ],
+    display: { school: "School", college: "College", both: "School and college" },
+    parse: admissionFrom,
+  },
+};
+
+const asButtons = (taps: Tap[]): ReplyButton[] => taps.map(({ id, title }) => ({ id, title }));
+export const FORMAT_BUTTONS: ReplyButton[] = asButtons(CHOICE_DETAILS.format!.taps);
+
+/** What a question offers to tap, if anything. */
+function buttonsFor(field: Field): ReplyButton[] | undefined {
+  const choice = CHOICE_DETAILS[field];
+  if (choice) return asButtons(choice.taps);
+  const text = TEXT_DETAILS[field];
+  if (text?.taps) return asButtons(text.taps);
+  if (text?.skippable) return [{ id: skipId(field), title: "Skip" }];
+  return undefined;
+}
+
+/** The enquiry's own fields, read and written by name for the table above. */
+const store = (e: WhatsAppEnquiryDocument): Record<string, string | undefined> =>
+  e as unknown as Record<string, string | undefined>;
+
+/**
+ * An answer that needs no reading: a tap, or a typed pass on something skippable. Returns the
+ * value to store, "skip" to carry on without one, or null when the answer has to be read.
+ */
+function shortcutFor(
+  field: Field,
+  replyId: string | null | undefined,
+  answer: string
+): { prop: string; value: string } | "skip" | null {
+  const choice = CHOICE_DETAILS[field];
+  const text = TEXT_DETAILS[field];
+  const tap = (choice?.taps ?? text?.taps)?.find((t) => t.id === replyId);
+  if (tap) return { prop: (choice?.prop ?? text?.prop)!, value: tap.value };
+  if (text?.skippable && (replyId === skipId(field) || SKIP_WORDS.test(answer))) return "skip";
+  return null;
+}
+
 const present = (e: WhatsAppEnquiryDocument, field: Field): boolean => {
   if (field === "sport") return Boolean(e.sport);
   if (field === "age") return e.childAge !== undefined;
   if (field === "city") return Boolean(e.city);
   if (field === "experience") return Boolean(e.playingContext);
-  return Boolean(e.objective);
+  if (field === "goal") return Boolean(e.objective);
+  const detail = CHOICE_DETAILS[field] ?? TEXT_DETAILS[field];
+  return detail ? Boolean(store(e)[detail.prop]) : false;
 };
 
 /** The next question worth asking: the first missing detail not asked before, within the cap. */
@@ -233,7 +410,7 @@ function nextQuestion(
   category: EnquiryCategory,
   asked: AdaptiveAsking[]
 ): Field | null {
-  if (asked.length >= MAX_FOLLOW_UPS) return null;
+  if (asked.length >= followUpCap(category)) return null;
   for (const field of CHECKLIST[category] ?? []) {
     if (!present(e, field) && !asked.includes(field)) return field;
   }
@@ -256,6 +433,11 @@ function apply(e: WhatsAppEnquiryDocument, x: Extracted, overwrite: Field[] | "a
   if (x.playingContext && can("experience")) e.playingContext = x.playingContext;
   if (x.goal && can("goal")) e.objective = x.goal;
   if (x.childName && !e.childName) e.childName = x.childName;
+  const read = x as Record<string, unknown>;
+  for (const [field, detail] of Object.entries({ ...TEXT_DETAILS, ...CHOICE_DETAILS })) {
+    const value = read[detail!.prop];
+    if (typeof value === "string" && value && can(field as Field)) store(e)[detail!.prop] = value;
+  }
 }
 
 /** What the model would have read, when it could not be asked: the answer to the question put. */
@@ -268,6 +450,17 @@ function fallback(hint: ExtractHint, said: string): Extracted {
     const age = parseAge(said);
     return age !== undefined ? { age } : {};
   }
+  const choice = CHOICE_DETAILS[hint as Field];
+  if (choice) {
+    const value = choice.parse(said);
+    return value ? ({ [choice.prop]: value } as Extracted) : {};
+  }
+  const text = TEXT_DETAILS[hint as Field];
+  if (text) {
+    const value =
+      text.skippable && SKIP_WORDS.test(said.trim()) ? undefined : plain(said, text.max);
+    return value ? ({ [text.prop]: value } as Extracted) : {};
+  }
   const value = plain(said, hint === "sport" ? 40 : 240);
   if (!value) return {};
   if (hint === "sport") return { sport: value };
@@ -276,13 +469,20 @@ function fallback(hint: ExtractHint, said: string): Extracted {
   return {};
 }
 
-const knownOf = (e: WhatsAppEnquiryDocument): Extracted => ({
-  ...(e.childAge !== undefined ? { age: e.childAge } : {}),
-  ...(e.sport ? { sport: e.sport } : {}),
-  ...(e.city ? { city: e.city } : {}),
-  ...(e.playingContext ? { playingContext: e.playingContext } : {}),
-  ...(e.objective ? { goal: e.objective } : {}),
-});
+const knownOf = (e: WhatsAppEnquiryDocument): Extracted => {
+  const known: Record<string, unknown> = {
+    ...(e.childAge !== undefined ? { age: e.childAge } : {}),
+    ...(e.sport ? { sport: e.sport } : {}),
+    ...(e.city ? { city: e.city } : {}),
+    ...(e.playingContext ? { playingContext: e.playingContext } : {}),
+    ...(e.objective ? { goal: e.objective } : {}),
+  };
+  for (const detail of [...Object.values(TEXT_DETAILS), ...Object.values(CHOICE_DETAILS)]) {
+    const value = store(e)[detail!.prop];
+    if (value) known[detail!.prop] = value;
+  }
+  return known as Extracted;
+};
 
 async function read(
   deps: AdaptiveDeps,
@@ -298,6 +498,18 @@ async function read(
   }
 }
 
+/** A summary line for a detail, or nothing when the request does not hold it. */
+const lineFor = (e: WhatsAppEnquiryDocument, field: Field): string | null => {
+  const choice = CHOICE_DETAILS[field];
+  if (choice) {
+    const value = store(e)[choice.prop];
+    return value ? `${choice.label}: ${choice.display[value] ?? value}` : null;
+  }
+  const text = TEXT_DETAILS[field];
+  const value = text && store(e)[text.prop];
+  return text && value ? `${text.label}: ${value}` : null;
+};
+
 /** The request in the parent's words and ours, the way the team reads it. */
 const summaryFor = (e: WhatsAppEnquiryDocument): string =>
   [
@@ -307,7 +519,16 @@ const summaryFor = (e: WhatsAppEnquiryDocument): string =>
           .join(", ")}`
       : null,
     e.sport ? `Sport: ${e.sport}` : null,
-    e.city ? `Location: ${e.city}` : null,
+    e.city ? `Location: ${[e.area, e.city].filter(Boolean).join(", ")}` : null,
+    lineFor(e, "grade"),
+    lineFor(e, "admission"),
+    lineFor(e, "state"),
+    lineFor(e, "timing"),
+    lineFor(e, "format"),
+    lineFor(e, "hours"),
+    lineFor(e, "budget"),
+    lineFor(e, "support"),
+    lineFor(e, "targets"),
     e.playingContext ? `Playing context: ${e.playingContext}` : null,
     e.objective ? `Your request: ${e.objective}` : null,
   ]
@@ -349,7 +570,9 @@ async function moveOn(
   };
   e.lastMessageAt = now;
   await e.save();
-  return next ? { reply: questionFor(category, next) } : confirmReply(e);
+  if (!next) return confirmReply(e);
+  const buttons = buttonsFor(next);
+  return { reply: questionFor(category, next), ...(buttons ? { buttons } : {}) };
 }
 
 /**
@@ -439,7 +662,11 @@ function fillFromProfile(
 
 /** The first question, behind a line on what it is about and, for an account, what it already knows. */
 function opening(category: EnquiryCategory, from: string, reply: IntakeReply): IntakeReply {
-  if (reply.buttons) return from ? { ...reply, reply: `${from}\n\n${reply.reply}` } : reply;
+  // The summary has no intro: the parent has already been through the questions. A question
+  // with buttons (group or one-to-one) is still a first question and gets its intro.
+  if (reply.reply.startsWith("Here's what we've captured")) {
+    return from ? { ...reply, reply: `${from}\n\n${reply.reply}` } : reply;
+  }
   const intro = INTRO[category];
   const body = intro ? `${intro}\n${reply.reply}` : reply.reply;
   return { ...reply, reply: from ? `${from}\n\n${body}` : body };
@@ -683,6 +910,12 @@ export async function answerAdaptive(
   }
 
   const field = state.asking;
+  // A tap on an answer, or a pass on something skippable, needs no reading.
+  const shortcut = shortcutFor(field, replyId, answer);
+  if (shortcut) {
+    if (shortcut !== "skip") store(e)[shortcut.prop] = shortcut.value;
+    return moveOn(e, state.category, state.asked, intake.startedAt, now);
+  }
   apply(e, await read(deps, answer, field, e), [field]);
   return moveOn(e, state.category, state.asked, intake.startedAt, now);
 }

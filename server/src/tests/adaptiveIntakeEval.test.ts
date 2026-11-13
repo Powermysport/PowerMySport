@@ -41,6 +41,22 @@ describe("the adaptive intake evaluation, offline", () => {
     assert.equal(route("registration-failed"), "team");
     assert.equal(route("badminton-coach"), "team");
 
+    // A coach request asks the leading questions the team needs, and not what was already said.
+    const coach = result.conversations.find((c: { id: string }) => c.id === "badminton-coach");
+    assert.deepEqual(coach.questions, ["area", "format", "budget", "experience"]);
+
+    // Each topic asks its own leading questions, and nothing the opening message said.
+    const asked = (id: string) =>
+      result.conversations.find((c: { id: string }) => c.id === id).questions;
+    assert.deepEqual(asked("scholarship-swimmer"), ["state", "support"]);
+    assert.deepEqual(asked("choose-a-sport"), ["hours", "budget", "city"]);
+    assert.deepEqual(asked("admissions-class-9"), ["age", "admission", "city", "targets"]);
+    assert.deepEqual(asked("fitness-knee"), ["hours", "city"]);
+    // Admissions, scholarships and fitness are the team's, and never answered by the assistant.
+    for (const id of ["scholarship-swimmer", "admissions-class-9", "fitness-knee"]) {
+      assert.equal(route(id), "team", id);
+    }
+
     // A parent reporting a problem with their own case is not quizzed about the child.
     const failed = result.conversations.find((c: { id: string }) => c.id === "registration-failed");
     assert.deepEqual(failed.questions, []);
@@ -75,6 +91,26 @@ describe("the adaptive intake evaluation, offline", () => {
       ["Which sport does your child play?", "sport"],
       ["How old is your child?", "age"],
       ["Which city are you based in?", "city"],
+      ["Which area or locality would suit for training? For example Sector 22 or Baner.", "area"],
+      [
+        "What days and times work best? For example weekday evenings or weekend mornings.",
+        "timing",
+      ],
+      ["Would you prefer group sessions or one-to-one?", "format"],
+      ["Do you have a monthly budget in mind? You can skip this.", "budget"],
+      ["Which class is your child in, and which board? For example Class 9, CBSE.", "grade"],
+      ["Is this for school admission, college admission, or both?", "admission"],
+      ["Are there any schools or colleges you already have in mind? You can skip this.", "targets"],
+      ["Which state does your child compete or train in?", "state"],
+      ["What kind of support are you looking for? For example fees, kit or travel.", "support"],
+      ["How many hours a week does your child train?", "hours"],
+      ["How many hours a week could your child give to sport?", "hours"],
+      ["Do you have a monthly budget for sport in mind? You can skip this.", "budget"],
+      [
+        "What level does your child play at in the sport, and what have they achieved so far?",
+        "experience",
+      ],
+      ["Is there a particular scholarship, sponsor or institution you have in mind?", "goal"],
       [
         "Has your child played any competitive tournaments before, or would this be the first?",
         "experience",
@@ -96,7 +132,6 @@ describe("the adaptive intake evaluation, offline", () => {
         "What kind of coaching are you looking for, for example timings, budget or a coach for a tournament?",
         "goal",
       ],
-      ["What kind of support are you looking for, for example a scholarship or a sponsor?", "goal"],
       ["What are you hoping your child's sporting path looks like?", "goal"],
     ];
     for (const [question, field] of asked) assert.equal(fieldAsked(question), field, question);

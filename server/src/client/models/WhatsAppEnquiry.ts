@@ -67,6 +67,14 @@ export type EnquiryCategory = (typeof ENQUIRY_CATEGORIES)[number];
 export const ANSWERED_BY = ["assistant", "team", "pending"] as const;
 export type AnsweredBy = (typeof ANSWERED_BY)[number];
 
+/** Whether a parent wants group sessions, one-to-one, or has no preference. */
+export const SESSION_FORMATS = ["group", "individual", "either"] as const;
+export type SessionFormat = (typeof SESSION_FORMATS)[number];
+
+/** Whether an admissions request is for a school, a college, or both. */
+export const ADMISSION_LEVELS = ["school", "college", "both"] as const;
+export type AdmissionLevel = (typeof ADMISSION_LEVELS)[number];
+
 /** The team's promise to a parent once their summary is confirmed. */
 export const TEAM_REPLY_PROMISE_MS = 24 * 60 * 60 * 1000;
 
@@ -93,6 +101,16 @@ export const ADAPTIVE_ASKING = [
   "sport",
   "age",
   "city",
+  "area",
+  "timing",
+  "format",
+  "budget",
+  "grade",
+  "admission",
+  "targets",
+  "state",
+  "support",
+  "hours",
   "experience",
   "goal",
   "confirm",
@@ -148,6 +166,25 @@ export interface WhatsAppEnquiryDocument extends Document {
   objective?: string;
   /** What the child has done so far and how they train, in the parent's words. */
   playingContext?: string;
+  /** The area within the city that suits for training, when the request is for a coach or trial. */
+  area?: string;
+  /** The days and times that suit, in the parent's words. */
+  timing?: string;
+  /** A monthly budget, in the parent's words. Optional: a parent may skip it. */
+  budget?: string;
+  sessionFormat?: SessionFormat;
+  /** The child's class and board, for an admissions request. */
+  grade?: string;
+  /** Whether admission is wanted to a school, a college or both. */
+  admission?: AdmissionLevel;
+  /** Schools or colleges the parent already has in mind. Optional. */
+  targets?: string;
+  /** The state the child competes or trains in, for a scholarship request. */
+  state?: string;
+  /** The kind of support wanted: fees, kit, travel, in the parent's words. */
+  supportType?: string;
+  /** How many hours a week the child trains, or could give to sport. */
+  trainingHours?: string;
   /** What the request is about. Absent on enquiries from before the adaptive questions. */
   category?: EnquiryCategory;
   /** Who answered it. Absent on enquiries from before the adaptive questions. */
@@ -200,6 +237,16 @@ const whatsAppEnquirySchema = new Schema<WhatsAppEnquiryDocument>(
     city: { type: String, maxlength: 60 },
     objective: { type: String, maxlength: 240 },
     playingContext: { type: String, maxlength: 240 },
+    area: { type: String, maxlength: 80 },
+    timing: { type: String, maxlength: 120 },
+    budget: { type: String, maxlength: 60 },
+    sessionFormat: { type: String, enum: SESSION_FORMATS },
+    grade: { type: String, maxlength: 60 },
+    admission: { type: String, enum: ADMISSION_LEVELS },
+    targets: { type: String, maxlength: 120 },
+    state: { type: String, maxlength: 40 },
+    supportType: { type: String, maxlength: 80 },
+    trainingHours: { type: String, maxlength: 40 },
     category: { type: String, enum: ENQUIRY_CATEGORIES },
     answeredBy: { type: String, enum: ANSWERED_BY },
     confirmedAt: { type: Date },

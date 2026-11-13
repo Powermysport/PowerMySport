@@ -119,3 +119,87 @@ describe("the daily budget of readings", () => {
 });
 
 process.on("exit", () => redis.disconnect());
+
+describe("what the reader may hand back for a coach or trial request", () => {
+  it("keeps the area, timing, budget and group or one-to-one", () => {
+    assert.deepEqual(
+      cleanExtracted({
+        area: "Sector 22",
+        timing: "weekday evenings",
+        budget: "around 5000 a month",
+        sessionFormat: "individual",
+      }),
+      {
+        area: "Sector 22",
+        timing: "weekday evenings",
+        budget: "around 5000 a month",
+        sessionFormat: "individual",
+      }
+    );
+  });
+
+  it("drops a format it does not know, and cuts each text to what the record allows", () => {
+    for (const sessionFormat of ["both", "GROUP", "one-to-one", 1, null, ["group"]]) {
+      assert.equal(
+        cleanExtracted({ sessionFormat }).sessionFormat,
+        undefined,
+        String(sessionFormat)
+      );
+    }
+    for (const sessionFormat of ["group", "individual", "either"]) {
+      assert.equal(cleanExtracted({ sessionFormat }).sessionFormat, sessionFormat);
+    }
+    const out = cleanExtracted({
+      area: "a".repeat(200),
+      timing: "b".repeat(500),
+      budget: "c".repeat(300),
+    });
+    assert.equal(out.area.length, 80);
+    assert.equal(out.timing.length, 120);
+    assert.equal(out.budget.length, 60);
+  });
+});
+
+describe("what the reader may hand back for admissions, scholarships and fitness", () => {
+  it("keeps the class, school or college, institutions, state, support and hours", () => {
+    assert.deepEqual(
+      cleanExtracted({
+        grade: "Class 9, CBSE",
+        admission: "both",
+        targets: "Symbiosis and Fergusson College",
+        state: "Maharashtra",
+        supportType: "fees and travel",
+        trainingHours: "about 5 hours a week",
+      }),
+      {
+        grade: "Class 9, CBSE",
+        admission: "both",
+        targets: "Symbiosis and Fergusson College",
+        state: "Maharashtra",
+        supportType: "fees and travel",
+        trainingHours: "about 5 hours a week",
+      }
+    );
+  });
+
+  it("drops an admission level it does not know, and cuts each text to what the record allows", () => {
+    for (const admission of ["university", "SCHOOL", "school and college", 1, null, ["school"]]) {
+      assert.equal(cleanExtracted({ admission }).admission, undefined, String(admission));
+    }
+    for (const admission of ["school", "college", "both"]) {
+      assert.equal(cleanExtracted({ admission }).admission, admission);
+    }
+    const out = cleanExtracted({
+      grade: "a".repeat(200),
+      targets: "b".repeat(500),
+      state: "c".repeat(200),
+      supportType: "d".repeat(300),
+      trainingHours: "e".repeat(200),
+    });
+    assert.equal(out.grade.length, 60);
+    assert.equal(out.targets.length, 120);
+    assert.equal(out.state.length, 40);
+    assert.equal(out.supportType.length, 80);
+    assert.equal(out.trainingHours.length, 40);
+  });
+});

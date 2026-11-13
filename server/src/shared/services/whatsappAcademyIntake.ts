@@ -63,7 +63,7 @@ const WANT_WORDS: Record<Wants, { one: string; many: string }> = {
 };
 
 export const introFor = (wants: Wants): string =>
-  `We don't list ${WANT_WORDS[wants].many} on PowerMySport yet, but our team can find good options near you. A few quick questions so they know what to look for (type cancel to stop).`;
+  `Happy to help you find ${WANT_WORDS[wants].one}. Our team will match you personally, so a few quick questions so they know what to look for (type cancel to stop).`;
 
 export type Topic = NonNullable<EnquiryIntake["topic"]>;
 

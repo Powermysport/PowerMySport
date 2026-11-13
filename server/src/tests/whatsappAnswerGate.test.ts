@@ -43,9 +43,18 @@ describe("who answers a confirmed request", () => {
     }
   });
 
-  it("always leaves coaches and academies to the team", async () => {
-    const out = await chooseRoute("coaching", "Find me an academy", at(0.99));
-    assert.deepEqual([out.route, out.reason], ["team", "team only"]);
+  it("always leaves coaches, admissions, scholarships and fitness to the team", async () => {
+    for (const category of ["coaching", "admissions", "scholarships", "fitness"]) {
+      const out = await chooseRoute(category, "Anything at all about this", at(0.99));
+      assert.deepEqual([out.route, out.reason], ["team", "team only"], category);
+    }
+  });
+
+  it("still lets the assistant answer what the knowledge base covers, in the other topics", async () => {
+    for (const category of ["sport", "start", "tournaments", "pathway", "other"]) {
+      const out = await chooseRoute(category, "Which sport suits a 9 year old?", at(0.9));
+      assert.equal(out.route, "assistant", category);
+    }
   });
 
   it("leaves the switch to the team when it is off, and only the exact word turns it off", async () => {
@@ -109,6 +118,41 @@ describe("a question about the parent's own case", () => {
     for (const text of general) {
       assert.doesNotMatch(text, PERSONAL_CASE, text);
       assert.equal((await chooseRoute("tournaments", text, at(0.9))).route, "assistant", text);
+    }
+  });
+});
+
+describe("a request that asks for a coach, an academy or a trial", () => {
+  const { WANTS_A_MATCH } = require("../shared/services/whatsappAnswerGate");
+
+  it("is recognised in the parent's words", () => {
+    for (const text of [
+      "I need a badminton coach",
+      "Can you book a trial for my son?",
+      "looking for an academy near me",
+      "tennis coaching for a 10 year old",
+      "a trainer for fitness",
+      "Which academies are there?",
+    ]) {
+      assert.match(text, WANTS_A_MATCH, text);
+    }
+  });
+
+  it("is not triggered by ordinary questions", () => {
+    for (const text of [
+      "How do I start playing AITA tournaments?",
+      "Which sport is best for a 9 year old?",
+      "What is the refund window for the wallet?",
+      "How are rankings calculated?",
+    ]) {
+      assert.doesNotMatch(text, WANTS_A_MATCH, text);
+    }
+  });
+
+  it("goes to the team however well the knowledge base matches", async () => {
+    for (const category of ["tournaments", "start", "sport", "other"]) {
+      const out = await chooseRoute(category, "I want to book a trial with a coach", at(0.99));
+      assert.deepEqual([out.route, out.reason], ["team", "team only"], category);
     }
   });
 });

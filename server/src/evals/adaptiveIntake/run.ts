@@ -79,9 +79,20 @@ const QUESTION_FIELD: Array<[RegExp, Field]> = [
   [/Which sport does your child play/, "sport"],
   [/How old is your child/, "age"],
   [/Which city are you based in/, "city"],
+  // Before the playing-history question, whose pattern also matches "training".
+  [/area or locality/i, "area"],
+  [/days and times/i, "timing"],
+  [/group sessions or one-to-one/i, "format"],
+  [/monthly budget/i, "budget"],
+  [/which class is your child in/i, "grade"],
+  [/school admission, college admission, or both/i, "admission"],
+  [/schools or colleges you already have in mind/i, "targets"],
+  [/which state does your child/i, "state"],
+  [/kind of support are you looking for/i, "support"],
+  [/hours a week/i, "hours"],
   [/played|achieved|training|how far|Where is your child at|enjoy at the moment/i, "experience"],
   [
-    /anything specific|What would you like|What kind of|What are you looking|What are you hoping/i,
+    /anything specific|What would you like|What kind of|What are you looking|What are you hoping|particular scholarship/i,
     "goal",
   ],
 ];
@@ -114,6 +125,7 @@ export async function runAdaptiveEval(options: EvalOptions): Promise<EvalResult>
     await import("../../shared/services/whatsappAssistantService");
   const { WhatsAppEnquiry } = await import("../../client/models/WhatsAppEnquiry");
   const { chooseRoute } = await import("../../shared/services/whatsappAnswerGate");
+  const { followUpCap } = await import("../../shared/services/whatsappAdaptiveIntake");
   const { geminiExtractor } = await import("../../shared/services/whatsappIntakeExtractor");
   const knowledge = await import("../../shared/services/knowledgeRetrievalService");
   const { MongoMemoryServer } = await import("mongodb-memory-server");
@@ -147,6 +159,7 @@ export async function runAdaptiveEval(options: EvalOptions): Promise<EvalResult>
           chooseRoute,
           geminiExtractor,
           retrieveRelevantChunks: knowledge.retrieveRelevantChunks,
+          followUpCap,
         })
       );
     }
@@ -172,6 +185,7 @@ type Services = {
   hashPhone: typeof import("../../shared/services/whatsappAssistantService").hashPhone;
   WhatsAppEnquiry: typeof import("../../client/models/WhatsAppEnquiry").WhatsAppEnquiry;
   chooseRoute: typeof import("../../shared/services/whatsappAnswerGate").chooseRoute;
+  followUpCap: typeof import("../../shared/services/whatsappAdaptiveIntake").followUpCap;
   geminiExtractor: typeof import("../../shared/services/whatsappIntakeExtractor").geminiExtractor;
   retrieveRelevantChunks: typeof import("../../shared/services/knowledgeRetrievalService").retrieveRelevantChunks;
 };
@@ -312,6 +326,7 @@ async function converse(
     summarised,
     final: final.reply,
     teamOffer: Boolean((final as { teamOffer?: boolean }).teamOffer),
+    limit: svc.followUpCap(persona.expect.category),
     stored: stored as never,
   });
   return {
@@ -338,11 +353,14 @@ interface Outcome {
   summarised: boolean;
   final: string;
   teamOffer: boolean;
+  /** The most follow-up questions this kind of request may ask. */
+  limit: number;
   stored: {
     category?: string;
     childAge?: number;
     sport?: string;
     city?: string;
+    sessionFormat?: string;
   } | null;
 }
 
@@ -363,13 +381,19 @@ function checkConversation(persona: Persona, o: Outcome): Check[] {
     repeated.length ? `asked again: ${repeated.join(", ")}` : "nothing repeated"
   );
   check(
-    "asks at most three questions",
-    o.questions.length <= 3,
+    `asks at most ${o.limit} questions`,
+    o.questions.length <= o.limit,
     `${o.questions.length} asked (${o.questions.join(", ") || "none"})`
   );
 
   if (o.summarised && o.stored) {
-    const { age, sport, city } = persona.truth;
+    const { age, sport, city, format } = persona.truth;
+    if (format)
+      check(
+        "captures group or one-to-one correctly",
+        o.stored.sessionFormat === format,
+        `${String(o.stored.sessionFormat)}`
+      );
     if (age !== undefined)
       check(
         "captures the age correctly",

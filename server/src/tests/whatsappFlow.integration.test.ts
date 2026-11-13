@@ -262,7 +262,7 @@ describe("asking the team to follow up on WhatsApp", () => {
     const reply = await answer(msg("Find a coach or academy", "next_coach"), neverCalled(calls));
 
     assert.equal(calls.length, 0);
-    assert.match(reply.reply, /our team can find good options near you/);
+    assert.match(reply.reply, /Our team will match you personally/);
     assert.match(reply.reply, /How old is your child/);
     const enquiry = await WhatsAppEnquiry.findOne({}).lean();
     assert.equal(enquiry.followUpStatus, "none", "forwarded only once the details are in");

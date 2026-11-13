@@ -72,7 +72,7 @@ const enquiry = () => WhatsAppEnquiry.findOne({ phoneHash: hashPhone(PHONE) }).l
 describe("the coach/academy intake", () => {
   it("collects the child's details step by step and forwards them to the team", async () => {
     const start = await say("Find a coach or academy", "next_coach");
-    assert.match(start.reply, /don't list coaches or academies/);
+    assert.match(start.reply, /Happy to help you find a coach or academy/);
     assert.match(start.reply, /How old is your child/);
     assert.equal((await enquiry()).followUpStatus, "none", "nothing forwarded before the details");
 
@@ -591,7 +591,7 @@ describe("the coach questions follow what the parent asked for", () => {
       { kind: "coach", summary: "academy", parentAgreed: false },
       { phoneHash: hashPhone(PHONE), userMessage: text, userId: await findUserIdByPhone(PHONE) }
     );
-    assert.match(out.instruction, /We don't list academies on PowerMySport yet/);
+    assert.match(out.instruction, /Happy to help you find an academy/);
     assert.doesNotMatch(out.instruction, /coaches/);
 
     await say("10");
