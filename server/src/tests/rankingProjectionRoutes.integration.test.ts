@@ -148,6 +148,13 @@ describe("the projection attached to a player's standing", () => {
     // invent a 53-point gain between a list and its own re-issue.
     assert.equal(projection.window.listsHeld, 2);
     assert.equal(projection.movement.fourWeeks.points, 58);
+
+    // The history the page charts has one row for that week, the corrected one.
+    // Two rows drew two dots and gave the weekly table two rows with one date.
+    const history = response.body.data.history;
+    assert.equal(history.length, 2);
+    assert.equal(history.filter((point: { rank: number }) => point.rank === 312).length, 1);
+    assert.equal(history.filter((point: { rank: number }) => point.rank === 400).length, 0);
   });
 
   it("keeps each list's series to itself", async () => {

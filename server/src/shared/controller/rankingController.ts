@@ -4,6 +4,7 @@ import { RankingSnapshot } from "../models/RankingSnapshot";
 import { AitaRankingIngestService } from "../services/aita/AitaRankingIngestService";
 import { nextTierFor, TOP_BAND, type Benchmark } from "../services/aita/rankingInsights";
 import { findSimilarPlayerIds } from "../services/ranking/atlasPlayerSearch";
+import { oneRowPerWeek } from "../services/ranking/oneRowPerWeek";
 import { projectRanking } from "../services/ranking/rankingProjection";
 import { LIVE_COMBOS } from "../services/aita/types";
 import { asyncHandler } from "../../middleware/asyncHandler";
@@ -454,7 +455,10 @@ export const getPlayerRankingHistory = asyncHandler(
           insight: buildPlayerInsight(entry, snapshots, history),
           projection: buildProjection(entry, snapshots, history, snapshotVersions),
         })),
-        history,
+        // One row per list per week: a corrected re-upload keeps both sets of rows,
+        // and the page would draw the week twice. The insight and projection above
+        // read the full history on purpose; the projection resolves versions itself.
+        history: oneRowPerWeek(history, snapshotVersions),
       },
     });
   }
