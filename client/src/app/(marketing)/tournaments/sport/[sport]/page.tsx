@@ -87,7 +87,12 @@ export default async function SportTournamentsHubPage({
     page,
     limit: EDITIONS_PER_PAGE,
     upcoming,
-    filters: { category: text(query.category), age: text(query.age), month: text(query.month) },
+    filters: {
+      category: text(query.category),
+      age: text(query.age),
+      month: text(query.month),
+      q: text(query.q),
+    },
   });
   const editions = result?.editions ?? [];
   const totalPages = result?.totalPages ?? 1;
@@ -97,7 +102,7 @@ export default async function SportTournamentsHubPage({
   // what it applied, so a stale link never shows a selected chip over a list
   // that ignored it.
   const state: TournamentListState = { upcoming, page, ...(result?.applied ?? {}) };
-  const filtered = Boolean(state.category || state.age || state.month);
+  const filtered = Boolean(state.category || state.age || state.month || state.q);
   const sportLower = sportLabel.toLowerCase();
 
   return (
@@ -173,6 +178,7 @@ export default async function SportTournamentsHubPage({
                     category: undefined,
                     age: undefined,
                     month: undefined,
+                    q: undefined,
                   })}
                   className="text-ink mt-3 inline-block text-sm font-medium underline underline-offset-4"
                 >

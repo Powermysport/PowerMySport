@@ -22,7 +22,12 @@ export interface EditionListFilters {
   age?: string | undefined;
   /** "2026-10". */
   month?: string | undefined;
+  /** Free text matched against name, city and venue. */
+  q?: string | undefined;
 }
+
+const MAX_QUERY_LENGTH = 80;
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export interface FacetOption {
   value: string;
@@ -213,6 +218,15 @@ export async function listSportEditions(
   if (range) {
     and.push({ startDate: { $gte: range.from, $lt: range.to } });
     applied.month = filters.month;
+  }
+
+  const q = filters.q?.trim().slice(0, MAX_QUERY_LENGTH);
+  if (q) {
+    const pattern = new RegExp(escapeRegex(q), "i");
+    and.push({
+      $or: [{ name: pattern }, { officialName: pattern }, { city: pattern }, { venue: pattern }],
+    });
+    applied.q = q;
   }
 
   const filter = and.length > 0 ? { ...base, $and: and } : base;

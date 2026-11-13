@@ -25,6 +25,7 @@ export function tournamentListHref(
   if (next.category) qs.set("category", next.category);
   if (next.age) qs.set("age", next.age);
   if (next.month) qs.set("month", next.month);
+  if (next.q) qs.set("q", next.q);
   if (next.page > 1) qs.set("page", String(next.page));
 
   const query = qs.toString();

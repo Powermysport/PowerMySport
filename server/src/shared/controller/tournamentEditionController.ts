@@ -206,7 +206,12 @@ export const listTournamentEditionSlugs = asyncHandler(
         page,
         limit,
         upcoming: req.query.upcoming !== "false",
-        filters: { category: text("category"), age: text("age"), month: text("month") },
+        filters: {
+          category: text("category"),
+          age: text("age"),
+          month: text("month"),
+          q: text("q"),
+        },
       });
 
       res.json({ success: true, data });

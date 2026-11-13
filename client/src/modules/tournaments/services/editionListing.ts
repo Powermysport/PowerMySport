@@ -27,6 +27,7 @@ export interface EditionListFilters {
   category?: string | undefined;
   age?: string | undefined;
   month?: string | undefined;
+  q?: string | undefined;
 }
 
 export type ListedEdition = TournamentEdition & {
