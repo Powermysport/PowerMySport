@@ -14,7 +14,13 @@ import {
   summariseSeason,
 } from "@/modules/rankings/components/PlayerHero";
 import { PlayerSummary } from "@/modules/rankings/components/PlayerSummary";
-import { PlayerPointsPanel } from "@/modules/rankings/components/PlayerPointsPanel";
+import { PlayerListSwitch } from "@/modules/rankings/components/PlayerListSwitch";
+import { PlayerPointsPanel, playerBand } from "@/modules/rankings/components/PlayerPointsPanel";
+import {
+  PlayerTabs,
+  readPlayerTab,
+  type PlayerTabId,
+} from "@/modules/rankings/components/PlayerTabs";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -57,10 +63,11 @@ export default async function PlayerRankingPage({
   searchParams,
 }: {
   params: Promise<{ sport: string; regNo: string }>;
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; tab?: string; list?: string }>;
 }) {
   const { sport: sportSlug, regNo } = await params;
-  const range = readHistoryRange(await searchParams);
+  const query = await searchParams;
+  const range = readHistoryRange(query);
   const sport = getRankingSport(sportSlug);
   if (!sport) notFound();
   if (!/^\d{4,8}$/.test(regNo)) notFound();
@@ -71,8 +78,6 @@ export default async function PlayerRankingPage({
   const { player, current, history } = data;
   // AITA ships names in block capitals; displayName cases them for reading.
   const name = displayName(player.fullName ?? `Player ${player.regNo}`);
-
-  const season = summariseSeason(history, comboLabel);
 
   // ── Which list is theirs ───────────────────────────────────────────────────
   // A child can enter an older bracket but never a younger one, so the youngest
@@ -87,7 +92,20 @@ export default async function PlayerRankingPage({
     if (b.subcategory === home) return 1;
     return a.rank - b.rank;
   });
-  const primaryEntry = standings[0];
+  // One list at a time: ?list= picks it, and an unknown value falls back to their
+  // own age group. Everything below (summary, trend, outlook, points, rules) is
+  // about this list only, so a player on two lists never gets two answers at once.
+  const primaryEntry = standings.find((entry) => entry.subcategory === query.list) ?? standings[0];
+  const listParam =
+    primaryEntry && primaryEntry.subcategory !== standings[0]?.subcategory
+      ? primaryEntry.subcategory
+      : null;
+  const season = summariseSeason(
+    primaryEntry
+      ? history.filter((point) => point.subcategory === primaryEntry.subcategory)
+      : history,
+    comboLabel
+  );
   const primaryCombo = primaryEntry && {
     category: primaryEntry.category,
     subcategory: primaryEntry.subcategory,
@@ -95,10 +113,10 @@ export default async function PlayerRankingPage({
   const primaryList = primaryCombo ? comboLabel(primaryCombo) : "";
   const primaryListHref = primaryCombo ? comboHref(sport.slug, primaryCombo) : "";
 
-  // Chart the list the player has the most history in — usually their main age
-  // group, and the one where a trend is actually readable.
+  // Chart the list in view. With no current list at all, whatever history exists.
   const byCombo = new Map<string, typeof history>();
   for (const point of history) {
+    if (primaryEntry && point.subcategory !== primaryEntry.subcategory) continue;
     const key = `${point.category}|${point.subcategory}`;
     const bucket = byCombo.get(key);
     if (bucket) bucket.push(point);
@@ -125,6 +143,14 @@ export default async function PlayerRankingPage({
       <EntryRules subcategory={primaryEntry.subcategory} listLabel={primaryListLabel} />
     ) : null;
 
+  // Which sections have something to show; the tab bar offers only those.
+  const available: PlayerTabId[] = [];
+  if (charted.length > 0) available.push("progress");
+  if (outlook) available.push("outlook");
+  if (primaryEntry && playerBand(primaryEntry, name)) available.push("points");
+  if (rules) available.push("rules");
+  const tab = readPlayerTab(query.tab, available);
+
   return (
     <>
       <PlayerPageHeader
@@ -135,31 +161,44 @@ export default async function PlayerRankingPage({
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <PlayerListSwitch
+          basePath={`/rankings/${sport.slug}/players/${regNo}`}
+          standings={standings}
+          selected={primaryEntry?.subcategory ?? ""}
+          home={home}
+          tab={query.tab}
+          range={range}
+        />
+
         <PlayerSummary
           standings={standings}
+          selected={primaryEntry?.subcategory}
           home={home}
           season={season}
           sportSlug={sport.slug}
           acronym={sport.federation.acronym}
         />
 
-        {charted.length > 0 && <RankProgress charted={charted} range={range} />}
+        {/* One section at a time, chosen by ?tab=. The summary above is the page's
+            answer; each tab is a follow-up question, and all four stacked made a page
+            nobody read to the end. Every section describes the list chosen above, since
+            the 52-week cycle and the entry gates are per list. */}
+        <PlayerTabs
+          basePath={`/rankings/${sport.slug}/players/${regNo}`}
+          active={tab}
+          available={available}
+          range={range}
+          list={listParam}
+        />
 
-        {/* Two cards side by side on a wide screen: where the trend is heading (what
-          ageing results will cost if nothing replaces them) beside what the rank
-          opens and closes under AITA's rules. The first answers the question the
-          chart raises; the second is what a parent reaches for once they have
-          decided something needs doing. Both are home bracket only: the 52-week
-          cycle and the entry gates are per list, and a second copy for a bracket
-          the child is only visiting would be a second, conflicting answer. */}
-        {(outlook || rules) && (
-          <div className={`mt-10 grid gap-6 ${outlook && rules ? "lg:grid-cols-2" : ""}`}>
-            {outlook}
-            {rules}
-          </div>
-        )}
-
-        {primaryEntry && <PlayerPointsPanel entry={primaryEntry} name={name} />}
+        <div className="mt-8 min-h-64">
+          {tab === "progress" && <RankProgress charted={charted} range={range} />}
+          {tab === "outlook" && outlook}
+          {tab === "points" && primaryEntry && (
+            <PlayerPointsPanel entry={primaryEntry} name={name} />
+          )}
+          {tab === "rules" && rules}
+        </div>
 
         {history.length === 0 && current.length === 0 && (
           <p className="text-muted-foreground mt-10 rounded-lg border border-dashed p-8 text-center">

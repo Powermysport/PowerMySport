@@ -18,8 +18,9 @@ export function PlayerPointsPanel({ entry, name }: { entry: PlayerCurrentEntry; 
 
   const combo = { category: entry.category, subcategory: entry.subcategory };
   return (
-    <div className="mt-10">
+    <div>
       <PointsComposition
+        flat
         bands={[band, ...(entry.insight.bands ?? [])]}
         subcategory={entry.subcategory}
         title={`What makes up these points: ${comboLabel(combo)}`}

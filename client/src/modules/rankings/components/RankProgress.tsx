@@ -37,7 +37,7 @@ export function RankProgress({
   const charts = charted.slice(0, 2).filter(([, all]) => all.length >= 2);
 
   return (
-    <section className="mt-10">
+    <section>
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Progress week by week</h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">{subtitle}</p>
@@ -55,13 +55,13 @@ export function RankProgress({
 
       {/* Side by side on a wide screen when there are two lists, so both trends
           can be read at once. One list takes the full width. */}
-      <div className={`mt-4 grid gap-4 ${charts.length > 1 ? "lg:grid-cols-2" : ""}`}>
+      <div className={`mt-6 grid gap-x-12 gap-y-10 ${charts.length > 1 ? "lg:grid-cols-2" : ""}`}>
         {charts.map(([key, all]) => {
           const [category, subcategory] = key.split("|");
           const label = comboLabel({ category: category ?? "", subcategory: subcategory ?? "" });
           const points = all.filter((p) => inHistoryRange(p.asOnDate, range));
           return (
-            <div key={key} className="border-border bg-card min-w-0 rounded-xl border p-5 sm:p-6">
+            <div key={key} className="min-w-0">
               <h3 className="text-base font-semibold tracking-tight">{label}</h3>
               {points.length >= 2 ? (
                 <RankTrajectory

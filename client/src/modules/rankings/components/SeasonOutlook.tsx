@@ -87,10 +87,10 @@ export function SeasonOutlook({
   const idle = activity.weeksSinceLastRise !== null && activity.weeksSinceLastRise >= 12;
 
   return (
-    <section className="bg-card rounded-xl border p-5 sm:p-6">
-      <h3 className="text-base font-semibold tracking-tight">
+    <section className="max-w-3xl">
+      <h2 className="text-xl font-semibold tracking-tight">
         What happens next on the {listLabel} list
-      </h3>
+      </h2>
       <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
         Worked out from every published list we hold for {subject}, not from this week alone.
       </p>
