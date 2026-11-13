@@ -60,7 +60,33 @@ const describeSmtpError = (error: unknown): string => {
     .join(" | ");
 };
 
+/**
+ * Addresses that can never receive mail: the reserved test/example domains
+ * (RFC 2606) that seed data and tests use. Mailing them only produces a bounce
+ * in our own inbox, one per message, so they are never handed to the SMTP server.
+ */
+export const isUndeliverableAddress = (address: string): boolean => {
+  const domain = address.trim().toLowerCase().split("@").pop() || "";
+  return (
+    /\.(test|invalid|example|localhost)$/.test(domain) ||
+    ["example.com", "example.org", "example.net", "localhost"].includes(domain)
+  );
+};
+
+/** True when the SMTP server refused for good (5xx), so sending again cannot help. */
+export const isPermanentSmtpFailure = (error: unknown): boolean => {
+  const code = (error as { responseCode?: number } | null)?.responseCode;
+  return typeof code === "number" && code >= 500 && code < 600;
+};
+
 export const sendEmail = async (options: SendEmailOptions): Promise<void> => {
+  const recipients = String(options.to).split(",");
+  if (recipients.some((r) => isUndeliverableAddress(r))) {
+    log.warn(
+      `Email not sent: reserved/test address [to=${options.to}] [subject=${options.subject}]`
+    );
+    return;
+  }
   try {
     const transporter = createTransporter();
 

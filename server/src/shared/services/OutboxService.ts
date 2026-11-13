@@ -7,13 +7,14 @@ import { isPhonePeRefundEvent } from "./phonepeWebhookAuth";
 import { reconcileWalletTopUpFromWebhookPayload } from "../../client/services/WalletService";
 import { reconcileEcommerceOrderFromWebhookPayload } from "../../shop/services/EcommerceService";
 import { sendEmail } from "../../utils/email";
+import { isPermanentSmtpFailure } from "../../utils/email/shared";
 import OutboxMessage from "../models/OutboxMessage";
 import PaymentWebhookEvent from "../models/PaymentWebhookEvent";
 import { log as __rootLog } from "../../utils/logger";
 const log = __rootLog.child("outbox");
 
 const POLL_INTERVAL_MS = 3000;
-const MAX_ATTEMPTS = 6;
+const MAX_ATTEMPTS = 4;
 
 const jitter = (ms: number) => {
   const variance = Math.floor(ms * 0.2);
@@ -148,12 +149,15 @@ export const startOutboxWorker = () => {
         log.info("[outbox] item done", { id: item._id, type: item.type });
       } catch (procErr) {
         const attempts = (item.attempts || 0) + 1;
-        const baseBackoff = Math.min(60 * 60 * 1000, Math.pow(2, attempts) * 1000);
+        // 1, 2, 4 minutes: a retry a few seconds later hits the same outage and just adds mail.
+        const baseBackoff = Math.min(60 * 60 * 1000, Math.pow(2, attempts - 1) * 60 * 1000);
         const backoffMs = jitter(baseBackoff);
         item.attempts = attempts;
         item.nextAttemptAt = new Date(Date.now() + backoffMs);
         item.lastError = (procErr as any)?.stack || (procErr as any)?.message || String(procErr);
-        item.status = attempts >= MAX_ATTEMPTS ? "FAILED" : "PENDING";
+        // A permanent mail refusal (550 no such mailbox) will not succeed on retry: stop now.
+        const permanent = item.type === "send_email" && isPermanentSmtpFailure(procErr);
+        item.status = permanent || attempts >= MAX_ATTEMPTS ? "FAILED" : "PENDING";
         await item.save();
         log.warn("[outbox] item failed, scheduled retry", {
           id: item._id,
