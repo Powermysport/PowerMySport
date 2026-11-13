@@ -650,9 +650,11 @@ export const suggestPlayers = asyncHandler(async (req: Request, res: Response): 
   const sportSlug = sportOf(req);
   const category = String(req.query.category ?? "").trim();
   const subcategory = String(req.query.subcategory ?? "").trim();
-  if (!category || !subcategory) {
-    throw new AppError("category and subcategory are both required.", 400);
+  // Both or neither: one without the other is a mistake, not a wider search.
+  if (Boolean(category) !== Boolean(subcategory)) {
+    throw new AppError("category and subcategory must be sent together.", 400);
   }
+  const acrossLists = !category;
 
   const q = String(req.query.q ?? "")
     .trim()
@@ -662,7 +664,11 @@ export const suggestPlayers = asyncHandler(async (req: Request, res: Response): 
     return;
   }
 
-  const filter: Record<string, unknown> = { sportSlug, category, subcategory };
+  const filter: Record<string, unknown> = { sportSlug };
+  if (!acrossLists) {
+    filter.category = category;
+    filter.subcategory = subcategory;
+  }
   const date = String(req.query.date ?? "").trim();
   if (date) {
     if (!ISO_DATE.test(date)) throw new AppError("date must be YYYY-MM-DD.", 400);
@@ -676,14 +682,48 @@ export const suggestPlayers = asyncHandler(async (req: Request, res: Response): 
   const clauses = nameClauses(q);
   const similar = await findSimilarPlayerIds(q, {
     sportSlug,
-    category,
-    subcategory,
+    ...(acrossLists ? {} : { category, subcategory }),
     ...(filter.isLatest === true ? { isLatest: true } : {}),
     ...(filter.asOnDate instanceof Date ? { asOnDate: filter.asOnDate } : {}),
     ...(state ? { state } : {}),
   });
   if (similar.length > 0) clauses.push({ _id: { $in: similar } });
   filter.$or = clauses;
+
+  if (acrossLists) {
+    // A player on two lists (own age group and one up) matches twice; the page
+    // wants one row, on the list they belong to. Over-fetch, dedupe, then trim.
+    const rows = await RankingEntry.find(filter)
+      .sort({ rank: 1 })
+      .limit(SUGGESTION_LIMIT * 8)
+      .select("regNo fullName rank state category subcategory")
+      .lean();
+
+    const bracketAge = (sub: string): number => {
+      const match = /^U-(\d+)$/i.exec(sub.trim());
+      return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+    };
+    const own = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      const held = own.get(row.regNo);
+      if (!held || bracketAge(row.subcategory) < bracketAge(held.subcategory)) {
+        own.set(row.regNo, row);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: [...own.values()].slice(0, SUGGESTION_LIMIT).map((row) => ({
+        regNo: row.regNo,
+        fullName: row.fullName,
+        rank: row.rank,
+        state: row.state ?? null,
+        category: row.category,
+        subcategory: row.subcategory,
+      })),
+    });
+    return;
+  }
 
   const rows = await RankingEntry.find(filter)
     .sort({ rank: 1 })

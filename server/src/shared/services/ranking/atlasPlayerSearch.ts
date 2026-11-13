@@ -29,8 +29,9 @@ export const atlasSearchEnabled = (): boolean => process.env.ATLAS_SEARCH_ENABLE
 
 export interface PlayerSearchScope {
   sportSlug: string;
-  category: string;
-  subcategory: string;
+  /** Both left out searches every list of the sport (the sport index page's box). */
+  category?: string;
+  subcategory?: string;
   isLatest?: boolean;
   asOnDate?: Date;
   state?: string;
@@ -44,9 +45,11 @@ export function buildPlayerSearchPipeline(
   const query = term.trim().slice(0, MAX_TERM_LENGTH);
   const filter: Record<string, unknown>[] = [
     { equals: { path: "sportSlug", value: scope.sportSlug } },
-    { equals: { path: "category", value: scope.category } },
-    { equals: { path: "subcategory", value: scope.subcategory } },
   ];
+  if (scope.category) filter.push({ equals: { path: "category", value: scope.category } });
+  if (scope.subcategory) {
+    filter.push({ equals: { path: "subcategory", value: scope.subcategory } });
+  }
   if (scope.isLatest !== undefined) {
     filter.push({ equals: { path: "isLatest", value: scope.isLatest } });
   }

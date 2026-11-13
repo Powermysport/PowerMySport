@@ -72,6 +72,47 @@ before(async () => {
       totalPoints: 100,
     }))
   );
+
+  // Two more lists, for the search that is not scoped to one: Vikram Rao is also on
+  // Boys U-14 (playing up), and Vikita Roy is only on Girls U-16.
+  const extra: Array<[string, string, string, string, number, string]> = [
+    ["Boys", "U-14", "200001", "Vikram Rao", 5, "Delhi"],
+    ["Girls", "U-16", "300001", "Vikita Roy", 7, "Kerala"],
+  ];
+  for (const [category, subcategory, regNo, fullName, rank, state] of extra) {
+    const other = await RankingSnapshot.create({
+      sportSlug: "tennis",
+      federationCode: "AITA",
+      category,
+      subcategory,
+      asOnDate: WEEK,
+      pdfUrl: "https://example.test/list",
+      sourceUrl: "https://example.test",
+      contentHash: `suggest-hash-${category}-${subcategory}`,
+      status: "published",
+      version: 1,
+      isLatestForCombo: true,
+      rowCount: 1,
+    });
+    await RankingEntry.create({
+      snapshot: other._id,
+      sportSlug: "tennis",
+      federationCode: "AITA",
+      category,
+      subcategory,
+      asOnDate: WEEK,
+      isLatest: true,
+      rank,
+      regNo,
+      givenName: fullName.split(" ")[0],
+      familyName: fullName.split(" ")[1],
+      fullName,
+      nameSearch: fullName.toLowerCase(),
+      birthYear: 2012,
+      state,
+      totalPoints: 100,
+    });
+  }
 });
 
 after(async () => {
@@ -118,8 +159,41 @@ describe("GET /api/rankings/suggest", () => {
     assert.deepEqual(odd.body.data, []);
   });
 
-  it("requires a category and subcategory", async () => {
-    const res = await request(app).get("/api/rankings/suggest?q=vik");
-    assert.equal(res.status, 400);
+  it("refuses a category without a subcategory, and the reverse", async () => {
+    const a = await request(app).get("/api/rankings/suggest?category=Boys&q=vik");
+    const b = await request(app).get("/api/rankings/suggest?subcategory=U-12&q=vik");
+    assert.equal(a.status, 400);
+    assert.equal(b.status, 400);
+  });
+});
+
+describe("GET /api/rankings/suggest across every list", () => {
+  const across = (q: string) =>
+    request(app).get(`/api/rankings/suggest?q=${encodeURIComponent(q)}`);
+
+  it("finds a player on any list and says which list it is", async () => {
+    const res = await across("vikita");
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.data, [
+      {
+        regNo: "300001",
+        fullName: "Vikita Roy",
+        rank: 7,
+        state: "Kerala",
+        category: "Girls",
+        subcategory: "U-16",
+      },
+    ]);
+  });
+
+  it("returns a player on two lists once, on their own age group", async () => {
+    const res = await across("vikram");
+    assert.equal(res.body.data.length, 1);
+    assert.equal(res.body.data[0].regNo, "200001");
+    assert.equal(res.body.data[0].subcategory, "U-12");
+  });
+
+  it("still returns nothing for a one-letter term", async () => {
+    assert.deepEqual((await across("v")).body.data, []);
   });
 });
