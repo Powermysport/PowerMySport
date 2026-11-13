@@ -6,6 +6,7 @@ import { s3Service } from "../S3Service";
 import { gzipSync } from "node:zlib";
 import { AitaRankingSource, aitaRankingSource, isoDateToWid } from "./AitaRankingSource";
 import { parseRankingPages } from "./rankingListParser";
+import { resolveGuidRegNos } from "./resolveGuidRegNos";
 import { recomputeSnapshotInsights } from "./recomputeSnapshotInsights";
 import { sampleBandComposition } from "./sampleBandComposition";
 import { resolveStateCode, resolveZoneId } from "./stateCodes";
@@ -315,6 +316,21 @@ export class AitaRankingIngestService {
       return { ...base, status: "failed", reason, snapshotId: String(failedSnapshot._id) };
     }
 
+    // GUID-keyed rows carry no AITA number; map known players back onto it before
+    // hashing, so the hash and the stored rows agree on identity.
+    const guid = await resolveGuidRegNos({
+      category,
+      subcategory,
+      asOnDate,
+      rows: parsed.rows,
+    });
+    if (guid.matched + guid.provisional > 0) {
+      parsed.diagnostics.warnings.push(
+        `GUID player keys: ${guid.matched} matched to known AITA numbers, ` +
+          `${guid.provisional} kept a provisional id (${guid.ambiguous} ambiguous)`
+      );
+    }
+
     const dataHash = rankingDataHash(parsed.rows);
 
     // Is this exact list already published for this date? Checked against every
@@ -438,6 +454,144 @@ export class AitaRankingIngestService {
       ...base,
       status: "published",
       rowCount: parsed.rows.length,
+      snapshotId: String(snapshot._id),
+    };
+  }
+
+  /**
+   * Publishes a list that was assembled OUTSIDE the AITA site, through the same
+   * validate -> publish -> insights path as a normal ingest.
+   *
+   * Exists for the weeks AITA's Cloudflare block kept the scraper from reading
+   * (28 Sep - 19 Oct 2026), filled from a third-party compilation. It does not
+   * fetch, archive to S3 or sample composition: the caller supplies the rows and
+   * an honest `note`, which is stored in the snapshot's diagnostics so the
+   * provenance is on the record. Run weeks oldest-first so each one's movement
+   * baseline is the week before it.
+   *
+   * `dryRun` performs every read-only check (idempotency, quarantine rules) and
+   * writes nothing.
+   *
+   * When the real scraper is working again, a normal sweep sees a different
+   * `dataHash` for the same date and publishes AITA's own list as a correction
+   * version, which replaces this one.
+   */
+  async ingestPrebuiltList(args: {
+    category: AitaCategory;
+    subcategory: string;
+    asOnDate: string;
+    rows: ParseResult["rows"];
+    sourceUrl: string;
+    note: string;
+    dryRun?: boolean;
+  }): Promise<IngestOutcome> {
+    const { category, subcategory, asOnDate, rows } = args;
+    const base = { category, subcategory, asOnDate };
+    const list = listForCombo(category, subcategory);
+    if (!list) {
+      return { ...base, status: "no-document", reason: "no equivalent list on the platform" };
+    }
+
+    const unknownCodes = new Set<string>();
+    let unknownRows = 0;
+    for (const row of rows) {
+      if (row.stateCode && !resolveStateCode(row.stateCode)) {
+        unknownRows += 1;
+        unknownCodes.add(row.stateCode);
+      }
+    }
+    const parsed: ParseResult = {
+      rows,
+      columns: ["Rank", "Player", "State", "Total Pts."],
+      sourceWeekof: null,
+      sourceCategory: null,
+      diagnostics: {
+        malformedRows: 0,
+        missingDob: rows.filter((r) => !r.birthYear).length,
+        unknownStateCodes: [...unknownCodes],
+        unknownStateRows: unknownRows,
+        unparsedLines: [],
+        warnings: [args.note],
+      },
+    };
+
+    const dataHash = rankingDataHash(parsed.rows);
+    const published = await RankingSnapshot.find({
+      category,
+      subcategory,
+      asOnDate: new Date(asOnDate),
+      status: "published",
+    })
+      .select("dataHash")
+      .lean();
+    if (published.some((p) => p.dataHash && p.dataHash === dataHash)) {
+      return { ...base, status: "unchanged", rowCount: rows.length };
+    }
+
+    const objection = await this.validate(parsed, list, isoDateToWid(asOnDate), asOnDate);
+    if (args.dryRun) {
+      return objection
+        ? {
+            ...base,
+            status: "quarantined",
+            rowCount: rows.length,
+            reason: `(dry run) ${objection}`,
+          }
+        : {
+            ...base,
+            status: "published",
+            rowCount: rows.length,
+            reason: "(dry run) would publish",
+          };
+    }
+
+    const priorVersions = await RankingSnapshot.countDocuments({
+      category,
+      subcategory,
+      asOnDate: new Date(asOnDate),
+    });
+    const snapshot: RankingSnapshotDocument = await RankingSnapshot.findOneAndUpdate(
+      { category, subcategory, asOnDate: new Date(asOnDate), dataHash },
+      {
+        $set: {
+          sportSlug: "tennis",
+          federationCode: "AITA",
+          pdfUrl: args.sourceUrl,
+          sourceUrl: args.sourceUrl,
+          contentHash: createHash("sha256").update(`${args.sourceUrl}|${dataHash}`).digest("hex"),
+          byteSize: 0,
+          status: "archived",
+          fetchedAt: new Date(),
+        },
+        $setOnInsert: { version: priorVersions + 1 },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    await applyToSnapshot(snapshot, {
+      rowCount: rows.length,
+      columns: parsed.columns,
+      diagnostics: parsed.diagnostics,
+      parsedAt: new Date(),
+      status: "parsed",
+    });
+
+    if (objection) {
+      await applyToSnapshot(snapshot, { status: "quarantined", failureReason: objection });
+      return {
+        ...base,
+        status: "quarantined",
+        reason: objection,
+        rowCount: rows.length,
+        snapshotId: String(snapshot._id),
+      };
+    }
+
+    await this.publish(snapshot, parsed);
+    return {
+      ...base,
+      status: "published",
+      rowCount: rows.length,
       snapshotId: String(snapshot._id),
     };
   }
@@ -750,15 +904,24 @@ export class AitaRankingIngestService {
     // week was quarantined the baseline froze, so a single legitimate
     // step-change quarantined every week after it too — twelve in a row, from
     // one real event.
-    const previous = await RankingSnapshot.findOne({
+    //
+    // When several snapshots share that newest date, a published one wins. The
+    // failed 2026-10-08 sweep left a 25-row quarantined snapshot dated 21 Sep
+    // beside each real list; picking by date alone chose between them arbitrarily
+    // and quarantined two healthy lists for "moving 2788%" against a baseline of 25.
+    const candidates = await RankingSnapshot.find({
       category,
       subcategory,
       status: { $in: ["published", "quarantined"] },
       asOnDate: { $lt: new Date(asOnDate) },
     })
       .sort({ asOnDate: -1 })
-      .select("rowCount asOnDate")
+      .limit(10)
+      .select("rowCount asOnDate status")
       .lean();
+    const newestAt = candidates[0]?.asOnDate ? new Date(candidates[0].asOnDate).getTime() : null;
+    const sameDate = candidates.filter((c) => new Date(c.asOnDate).getTime() === newestAt);
+    const previous = sameDate.find((c) => c.status === "published") ?? sameDate[0] ?? null;
 
     if (previous?.rowCount) {
       const deviation = Math.abs(parsed.rows.length - previous.rowCount) / previous.rowCount;

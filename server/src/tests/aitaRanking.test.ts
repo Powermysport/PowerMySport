@@ -9,6 +9,8 @@ import {
   parsePointBreakdown,
   parseRankingList,
   parseRankingPages,
+  isGuidPlayerKey,
+  provisionalRegNo,
   regNoFromPlayerKey,
   toFloat,
 } from "../shared/services/aita/rankingListParser";
@@ -93,6 +95,23 @@ test("the registration number is recovered from the base64 player key", () => {
   // one would merge two players' histories under a single row.
   assert.equal(regNoFromPlayerKey("bm90LWEta2V5"), null);
   assert.equal(regNoFromPlayerKey(""), null);
+});
+
+test("a GUID player key gets a provisional number, never a decoded one", () => {
+  const guid = "0CEF4922-141F-46A6-9897-1B85755D8013";
+  assert.equal(regNoFromPlayerKey(guid), null);
+  assert.equal(isGuidPlayerKey(guid), true);
+  assert.equal(isGuidPlayerKey("UklBTkFONDQwMDkw"), false);
+  assert.equal(provisionalRegNo(guid), "g-0cef4922141f46a698971b85755d8013");
+
+  const result = parseRankingList(
+    page([
+      card({ rank: 1, playerKey: guid, name: "Riaan NANDANKAR", yob: "2014", points: "1145.25" }),
+    ])
+  );
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0]!.regNo, "g-0cef4922141f46a698971b85755d8013");
+  assert.equal(result.diagnostics.malformedRows, 0);
 });
 
 test("a row missing its identity fields is counted, not defaulted", () => {

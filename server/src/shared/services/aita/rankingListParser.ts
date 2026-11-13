@@ -184,7 +184,11 @@ function readCard(
   // it is inside the base64 player key. Recovering it is what keeps the primary
   // key (asOnDate, category, subcategory, regNo) continuous across the cutover,
   // which is what keeps week-over-week movement working on archived rows.
-  const regNo = regNoFromPlayerKey(playerKey);
+  // GUID keys (the platform now sends these) have no number inside; they get a
+  // provisional one that the ingest resolves against the archive.
+  const regNo =
+    regNoFromPlayerKey(playerKey) ??
+    (isGuidPlayerKey(playerKey) ? provisionalRegNo(playerKey) : null);
 
   if (rank === null || !playerKey || !regNo || !fullName) {
     diagnostics.malformedRows++;
@@ -282,6 +286,9 @@ function readWtn(card: cheerio.Cheerio<AnyNode>, index: number): number | null {
  */
 export function regNoFromPlayerKey(playerKey: string): string | null {
   if (!playerKey) return null;
+  // A GUID carries no registration number. Without this guard its base64
+  // "decode" is garbage that can still end in digits and pass the match below.
+  if (isGuidPlayerKey(playerKey)) return null;
   let decoded: string;
   try {
     decoded = Buffer.from(playerKey, "base64").toString("utf8");
@@ -290,6 +297,31 @@ export function regNoFromPlayerKey(playerKey: string): string | null {
   }
   const match = decoded.match(/(\d{4,8})\s*$/);
   return match?.[1] ?? null;
+}
+
+const GUID_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Since the Oct 2026 platform update `data-player` is a random GUID,
+ * e.g. `0CEF4922-141F-46A6-9897-1B85755D8013`, and the AITA number appears
+ * nowhere on the list page, the point fragment or the profile page.
+ */
+export function isGuidPlayerKey(playerKey: string): boolean {
+  return GUID_KEY.test(playerKey.trim());
+}
+
+/**
+ * Stand-in registration number for a GUID-keyed player: `g-` + the 32 hex digits,
+ * lowercase. Stable for as long as AITA keeps the GUID, and it can never collide
+ * with a numeric AITA number. `resolveGuidRegNos` swaps it for the real number
+ * when the player is already in our archive.
+ */
+export function provisionalRegNo(playerKey: string): string {
+  return `g-${playerKey.trim().replace(/-/g, "").toLowerCase()}`;
+}
+
+export function isProvisionalRegNo(regNo: string): boolean {
+  return regNo.startsWith("g-");
 }
 
 /**
