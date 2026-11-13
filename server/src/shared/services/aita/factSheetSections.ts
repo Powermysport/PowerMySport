@@ -372,6 +372,24 @@ export function hasFactSheetDetails(details: FactSheetDetails): boolean {
       details.travel,
       details.hotel,
       details.additional,
-    ].some(Boolean)
+    ].some(blockHasContent)
   );
+}
+
+/** The page's own "nothing here" line, which is not something the organiser wrote. */
+const NO_RECORDS = /^!*\s*No Records Found\s*!*$/i;
+
+/**
+ * A block whose every field is null is a shell, not information. The page can hand
+ * back a hotel or travel block with its labels and no values (a rendered copy of
+ * the page does, before its tabs are opened), and writing that would put an empty
+ * hotel card on a tournament that has none.
+ */
+function blockHasContent(block: unknown): boolean {
+  if (block === null || block === undefined || block === false) return false;
+  if (typeof block === "string") return block.trim() !== "" && !NO_RECORDS.test(block.trim());
+  if (typeof block === "number") return true;
+  if (Array.isArray(block)) return block.some(blockHasContent);
+  if (typeof block === "object") return Object.values(block).some(blockHasContent);
+  return Boolean(block);
 }

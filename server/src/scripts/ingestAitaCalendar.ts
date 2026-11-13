@@ -41,7 +41,9 @@
 
 import "dotenv/config";
 import fs from "node:fs";
+import path from "node:path";
 import mongoose from "mongoose";
+import { AitaCalendarSource } from "../shared/services/aita/AitaCalendarSource";
 import { syncAitaCalendar } from "../shared/services/aita/AitaCalendarSyncService";
 import {
   describeCoverage,
@@ -60,6 +62,37 @@ const argValue = (flag: string): string | undefined => {
   return at === -1 ? undefined : process.argv[at + 1];
 };
 const APPLY = process.argv.includes("--apply");
+/**
+ * `--from-cache <dir>`: read the pages from files saved out of a real browser
+ * (<dir>/manifest.jsonl, one {url, file} per line) instead of fetching them. For
+ * when AITA's Cloudflare turns the scheduled reader away. Pages not in the cache
+ * are listed in <dir>/missing.txt; a missing fact sheet is tolerated by the sync,
+ * a missing month page is not.
+ */
+const CACHE_DIR = argValue("--from-cache");
+
+function cacheSource(dir: string): AitaCalendarSource {
+  const pages = new Map<string, string>();
+  const manifest = path.join(dir, "manifest.jsonl");
+  for (const line of fs.readFileSync(manifest, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    const { url, file } = JSON.parse(line) as { url: string; file: string };
+    pages.set(url, path.join(dir, file));
+  }
+  const missing = new Set<string>();
+  const source = new AitaCalendarSource({
+    fetchHtml: async (url) => {
+      const file = pages.get(url);
+      if (!file) {
+        missing.add(url);
+        fs.writeFileSync(path.join(dir, "missing.txt"), [...missing].join("\n"));
+        return { status: 404, body: "" };
+      }
+      return { status: 200, body: fs.readFileSync(file, "utf8") };
+    },
+  });
+  return source;
+}
 const BACKUP = argValue("--backup");
 const MONTHS = Number(argValue("--months")) || 5;
 const SHEET_DAYS = Number(argValue("--sheet-days") ?? 120);
@@ -77,7 +110,7 @@ async function main(): Promise<void> {
 
   console.log("Reading AITA (about 3 minutes: one request every 1.5 seconds)...");
   const report = await syncAitaCalendar(
-    { db },
+    { db, ...(CACHE_DIR ? { source: cacheSource(CACHE_DIR) } : {}) },
     {
       apply: APPLY,
       months: MONTHS,
