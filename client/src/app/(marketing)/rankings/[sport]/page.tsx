@@ -5,6 +5,7 @@
 // so a second federation renders here without a new page.
 
 import { PageHeader } from "@/modules/shared/ui/PageHeader";
+import { PlayerFinder } from "@/modules/rankings/components/PlayerFinder";
 import { breadcrumbJsonLd } from "@/lib/seo";
 import { fetchRankingMeta, formatAsOn } from "@/modules/rankings/services/api";
 import {
@@ -58,6 +59,12 @@ export default async function SportRankingsPage({
     (meta?.combos ?? []).map((c) => [`${c.category}/${c.subcategory}`, c])
   );
 
+  // The one date every published list shares, or null when they differ.
+  const dates = new Set(
+    (meta?.combos ?? []).filter((c) => c.available && c.asOnDate).map((c) => c.asOnDate)
+  );
+  const commonDate = dates.size === 1 ? ([...dates][0] ?? null) : null;
+
   return (
     <>
       <script
@@ -79,15 +86,27 @@ export default async function SportRankingsPage({
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="space-y-10">
+        <div className="mb-12">
+          <PlayerFinder sport={sport.slug} />
+        </div>
+
+        {/* Twelve lists, but really two questions: whose list (boys, girls, men,
+            women) and which age. Each group is a ruled list, and Boys sits beside
+            Girls, Men beside Women, so the same age brackets line up across the
+            page. When every list was published on the same date, that date is said
+            once here instead of twelve times. */}
+        {commonDate && (
+          <p className="text-muted-foreground mb-8 text-sm">
+            All lists as on {formatAsOn(commonDate)}.
+          </p>
+        )}
+        <div className="grid gap-x-16 gap-y-12 lg:grid-cols-2">
           {sport.groups.map((group) => (
             <section key={group.title}>
-              <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-xl font-semibold tracking-tight">{group.title}</h2>
-                <p className="text-muted-foreground text-sm">{group.blurb}</p>
-              </div>
+              <h2 className="text-xl font-semibold tracking-tight">{group.title}</h2>
+              <p className="text-muted-foreground mt-1 text-sm">{group.blurb}</p>
 
-              <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <ul className="divide-border border-border mt-4 divide-y border-y">
                 {group.combos.map((combo) => {
                   const info = availability.get(`${combo.category}/${combo.subcategory}`);
                   const available = info?.available ?? false;
@@ -95,24 +114,22 @@ export default async function SportRankingsPage({
                     <li key={comboHref(sport.slug, combo)}>
                       <Link
                         href={comboHref(sport.slug, combo)}
-                        className="bg-card hover:border-power-orange focus-visible:ring-power-orange group flex h-full flex-col justify-between rounded-lg border p-4 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                        className="hover:bg-paper-deep focus-visible:ring-power-orange group flex min-h-14 items-center justify-between gap-4 px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
                       >
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="font-medium">{comboLabel(combo)}</span>
-                          <ArrowRight className="text-muted-foreground group-hover:text-power-orange h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
-                        </span>
-                        <span className="text-muted-foreground mt-3 block text-sm">
+                        <span className="font-medium">{comboLabel(combo)}</span>
+                        <span className="text-muted-foreground flex items-center gap-3 text-sm tabular-nums">
                           {available ? (
-                            <>
+                            <span>
                               {info?.rowCount?.toLocaleString("en-IN")} players
-                              <span className="mx-1.5" aria-hidden>
-                                ·
-                              </span>
-                              as on {formatAsOn(info?.asOnDate)}
-                            </>
+                              {!commonDate && <> · as on {formatAsOn(info?.asOnDate)}</>}
+                            </span>
                           ) : (
-                            "Not published yet"
+                            <span>Not published yet</span>
                           )}
+                          <ArrowRight
+                            className="group-hover:text-foreground h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
+                            aria-hidden
+                          />
                         </span>
                       </Link>
                     </li>
@@ -128,7 +145,7 @@ export default async function SportRankingsPage({
         and a parent checking a rank they disagree with should be one click from
         the official source rather than stuck arguing with us.
       */}
-        <footer className="bg-muted/40 text-muted-foreground mt-12 rounded-lg border p-4 text-sm">
+        <footer className="border-border text-muted-foreground mt-16 border-t pt-6 text-sm">
           <p>
             Rankings are published by the{" "}
             <span className="text-foreground font-medium">

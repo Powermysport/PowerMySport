@@ -7,6 +7,9 @@ export interface PlayerSuggestion {
   fullName: string;
   rank: number;
   state: string | null;
+  /** Sent only when the search was not scoped to one list: which list this row is on. */
+  category?: string;
+  subcategory?: string;
 }
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -34,7 +37,8 @@ export const suggestionMatches = (item: PlayerSuggestion, term: string): boolean
  */
 export function usePlayerSuggestions(
   term: string,
-  scope: { sport: string; category: string; subcategory: string; state?: string; date?: string },
+  /** Leave category and subcategory out to search every list of the sport. */
+  scope: { sport: string; category?: string; subcategory?: string; state?: string; date?: string },
   enabled: boolean
 ): { items: PlayerSuggestion[]; loading: boolean } {
   const { sport, category, subcategory, state, date } = scope;
@@ -59,7 +63,11 @@ export function usePlayerSuggestions(
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setPendingFor(cacheKey);
-      const qs = new URLSearchParams({ sport, category, subcategory, q: query });
+      const qs = new URLSearchParams({ sport, q: query });
+      if (category && subcategory) {
+        qs.set("category", category);
+        qs.set("subcategory", subcategory);
+      }
       if (state) qs.set("state", state);
       if (date) qs.set("date", date);
       try {

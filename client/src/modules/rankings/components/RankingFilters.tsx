@@ -5,24 +5,10 @@ import {
   type PlayerSuggestion,
 } from "@/modules/rankings/hooks/usePlayerSuggestions";
 import { formatAsOn, type RankingDate } from "@/modules/rankings/services/api";
+import { HighlightedName } from "./HighlightedName";
 import { Loader2, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-
-/** Bolds the part of a name the visitor has typed, so why it matched is obvious. */
-function highlight(name: string, term: string) {
-  const needle = term.trim().toLowerCase();
-  const lower = name.toLowerCase();
-  const at = lower.startsWith(needle) ? 0 : lower.indexOf(` ${needle}`) + 1;
-  if (!needle || at < 0 || (at === 0 && !lower.startsWith(needle))) return name;
-  return (
-    <>
-      {name.slice(0, at)}
-      <strong className="font-semibold">{name.slice(at, at + needle.length)}</strong>
-      <span className="text-muted-foreground">{name.slice(at + needle.length)}</span>
-    </>
-  );
-}
 
 const EMPTY_DRAFT = { state: "", date: "", since: "", sort: "rank" };
 
@@ -270,7 +256,9 @@ export function RankingFilters({
                       index === active ? "bg-muted" : ""
                     }`}
                   >
-                    <span className="min-w-0 truncate">{highlight(item.fullName, search)}</span>
+                    <span className="min-w-0 truncate">
+                      <HighlightedName name={item.fullName} term={search} />
+                    </span>
                     <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                       #{item.rank}
                       {item.state ? ` · ${item.state}` : ""}
