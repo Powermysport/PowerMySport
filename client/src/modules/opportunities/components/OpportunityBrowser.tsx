@@ -1,17 +1,19 @@
 "use client";
 
 import { SPORT_LABEL } from "@/modules/pathway/config/tournamentDisplay";
-import { MessageCircle } from "lucide-react";
+import { FilterModal } from "@/modules/shared/ui/FilterModal";
+import { MessageCircle, SlidersHorizontal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useOpportunityProfile } from "../hooks/useOpportunityProfile";
 import { GROUP_THRESHOLD, TRACKS, askUsHref } from "../config/tracks";
 import type { Opportunity, OpportunityTrack } from "../services/opportunities";
 import { formatDay } from "../utils/format";
 import { VERDICT_ORDER, checkOpportunity, hasProfile, type Verdict } from "../utils/match";
+import { matchesQuery } from "../utils/search";
 import { OpportunityRow, OpportunityTableHead } from "./OpportunityRow";
-import { ProfileFields } from "./ProfileFields";
+import { AgeField, GenderField, SportField, StateField } from "./ProfileFields";
 
 // ─── The list on /admissions and /scholarships ───────────────────────────
 //
@@ -23,7 +25,9 @@ import { ProfileFields } from "./ProfileFields";
 //    checking or not a match, and puts the ones that fit first;
 //  - when the list is short or comes up empty it says so, and offers a person.
 //
-// All the controls live in one panel, and there is one sport control. Sport
+// One panel, the same as the tournaments page: a search box, and a Filters
+// button that opens the rest (sport, type, and the answers about the child).
+// Typing filters the list as you go; there is nothing to submit. Sport
 // FILTERS (a tennis parent has no use for a badminton-only scheme); age, boy or
 // girl and state only MARK, because a "does not match" is still worth seeing
 // when the rule might bend. `?sport=` in the URL is an entry point only: it
@@ -31,13 +35,6 @@ import { ProfileFields } from "./ProfileFields";
 //
 // The server still renders every card (this is a client component, not a
 // client-only one), so the page reads fully with no JavaScript and to a crawler.
-
-const chipClass = (active: boolean) =>
-  `btn-motion focus-visible:ring-ink min-h-9 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${
-    active
-      ? "bg-ink border-ink text-white"
-      : "border-hairline text-ink hover:border-ink/40 bg-white"
-  }`;
 
 export function OpportunityBrowser({
   track,
@@ -63,6 +60,9 @@ export function OpportunityBrowser({
   const known = hasProfile(profile);
   const [hideMismatches, setHideMismatches] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const closeFilters = useCallback(() => setFiltersOpen(false), []);
 
   // A link to ?sport=tennis means "tennis", whatever was remembered before.
   useEffect(() => {
@@ -89,6 +89,7 @@ export function OpportunityBrowser({
   const clearAll = () => {
     clear();
     setCategory(null);
+    setQuery("");
     setHideMismatches(false);
     if (selectedSport) router.replace(config.path, { scroll: false });
   };
@@ -115,8 +116,13 @@ export function OpportunityBrowser({
 
   // What the sport and type filters leave, before "hide the ones that do not match".
   const pool = useMemo(
-    () => (category ? sportItems.filter((item) => item.category === category) : sportItems),
-    [sportItems, category]
+    () =>
+      sportItems.filter(
+        (item) =>
+          (!category || item.category === category) &&
+          matchesQuery(item, query, config.categories[item.category]?.label)
+      ),
+    [sportItems, category, query, config]
   );
 
   const counts = useMemo(() => {
@@ -155,8 +161,13 @@ export function OpportunityBrowser({
       : n === 1
         ? "option"
         : "options";
+  const plural = track === "scholarship" ? "scholarships" : "admissions";
   const narrowed = shown.length !== items.length;
-  const anythingSet = known || category !== null || hideMismatches;
+  const anythingSet = known || category !== null || hideMismatches || query.trim() !== "";
+  // What the Filters button counts: the choices inside the modal.
+  const filterCount = [activeSport, category, profile.age, profile.gender, profile.state].filter(
+    (value) => value !== null && value !== undefined && value !== ""
+  ).length;
   const askLabel = activeSport ? (SPORT_LABEL[activeSport] ?? activeSport) : undefined;
 
   const card = (item: Opportunity, withCategory: boolean) => (
@@ -175,70 +186,167 @@ export function OpportunityBrowser({
       {items.length > 0 && (
         <div className="space-y-4">
           <section
-            aria-labelledby="find-fit-heading"
-            className="border-hairline rounded-2xl border bg-white"
+            aria-label={`Search and filter ${plural}`}
+            className="border-hairline rounded-xl border bg-white p-4 sm:p-5"
           >
-            <div className="px-5 pt-5 sm:px-6 sm:pt-6">
-              <div className="flex items-baseline justify-between gap-4">
-                <h2
-                  id="find-fit-heading"
-                  className="font-editorial text-ink text-balance text-2xl font-light tracking-tight"
-                >
-                  Narrow the list to your child
-                </h2>
-                {anythingSet && (
-                  <button
-                    type="button"
-                    onClick={clearAll}
-                    className="text-ink decoration-ink/30 hover:decoration-ink focus-visible:ring-ink shrink-0 rounded-sm text-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-              <p className="text-ink-body mt-1.5 max-w-[60ch] text-pretty text-sm leading-relaxed">
-                Choose a sport to see only what is open to it. Add age, boy or girl, and state, and
-                we mark which ones match. Your answers stay on this device.
-              </p>
-            </div>
-
-            <div className="px-5 py-5 sm:px-6">
-              <ProfileFields
-                sports={sports}
-                sportValue={activeSport ?? ""}
-                sportPlaceholder="All sports"
-                onSportChange={changeSport}
-              />
-            </div>
-
-            {showTypes && (
-              <div className="border-hairline flex flex-col gap-2 border-t px-5 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
-                <span id="type-filter-label" className="text-ink shrink-0 text-sm font-medium">
-                  Type
-                </span>
-                <div
-                  role="group"
-                  aria-labelledby="type-filter-label"
-                  className="flex flex-wrap gap-2"
-                >
-                  {[null, ...presentCategories].map((name) => (
+            <form
+              role="search"
+              onSubmit={(event) => {
+                // The list already follows what is typed. Search is for the
+                // moment a visitor feels done: put the phone keyboard away and
+                // bring the results into view.
+                event.preventDefault();
+                document.getElementById("opportunity-search")?.blur();
+                document
+                  .getElementById("opportunity-results")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              <label
+                htmlFor="opportunity-search"
+                className="text-ink mb-2 block text-sm font-medium"
+              >
+                {`Find ${plural} for your child`}
+              </label>
+              <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                <div className="relative min-w-0 flex-1 basis-full sm:basis-0">
+                  <input
+                    id="opportunity-search"
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && query) setQuery("");
+                    }}
+                    maxLength={80}
+                    placeholder="Search by name, organisation or sport"
+                    enterKeyHint="search"
+                    autoComplete="off"
+                    className="border-hairline text-ink focus-visible:border-ink h-11 w-full rounded-md border bg-white pl-3 pr-11 text-sm outline-none transition [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
+                  />
+                  {query && (
                     <button
-                      key={name ?? "all"}
                       type="button"
-                      aria-pressed={name === category}
-                      onClick={() => setCategory(name)}
-                      className={chipClass(name === category)}
+                      aria-label="Clear search"
+                      onClick={() => {
+                        setQuery("");
+                        document.getElementById("opportunity-search")?.focus();
+                      }}
+                      className="text-ink-muted hover:text-ink focus-visible:ring-ink absolute right-1 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2"
                     >
-                      {name ? config.categories[name]?.label : "All types"}
+                      <X className="h-4 w-4" aria-hidden />
                     </button>
-                  ))}
+                  )}
                 </div>
+                <button
+                  type="submit"
+                  className="bg-ink inline-flex h-11 flex-1 shrink-0 items-center justify-center rounded-md px-6 text-sm font-medium text-white transition hover:opacity-90 sm:flex-none"
+                >
+                  Search
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(true)}
+                  aria-haspopup="dialog"
+                  className="border-hairline text-ink hover:border-ink/40 inline-flex h-11 flex-1 shrink-0 items-center justify-center gap-2 rounded-md border bg-white px-4 text-sm font-medium transition sm:flex-none"
+                >
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                  Filters
+                  {filterCount > 0 && (
+                    <span className="bg-ink inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs tabular-nums text-white">
+                      {filterCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {anythingSet && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-ink text-sm font-medium underline underline-offset-4"
+                >
+                  Clear all filters
+                </button>
               </div>
             )}
+
+            <FilterModal
+              open={filtersOpen}
+              onClose={closeFilters}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clear();
+                      setCategory(null);
+                      if (selectedSport) router.replace(config.path, { scroll: false });
+                    }}
+                    className="text-ink text-sm font-medium underline underline-offset-4"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeFilters}
+                    className="bg-ink h-11 rounded-md px-6 text-sm font-medium text-white transition hover:opacity-90"
+                  >
+                    {`Show ${shown.length} ${nounFor(shown.length)}`}
+                  </button>
+                </>
+              }
+            >
+              <SportField
+                sports={sports}
+                value={activeSport ?? ""}
+                placeholder="All sports"
+                onChange={changeSport}
+              />
+
+              {showTypes && (
+                <div>
+                  <label
+                    htmlFor="opportunity-type"
+                    className="text-ink mb-1.5 block text-sm font-medium"
+                  >
+                    Type
+                  </label>
+                  <select
+                    id="opportunity-type"
+                    value={category ?? ""}
+                    onChange={(event) => setCategory(event.target.value || null)}
+                    className="border-hairline text-ink focus-visible:border-ink h-11 w-full rounded-md border bg-white px-3 text-sm outline-none transition"
+                  >
+                    <option value="">All types</option>
+                    {presentCategories.map((name) => (
+                      <option key={name} value={name}>
+                        {config.categories[name]?.label ?? name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="border-hairline space-y-4 border-t pt-4">
+                <p className="text-ink-body text-sm">
+                  Tell us about your child and we mark which ones match. Your answers stay on this
+                  device.
+                </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                  <AgeField className="min-w-0" />
+                  <GenderField className="min-w-0" />
+                  <StateField className="col-span-2" />
+                </div>
+              </div>
+            </FilterModal>
           </section>
 
           {/* Right above the list it describes, and announced as it changes. */}
           <div
+            id="opportunity-results"
             role="status"
             className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm"
           >
