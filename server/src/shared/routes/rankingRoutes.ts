@@ -1,10 +1,12 @@
 import { Router } from "express";
+import { rankingSuggestRateLimiter } from "../../middleware/rateLimit";
 import {
   getPlayerRankingHistory,
   getRankingHealth,
   getRankingMeta,
   listRankingDates,
   listRankings,
+  suggestPlayers,
 } from "../controller/rankingController";
 
 const router = Router();
@@ -17,6 +19,9 @@ router.get("/health", getRankingHealth);
 
 // GET /api/rankings/dates?category=&subcategory= — weeks available for a combo
 router.get("/dates", listRankingDates);
+
+// GET /api/rankings/suggest?category=&subcategory=&q= — name suggestions for the search box
+router.get("/suggest", rankingSuggestRateLimiter, suggestPlayers);
 
 // GET /api/rankings/players/:regNo — one player's standing and trajectory
 router.get("/players/:regNo", getPlayerRankingHistory);

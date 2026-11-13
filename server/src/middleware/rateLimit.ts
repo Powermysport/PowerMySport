@@ -250,3 +250,27 @@ export const createContactRequestRateLimiter = (
 export const publicShareRateLimiter = createPublicShareRateLimiter();
 export const publicShareTokenRateLimiter = createPublicShareTokenRateLimiter();
 export const contactRequestRateLimiter = createContactRequestRateLimiter();
+
+/**
+ * Limiter for the ranking search box's suggestions, a public endpoint the page
+ * calls as a parent types. The client waits for a pause and cancels overtaken
+ * requests, so a real visitor sends a handful per search; 90 a minute per IP
+ * leaves room for several people behind one school or carrier address while
+ * capping a script that walks the list one letter at a time. Fails open when
+ * Redis is down.
+ *
+ * `store` is a parameter only so a test can pass an in-memory one.
+ */
+export const createRankingSuggestRateLimiter = (
+  store: Store = createRedisRateLimitStore("rl:rankings:suggest:")
+) =>
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 90,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store,
+    message: { success: false, message: "Too many searches. Please wait a moment." },
+  });
+
+export const rankingSuggestRateLimiter = createRankingSuggestRateLimiter();

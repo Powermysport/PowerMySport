@@ -3,6 +3,7 @@ import { RankingEntry } from "../models/RankingEntry";
 import { RankingSnapshot } from "../models/RankingSnapshot";
 import { AitaRankingIngestService } from "../services/aita/AitaRankingIngestService";
 import { nextTierFor, TOP_BAND, type Benchmark } from "../services/aita/rankingInsights";
+import { findSimilarPlayerIds } from "../services/ranking/atlasPlayerSearch";
 import { projectRanking } from "../services/ranking/rankingProjection";
 import { LIVE_COMBOS } from "../services/aita/types";
 import { asyncHandler } from "../../middleware/asyncHandler";
@@ -55,6 +56,20 @@ const DEFAULT_PAGE_SIZE = 50;
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The name match both the list and the suggestions use. Anchored so the
+ * nameSearch index is usable. Matches on either name part because "Given
+ * Family" order is not what a parent types half the time.
+ */
+const nameClauses = (search: string): Record<string, unknown>[] => {
+  const pattern = escapeRegex(search.toLowerCase());
+  return [
+    { nameSearch: { $regex: `^${pattern}` } },
+    { nameSearch: { $regex: `\\s${pattern}` } },
+    { regNo: search },
+  ];
+};
 
 /** Rank of each player (by AITA registration number) on one published list. */
 async function ranksOnList(snapshotId: unknown, regNos?: string[]): Promise<Map<string, number>> {
@@ -122,14 +137,18 @@ export const listRankings = asyncHandler(async (req: Request, res: Response): Pr
 
   const search = String(req.query.search ?? "").trim();
   if (search) {
-    // Anchored so the nameSearch index is usable. Matches on either name part
-    // because "Given Family" order is not what a parent types half the time.
-    const pattern = escapeRegex(search.toLowerCase());
-    filter.$or = [
-      { nameSearch: { $regex: `^${pattern}` } },
-      { nameSearch: { $regex: `\\s${pattern}` } },
-      { regNo: search },
-    ];
+    filter.$or = nameClauses(search);
+    // Typo-tolerant matches ("sarma" -> "sharma") are added to, never swapped
+    // for, the regex ones. Empty unless Atlas Search is switched on.
+    const similar = await findSimilarPlayerIds(search, {
+      sportSlug,
+      category,
+      subcategory,
+      ...(filter.isLatest === true ? { isLatest: true } : {}),
+      ...(filter.asOnDate instanceof Date ? { asOnDate: filter.asOnDate } : {}),
+      ...(typeof filter.state === "string" ? { state: filter.state } : {}),
+    });
+    if (similar.length > 0) (filter.$or as unknown[]).push({ _id: { $in: similar } });
   }
 
   const since = String(req.query.since ?? "").trim();
@@ -613,3 +632,68 @@ export const getRankingHealth = asyncHandler(
     res.json({ success: true, data: health });
   }
 );
+
+const SUGGESTION_LIMIT = 6;
+
+/**
+ * GET /api/rankings/suggest?category=Boys&subcategory=U-14&q=vik[&state=][&date=]
+ *
+ * The few players on this list whose name starts like what has been typed, for
+ * the search box's dropdown. Deliberately tiny: no snapshot, no insights, and
+ * only fields already public on the list itself (never a date of birth).
+ */
+export const suggestPlayers = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const sportSlug = sportOf(req);
+  const category = String(req.query.category ?? "").trim();
+  const subcategory = String(req.query.subcategory ?? "").trim();
+  if (!category || !subcategory) {
+    throw new AppError("category and subcategory are both required.", 400);
+  }
+
+  const q = String(req.query.q ?? "")
+    .trim()
+    .slice(0, 100);
+  if (q.length < 2) {
+    res.json({ success: true, data: [] });
+    return;
+  }
+
+  const filter: Record<string, unknown> = { sportSlug, category, subcategory };
+  const date = String(req.query.date ?? "").trim();
+  if (date) {
+    if (!ISO_DATE.test(date)) throw new AppError("date must be YYYY-MM-DD.", 400);
+    filter.asOnDate = new Date(date);
+  } else {
+    filter.isLatest = true;
+  }
+  const state = String(req.query.state ?? "").trim();
+  if (state) filter.state = state;
+
+  const clauses = nameClauses(q);
+  const similar = await findSimilarPlayerIds(q, {
+    sportSlug,
+    category,
+    subcategory,
+    ...(filter.isLatest === true ? { isLatest: true } : {}),
+    ...(filter.asOnDate instanceof Date ? { asOnDate: filter.asOnDate } : {}),
+    ...(state ? { state } : {}),
+  });
+  if (similar.length > 0) clauses.push({ _id: { $in: similar } });
+  filter.$or = clauses;
+
+  const rows = await RankingEntry.find(filter)
+    .sort({ rank: 1 })
+    .limit(SUGGESTION_LIMIT)
+    .select("regNo fullName rank state")
+    .lean();
+
+  res.json({
+    success: true,
+    data: rows.map((row) => ({
+      regNo: row.regNo,
+      fullName: row.fullName,
+      rank: row.rank,
+      state: row.state ?? null,
+    })),
+  });
+});
