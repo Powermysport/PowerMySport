@@ -27,7 +27,7 @@ import { CalendarDays, ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RankingFilters } from "./RankingFilters";
+import { RankingFilters } from "@/modules/rankings/components/RankingFilters";
 
 type Params = Promise<{ sport: string; category: string; subcategory: string }>;
 type Search = Promise<{
