@@ -413,7 +413,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ clas
                             <span
                               role="button"
                               onClick={(e) => handleMarkAsRead(notification._id, e)}
-                              className="rounded p-1 text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+                              className="cursor-pointer rounded p-1 text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
                               title="Mark as read"
                             >
                               <Check className="h-4 w-4" />
@@ -422,7 +422,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ clas
                           <span
                             role="button"
                             onClick={(e) => handleDelete(notification._id, e)}
-                            className="rounded p-1 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700"
+                            className="cursor-pointer rounded p-1 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700"
                             title="Delete"
                           >
                             <Trash2 className="h-4 w-4" />

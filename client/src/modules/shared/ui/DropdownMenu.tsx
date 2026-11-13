@@ -36,7 +36,7 @@ const DropdownMenuTrigger = React.forwardRef<HTMLDivElement, React.HTMLAttribute
     const { toggle } = useDropdownContext();
 
     return (
-      <div ref={ref} onClick={toggle} {...props}>
+      <div ref={ref} onClick={toggle} {...props} className={cn("cursor-pointer", props.className)}>
         {children}
       </div>
     );

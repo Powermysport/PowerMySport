@@ -274,6 +274,23 @@
     @apply border-border outline-ring/50;
   }
 
+  /* Tailwind v4 resets buttons to the default arrow, so nothing told a visitor a
+     button was clickable. One rule here instead of a class on every element, so
+     a new button cannot forget it. Disabled controls keep the arrow. */
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  label[for],
+  input:is([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"]):not(
+      :disabled
+    ),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
   html {
     /* Always show the scrollbar so content never reflows (shifting
        horizontally, and any wrapped text vertically) when a page transitions
