@@ -13,3 +13,7 @@ debug_output.txt
 
 # One-off pathway text cleanup backups (scripts/cleanPathwayRichText.ts)
 pathway-richtext-backup-*.json
+
+# Row backups written by --apply runs (scripts/ingestAicfCalendar.ts, migrations/74_*.ts)
+aicf-backup*.json
+m[0-9][0-9]-backup*.json
