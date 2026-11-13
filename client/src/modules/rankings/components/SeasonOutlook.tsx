@@ -68,15 +68,16 @@ function MovementLine({
 export function SeasonOutlook({
   projection,
   listLabel,
-  /** Junior lists are read by parents; the open-age lists by the players. */
-  parentAudience = true,
+  /** The player's display name. The page is a public profile, so it speaks of the
+   * player by first name, not as "your child" to a reader who may be anyone. */
+  playerName,
 }: {
   projection: RankingProjection;
   listLabel: string;
-  parentAudience?: boolean;
+  playerName?: string | undefined;
 }) {
   const { movement, activity, atRisk, toNextTier, window } = projection;
-  const subject = parentAudience ? "your child" : "this player";
+  const subject = playerName?.trim().split(/\s+/)[0] || "this player";
 
   // With one comparison and nothing else, the trajectory chart above has already
   // said everything this panel could, and said it better.
@@ -86,7 +87,7 @@ export function SeasonOutlook({
   const idle = activity.weeksSinceLastRise !== null && activity.weeksSinceLastRise >= 12;
 
   return (
-    <section className="bg-card rounded-lg border p-5 sm:p-6">
+    <section className="bg-card rounded-xl border p-5 sm:p-6">
       <h3 className="text-base font-semibold tracking-tight">
         What happens next on the {listLabel} list
       </h3>

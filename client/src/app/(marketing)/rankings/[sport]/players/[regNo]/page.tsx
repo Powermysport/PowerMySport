@@ -1,32 +1,21 @@
 import { NOINDEX_METADATA } from "@/lib/seo";
-import {
-  fetchPlayer,
-  formatAsOn,
-  type PlayerCurrentEntry,
-  type RankingBandProfile,
-} from "@/modules/rankings/services/api";
-import { entryStatus, isJuniorBracket } from "@powermysport/shared-types";
+import { fetchPlayer } from "@/modules/rankings/services/api";
+import { isJuniorBracket } from "@powermysport/shared-types";
 import { EntryRules } from "@/modules/rankings/components/HowToRead";
 import { RankProgress } from "@/modules/rankings/components/RankProgress";
 import { readHistoryRange } from "@/modules/rankings/utils/historyRange";
+import { playerPageTitle } from "@/modules/rankings/utils/playerTitle";
 import { SeasonOutlook } from "@/modules/rankings/components/SeasonOutlook";
 import { comboHref, comboLabel, getRankingSport } from "@/modules/rankings/config/rankings";
-import {
-  formatPoints,
-  nationalStandingPhrase,
-  ownBracket,
-  tierPhrase,
-} from "@/modules/rankings/utils/insights";
+import { ownBracket } from "@/modules/rankings/utils/insights";
 import {
   PlayerPageHeader,
-  PlayerStanding,
   displayName,
   summariseSeason,
 } from "@/modules/rankings/components/PlayerHero";
-import { PointsComposition } from "@/modules/rankings/components/PointsComposition";
-import { RankDelta } from "@/modules/rankings/components/RankDelta";
+import { PlayerSummary } from "@/modules/rankings/components/PlayerSummary";
+import { PlayerPointsPanel } from "@/modules/rankings/components/PlayerPointsPanel";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 /**
@@ -54,10 +43,14 @@ import { notFound } from "next/navigation";
  * costs and what this rank opens or closes, and only then the breakdown of where
  * the points came from. The old order led with a chart and buried the target.
  */
-export const metadata: Metadata = {
-  ...NOINDEX_METADATA,
-  title: "Player ranking history",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ sport: string; regNo: string }>;
+}): Promise<Metadata> {
+  const { sport, regNo } = await params;
+  return { ...NOINDEX_METADATA, title: await playerPageTitle(sport, regNo) };
+}
 
 export default async function PlayerRankingPage({
   params,
@@ -95,6 +88,12 @@ export default async function PlayerRankingPage({
     return a.rank - b.rank;
   });
   const primaryEntry = standings[0];
+  const primaryCombo = primaryEntry && {
+    category: primaryEntry.category,
+    subcategory: primaryEntry.subcategory,
+  };
+  const primaryList = primaryCombo ? comboLabel(primaryCombo) : "";
+  const primaryListHref = primaryCombo ? comboHref(sport.slug, primaryCombo) : "";
 
   // Chart the list the player has the most history in — usually their main age
   // group, and the one where a trend is actually readable.
@@ -113,122 +112,54 @@ export default async function PlayerRankingPage({
     return b[1].length - a[1].length;
   });
 
+  const primaryListLabel = primaryList;
+  const outlook = primaryEntry?.projection ? (
+    <SeasonOutlook
+      projection={primaryEntry.projection}
+      listLabel={primaryListLabel}
+      playerName={name}
+    />
+  ) : null;
+  const rules =
+    primaryEntry && isJuniorBracket(primaryEntry.subcategory) ? (
+      <EntryRules subcategory={primaryEntry.subcategory} listLabel={primaryListLabel} />
+    ) : null;
+
   return (
     <>
-      <PlayerPageHeader name={name} acronym={sport.federation.acronym} player={player} />
+      <PlayerPageHeader
+        name={name}
+        acronym={sport.federation.acronym}
+        player={player}
+        list={primaryEntry ? { label: primaryList, href: primaryListHref } : null}
+      />
 
-      <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-        <PlayerStanding
-          federationAcronym={sport.federation.acronym}
-          summary={season}
-          primary={
-            primaryEntry
-              ? {
-                  listLabel: comboLabel({
-                    category: primaryEntry.category,
-                    subcategory: primaryEntry.subcategory,
-                  }),
-                  rank: primaryEntry.rank,
-                  listSize: primaryEntry.insight.listSize,
-                  totalPoints: primaryEntry.totalPoints,
-                  nextTier: primaryEntry.insight.nextTier,
-                }
-              : null
-          }
+      <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <PlayerSummary
+          standings={standings}
+          home={home}
+          season={season}
+          sportSlug={sport.slug}
+          acronym={sport.federation.acronym}
         />
-
-        {standings.length > 0 && (
-          <section className="mt-10">
-            <SectionHeading
-              title={standings.length > 1 ? "Both lists" : "Current standing"}
-              subtitle={
-                standings.length > 1 && home
-                  ? `${comboLabel({ category: standings[0]!.category, subcategory: home })} is the main list, the age group this player belongs to. Entering an older group as well is normal, and results there earn points on both lists.`
-                  : undefined
-              }
-            />
-            <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-              {standings.map((entry) => (
-                <li key={entry._id}>
-                  <StandingCard
-                    entry={entry}
-                    sportSlug={sport.slug}
-                    isHome={entry.subcategory === home}
-                    showRole={standings.length > 1 && home !== null}
-                  />
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
 
         {charted.length > 0 && <RankProgress charted={charted} range={range} />}
 
-        {/* Where the trend is heading, and what ageing results will cost if nothing
-          replaces them. Sits after the chart because it answers the question the
-          chart raises, and before the rules because the rules are what a parent
-          reaches for once they have decided something needs doing. Home bracket
-          only: the 52-week cycle is per list, and two of these would be two
-          different answers to one question. */}
-        {primaryEntry?.projection && (
-          <section className="mt-10">
-            <SeasonOutlook
-              projection={primaryEntry.projection}
-              listLabel={comboLabel({
-                category: primaryEntry.category,
-                subcategory: primaryEntry.subcategory,
-              })}
-              parentAudience={isJuniorBracket(primaryEntry.subcategory)}
-            />
-          </section>
+        {/* Two cards side by side on a wide screen: where the trend is heading (what
+          ageing results will cost if nothing replaces them) beside what the rank
+          opens and closes under AITA's rules. The first answers the question the
+          chart raises; the second is what a parent reaches for once they have
+          decided something needs doing. Both are home bracket only: the 52-week
+          cycle and the entry gates are per list, and a second copy for a bracket
+          the child is only visiting would be a second, conflicting answer. */}
+        {(outlook || rules) && (
+          <div className={`mt-10 grid gap-6 ${outlook && rules ? "lg:grid-cols-2" : ""}`}>
+            {outlook}
+            {rules}
+          </div>
         )}
 
-        {/* What the rank does, under AITA's rules. Only for the home bracket — the
-          gates are per age group, and repeating the panel for a bracket the child
-          is only visiting would read as two conflicting sets of rules. */}
-        {primaryEntry && isJuniorBracket(primaryEntry.subcategory) && (
-          <section className="mt-10">
-            <EntryRules
-              subcategory={primaryEntry.subcategory}
-              listLabel={comboLabel({
-                category: primaryEntry.category,
-                subcategory: primaryEntry.subcategory,
-              })}
-            />
-          </section>
-        )}
-
-        {/* Their own point mix against the mix of the players above them. Reading
-          the two together is the actionable part: a player whose total is all
-          singles, beside a top ten that draws a quarter of its points from
-          doubles and international events, has been shown where the gap is.
-
-          Home bracket only. Two of these panels, one per list, was four charts of
-          near-identical shape and no reader got to the end of them. */}
-        {primaryEntry &&
-          (() => {
-            const band = playerBand(primaryEntry, name);
-            if (!band) return null;
-            const combo = {
-              category: primaryEntry.category,
-              subcategory: primaryEntry.subcategory,
-            };
-            return (
-              <section className="mt-10">
-                <PointsComposition
-                  bands={[band, ...(primaryEntry.insight.bands ?? [])]}
-                  subcategory={primaryEntry.subcategory}
-                  title={`What makes up these points: ${comboLabel(combo)}`}
-                  caption={
-                    `The top bar is ${name}, broken into where each point came from. ` +
-                    "The bars under it are the averages for each part of the list. " +
-                    "Where a colour is wide at the top of the list but thin or missing " +
-                    "on the top bar, that is what the leading players are doing differently."
-                  }
-                />
-              </section>
-            );
-          })()}
+        {primaryEntry && <PlayerPointsPanel entry={primaryEntry} name={name} />}
 
         {history.length === 0 && current.length === 0 && (
           <p className="text-muted-foreground mt-10 rounded-lg border border-dashed p-8 text-center">
@@ -243,208 +174,4 @@ export default async function PlayerRankingPage({
       </div>
     </>
   );
-}
-
-function SectionHeading({ title, subtitle }: { title: string; subtitle?: string | undefined }) {
-  return (
-    <div>
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-      {subtitle && (
-        <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">{subtitle}</p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Where the player sits in the field, drawn rather than only stated.
- *
- * ── Why this replaced a percentile bar ───────────────────────────────────────
- * The previous version filled a bar to the percentile — top 20% drew a bar 20%
- * full. That is backwards to look at: a fuller bar reads as more, better, further
- * along, so the best players in the country got the emptiest bars and a player
- * near the bottom got a bar brimming with colour. Nothing on screen said which
- * way to read it.
- *
- * This draws the field instead, labelled at both ends, with a marker where the
- * player stands. There is no direction to infer — the ends say what they are.
- */
-function FieldPosition({ rank, listSize }: { rank: number; listSize: number }) {
-  const position = Math.min(100, Math.max(0, (rank / listSize) * 100));
-  return (
-    <div className="mt-2.5">
-      <div aria-hidden className="bg-muted relative h-1.5 w-full rounded-full">
-        <span
-          className="border-card bg-power-orange absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-sm"
-          style={{ left: `${position}%` }}
-        />
-      </div>
-      <div aria-hidden className="text-muted-foreground mt-1 flex justify-between text-xs">
-        <span>best</span>
-        <span>{listSize.toLocaleString("en-IN")}th</span>
-      </div>
-    </div>
-  );
-}
-
-/**
- * One standing, with the context that makes it mean something.
- *
- * The rank is the biggest thing on the card, but on its own it is the least
- * informative — so it is immediately followed by the plain-language version of
- * itself ("in the top 20% in India"), the standing inside their own state, and
- * the points still needed for the next rung. "Weeks in the top 100: 0 of 43"
- * used to sit here too; it told a parent nothing except that their child had
- * never been near the top hundred, which is true of roughly every player on the
- * list and is not information anyone came for.
- */
-function StandingCard({
-  entry,
-  sportSlug,
-  isHome,
-  showRole,
-}: {
-  entry: PlayerCurrentEntry;
-  sportSlug: string;
-  isHome: boolean;
-  showRole: boolean;
-}) {
-  const combo = { category: entry.category, subcategory: entry.subcategory };
-  const { insight } = entry;
-  const standing = nationalStandingPhrase(entry.rank, insight.listSize);
-  const gates = entryStatus(entry.rank, entry.subcategory);
-
-  return (
-    <div
-      className={`bg-card flex h-full flex-col rounded-lg border p-5 shadow-sm transition-shadow hover:shadow-md ${
-        isHome ? "border-power-orange/40 ring-power-orange/20 ring-1" : "border-border"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            href={comboHref(sportSlug, combo)}
-            className="text-foreground hover:text-power-orange-solid focus-visible:ring-power-orange text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          >
-            {comboLabel(combo)}
-          </Link>
-          {showRole && (
-            <span className="text-muted-foreground mt-0.5 block text-xs">
-              {isHome ? "Own age group" : "Playing up"}
-            </span>
-          )}
-        </div>
-        {/* Movement is only meaningful when we hold the previous week; the chip
-            renders nothing rather than guessing. */}
-        <RankDelta delta={entry.rankDelta} hasBaseline={entry.prevRank !== undefined} />
-      </div>
-
-      <p className="mt-3 flex items-baseline gap-2">
-        <span className="text-4xl font-bold tabular-nums tracking-tight">
-          #{entry.rank.toLocaleString("en-IN")}
-        </span>
-        {insight.listSize && (
-          <span className="text-muted-foreground text-sm">
-            of {insight.listSize.toLocaleString("en-IN")}
-          </span>
-        )}
-      </p>
-      {/* `capitalize` would title-case every word — "In The Top 20% In India".
-          Only the first letter should move, and the phrase is authored lower-case
-          so it can also sit mid-sentence in the hero. */}
-      {standing && <p className="mt-1 text-sm font-medium first-letter:uppercase">{standing}</p>}
-      {insight.listSize && <FieldPosition rank={entry.rank} listSize={insight.listSize} />}
-
-      <dl className="mb-4 mt-4 space-y-1.5 text-sm">
-        <Row label="Points" value={formatPoints(entry.totalPoints)} />
-        {entry.stateRank && entry.state && (
-          <Row
-            label={`Within ${entry.state}`}
-            value={`#${entry.stateRank}${
-              insight.stateSize ? ` of ${insight.stateSize.toLocaleString("en-IN")}` : ""
-            }`}
-          />
-        )}
-        {insight.careerHigh && insight.careerHigh.rank < entry.rank && (
-          <Row
-            label="Best on this list"
-            value={`#${insight.careerHigh.rank.toLocaleString("en-IN")} · ${formatAsOn(insight.careerHigh.asOnDate)}`}
-          />
-        )}
-      </dl>
-
-      {insight.nextTier && (
-        <p className="border-border mt-auto border-t pt-3 text-sm leading-relaxed">
-          <span className="font-semibold tabular-nums">
-            {formatPoints(insight.nextTier.gap)} more points
-          </span>{" "}
-          <span className="text-muted-foreground">
-            to reach the {tierPhrase(insight.nextTier.rank)}, which takes{" "}
-            {formatPoints(insight.nextTier.points)} this week
-          </span>
-        </p>
-      )}
-
-      {/* One line of what this rank means for entries. The full rules, with their
-          source, are in the panel below — this is the pointer, not the argument. */}
-      {gates && (
-        <p className="text-muted-foreground mt-2.5 text-xs leading-relaxed">
-          {gates.closed.length > 0
-            ? `At this rank: ${gates.summary.toLowerCase()}.`
-            : "At this rank, every tournament level is open to enter."}
-        </p>
-      )}
-
-      <p className="text-muted-foreground mt-3 text-xs">as on {formatAsOn(entry.asOnDate)}</p>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <dt className="text-muted-foreground truncate">{label}</dt>
-      <dd className="shrink-0 text-right font-medium tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-/**
- * The player's own points as a band, so their bar can sit beside the list's
- * averages in the same chart.
- *
- * Which columns are deductions is read off the API's aggregate bands rather than
- * re-derived here — the pipeline already made that call from the printed header,
- * and a second rule in the browser is a second chance to disagree with it.
- */
-function playerBand(entry: PlayerCurrentEntry, name: string): RankingBandProfile | null {
-  const bands = entry.insight.bands ?? [];
-  // No aggregates means no way to tell a deduction column from a scoring one, and
-  // nothing to compare the player against. Both reasons to skip the panel.
-  if (bands.length === 0) return null;
-  const components = entry.points.slice(0, -1);
-  if (components.length < 2) return null;
-
-  const classified = new Map(
-    bands.flatMap((band) =>
-      (band.composition ?? []).map((slice) => [slice.label, slice.isDeduction] as const)
-    )
-  );
-
-  return {
-    // The child's own name, not "This player". The bar sits directly above three
-    // rows labelled "Top 10", "Ranked 11–100" and "Ranked 101 and below", and a
-    // parent scanning that stack should find the person they came for by name
-    // rather than by working out which row must be theirs.
-    label: name,
-    from: entry.rank,
-    to: entry.rank,
-    playerCount: 1,
-    averageTotal: entry.totalPoints,
-    composition: components.map((point) => ({
-      label: point.label,
-      average: point.value,
-      isDeduction: classified.get(point.label) ?? false,
-    })),
-  };
 }

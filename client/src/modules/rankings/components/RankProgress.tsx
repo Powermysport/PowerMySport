@@ -33,6 +33,9 @@ export function RankProgress({
       }.`
     : "Every list AITA has published since we started mirroring them.";
 
+  // Lists with at least two weeks, since one point is not a trend.
+  const charts = charted.slice(0, 2).filter(([, all]) => all.length >= 2);
+
   return (
     <section className="mt-10">
       <div>
@@ -50,39 +53,39 @@ export function RankProgress({
         to={range.to}
       />
 
-      {charted.slice(0, 2).map(([key, all]) => {
-        const [category, subcategory] = key.split("|");
-        const label = comboLabel({ category: category ?? "", subcategory: subcategory ?? "" });
-        if (all.length < 2) return null;
-        const points = all.filter((p) => inHistoryRange(p.asOnDate, range));
-        return (
-          <div
-            key={key}
-            className="border-border bg-card mt-4 rounded-lg border p-4 shadow-sm sm:p-5"
-          >
-            <h3 className="text-sm font-semibold">{label}</h3>
-            {points.length >= 2 ? (
-              <RankTrajectory
-                points={points.map((p) => ({
-                  asOnDate: p.asOnDate,
-                  rank: p.rank,
-                  // Lets the hover readout answer the follow-up question: a jump
-                  // of 80 places is a different story depending on whether the
-                  // points moved with it.
-                  totalPoints: p.totalPoints,
-                }))}
-                label={label}
-              />
-            ) : (
-              <p className="text-muted-foreground mt-2 text-sm">
-                {points.length === 1
-                  ? "Only one list in this range, so there is no trend to draw. Widen the range."
-                  : "No lists in this range. Widen the range or choose All."}
-              </p>
-            )}
-          </div>
-        );
-      })}
+      {/* Side by side on a wide screen when there are two lists, so both trends
+          can be read at once. One list takes the full width. */}
+      <div className={`mt-4 grid gap-4 ${charts.length > 1 ? "lg:grid-cols-2" : ""}`}>
+        {charts.map(([key, all]) => {
+          const [category, subcategory] = key.split("|");
+          const label = comboLabel({ category: category ?? "", subcategory: subcategory ?? "" });
+          const points = all.filter((p) => inHistoryRange(p.asOnDate, range));
+          return (
+            <div key={key} className="border-border bg-card min-w-0 rounded-xl border p-5 sm:p-6">
+              <h3 className="text-base font-semibold tracking-tight">{label}</h3>
+              {points.length >= 2 ? (
+                <RankTrajectory
+                  points={points.map((p) => ({
+                    asOnDate: p.asOnDate,
+                    rank: p.rank,
+                    // Lets the hover readout answer the follow-up question: a jump
+                    // of 80 places is a different story depending on whether the
+                    // points moved with it.
+                    totalPoints: p.totalPoints,
+                  }))}
+                  label={label}
+                />
+              ) : (
+                <p className="text-muted-foreground mt-2 text-sm">
+                  {points.length === 1
+                    ? "Only one list in this range, so there is no trend to draw. Widen the range."
+                    : "No lists in this range. Widen the range or choose All."}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

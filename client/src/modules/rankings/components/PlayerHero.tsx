@@ -1,31 +1,12 @@
 import { PageHeader } from "@/modules/shared/ui/PageHeader";
-import { ArrowUp, Award, Target, TrendingUp } from "lucide-react";
-import { formatAsOn } from "../services/api";
-import { formatPoints, nationalStandingPhrase, tierPhrase } from "../utils/insights";
 
 /**
- * The standing at the top of a player's page, under the shared PageHeader.
- *
- * ── What this is for ─────────────────────────────────────────────────────────
- * A parent opening this page is asking one question — *is my child doing well?*
- * — and the honest answer is a sentence, not a number. So the page opens with
- * the sentence: ranked 312th of 1,602 in Boys Under-16, which is the top 20% in
- * India. Everything after it is supporting detail.
- *
- * ── What was removed, and why ────────────────────────────────────────────────
- * The three headline figures used to be "best rank held", "weeks tracked" and
- * "age groups". Two of those were facts about our archive rather than about the
- * child: "43 published lists" measures how far back we have mirrored AITA, and
- * "2 age groups" is a count of rows in a database. Neither tells a parent
- * anything they can use, and both occupied the most valuable space on the page.
- *
- * They are replaced by the three numbers a parent actually reaches for: where the
- * child stands now, the best they have stood, and how far the next level is.
- *
- * Everything here is derived from data the page already fetched. No new requests.
+ * The top of a player's page: the shared PageHeader with the name as its title,
+ * and the identity chips. The standing itself (the answer, best rank, points)
+ * lives in PlayerSummary.
  *
  * No pronouns anywhere. These are real children whose pronouns we have never been
- * told — the list category is the name of a tournament bracket, not a statement
+ * told: the list category is the name of a tournament bracket, not a statement
  * about the person on the row.
  */
 
@@ -37,19 +18,26 @@ export interface HistoryPoint {
 }
 
 /**
- * AITA publishes names in block capitals. Rendering that verbatim makes every
- * player's page read as though it is shouting, so an all-caps name is cased for
- * display. A name that already has mixed case is left exactly as supplied —
- * people capitalise their own names in ways a rule will get wrong.
+ * AITA publishes names in block capitals, sometimes only the surname
+ * ("Vikrant KHANDELWAL"). Rendered verbatim that reads as shouting, so a word
+ * that is entirely capitals is cased for display. A word already in mixed case
+ * is left exactly as supplied, since people capitalise their own names in ways a
+ * rule will get wrong, and so are single letters (initials) and roman numerals.
  */
 export function displayName(raw: string): string {
-  if (raw !== raw.toUpperCase()) return raw;
   return raw
-    .toLowerCase()
-    .replace(
-      /(^|[\s'\-.])([a-z])/g,
-      (_, boundary: string, char: string) => `${boundary}${char.toUpperCase()}`
-    );
+    .split(/(\s+)/)
+    .map((word) => {
+      const shouting = /[A-Z]{2,}/.test(word) && word === word.toUpperCase();
+      if (!shouting || /^(II|III|IV)$/.test(word)) return word;
+      return word
+        .toLowerCase()
+        .replace(
+          /(^|['\-.])([a-z])/g,
+          (_, boundary: string, char: string) => `${boundary}${char.toUpperCase()}`
+        );
+    })
+    .join("");
 }
 
 export interface SeasonSummary {
@@ -129,15 +117,6 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** The one standing the headline sentence and the stat row are built from. */
-export interface PrimaryStanding {
-  listLabel: string;
-  rank: number;
-  listSize: number | null;
-  totalPoints: number;
-  nextTier: { rank: number; gap: number } | null;
-}
-
 /**
  * The player page's header: the shared PageHeader, with the name as its title
  * and the identity chips (state, birth year, registration number) above it.
@@ -147,15 +126,22 @@ export function PlayerPageHeader({
   name,
   acronym,
   player,
+  list,
 }: {
   name: string;
   acronym: string;
   player: Omit<PlayerChipsProps, "federationAcronym">;
+  /** The list this player is ranked on, so the way back is one click, not two. */
+  list?: { label: string; href: string } | null;
 }) {
   return (
     <PageHeader
-      width="4xl"
-      breadcrumbs={[{ label: "Rankings", href: "/rankings" }, { label: name }]}
+      width="6xl"
+      breadcrumbs={[
+        { label: "Rankings", href: "/rankings" },
+        ...(list ? [{ label: list.label, href: list.href }] : []),
+        { label: name },
+      ]}
       badges={<PlayerChips federationAcronym={acronym} {...player} />}
       title={name}
     />
@@ -180,127 +166,5 @@ function PlayerChips({ federationAcronym, regNo, state, birthYear }: PlayerChips
         {federationAcronym} #{regNo}
       </Chip>
     </>
-  );
-}
-
-/**
- * The standing card under the header: the answer sentence, the best climb and
- * the three numbers. The name, chips and initials tile that used to sit on top
- * of it are now the shared PageHeader, like every other detail page.
- */
-export function PlayerStanding({
-  federationAcronym,
-  summary,
-  primary,
-}: {
-  federationAcronym: string;
-  summary: SeasonSummary;
-  /** Null for a player we hold no current standing for — history only. */
-  primary: PrimaryStanding | null;
-}) {
-  const standing = primary ? nationalStandingPhrase(primary.rank, primary.listSize) : null;
-
-  return (
-    <section className="border-border bg-card overflow-hidden rounded-xl border shadow-sm">
-      <div className="px-5 py-6 sm:px-8 sm:py-7">
-        {/* The answer, in a sentence, before any table. A parent who reads only
-            this line and closes the tab has still been told the thing they came
-            for. */}
-        {primary && (
-          <p className="max-w-2xl text-base leading-relaxed sm:text-lg">
-            Ranked{" "}
-            <span className="font-bold tabular-nums">#{primary.rank.toLocaleString("en-IN")}</span>
-            {primary.listSize && <> of {primary.listSize.toLocaleString("en-IN")}</>} in{" "}
-            {federationAcronym} {primary.listLabel}
-            {standing && (
-              <>
-                {/* A real separator. The em-dash sweep replaced the one that
-                    was here with an empty expression, so every ranked player's
-                    page read "...Boys Under-14in the top 19% in India." */}
-                {", "}
-                <span className="text-foreground font-semibold">{standing}</span>
-              </>
-            )}
-            .
-          </p>
-        )}
-
-        {summary.bestClimb && summary.bestClimb.places > 0 && (
-          <p className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm sm:text-base">
-            <ArrowUp className="text-rank-delta-up h-4 w-4 shrink-0 self-center" aria-hidden />
-            <span className="text-rank-delta-up font-bold tabular-nums">
-              Up {summary.bestClimb.places.toLocaleString("en-IN")} places
-            </span>
-            <span className="text-muted-foreground">
-              in {summary.bestClimb.label} since we started tracking, from #
-              {summary.bestClimb.from.toLocaleString("en-IN")} to #
-              {summary.bestClimb.to.toLocaleString("en-IN")}
-            </span>
-          </p>
-        )}
-      </div>
-
-      <dl className="divide-border border-border grid grid-cols-1 divide-y border-t sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        {primary && (
-          <Stat
-            icon={<TrendingUp className="h-4 w-4" aria-hidden />}
-            label="Rank now"
-            value={`#${primary.rank.toLocaleString("en-IN")}`}
-            hint={
-              primary.listSize
-                ? `of ${primary.listSize.toLocaleString("en-IN")} in ${primary.listLabel}`
-                : primary.listLabel
-            }
-          />
-        )}
-        {summary.careerBest && (
-          <Stat
-            icon={<Award className="h-4 w-4" aria-hidden />}
-            label="Best rank so far"
-            value={`#${summary.careerBest.rank.toLocaleString("en-IN")}`}
-            hint={`reached ${formatAsOn(summary.careerBest.asOnDate)}`}
-          />
-        )}
-        {primary && (
-          <Stat
-            icon={<Target className="h-4 w-4" aria-hidden />}
-            label="Points"
-            value={formatPoints(primary.totalPoints)}
-            hint={
-              primary.nextTier
-                ? `${formatPoints(primary.nextTier.gap)} more for the ${tierPhrase(primary.nextTier.rank)}`
-                : "in their own age group"
-            }
-          />
-        )}
-      </dl>
-    </section>
-  );
-}
-
-function Stat({
-  icon,
-  label,
-  value,
-  hint,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  hint: string;
-}) {
-  return (
-    <div className="px-5 py-4 sm:px-6">
-      <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
-        {icon}
-        {label}
-      </dt>
-      {/* Hint on its own line: inline, "#270" and "13 Jul 2026" ran together
-          and read as a single number. */}
-      <dd className="mt-1">
-        <span className="text-foreground text-2xl font-bold tabular-nums">{value}</span>
-        <span className="text-muted-foreground mt-0.5 block text-xs">{hint}</span>
-      </dd>
-    </div>
   );
 }

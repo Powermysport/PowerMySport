@@ -93,7 +93,7 @@ export function EntryRules({ subcategory, listLabel }: { subcategory: string; li
   const isUnder18 = subcategory.trim().toUpperCase() === "U-18";
 
   return (
-    <section className="bg-card rounded-lg border p-5 sm:p-6">
+    <section className="bg-card rounded-xl border p-5 sm:p-6">
       <h3 className="text-base font-semibold tracking-tight">What a rank opens and closes</h3>
 
       {/* The ladder first. The gates below are stated in these names, and they
@@ -166,7 +166,9 @@ export function EntryRules({ subcategory, listLabel }: { subcategory: string; li
           href={RULES_SOURCE.href}
           target="_blank"
           rel="noopener noreferrer nofollow"
-          className="hover:text-foreground underline"
+          // Padding gives the link a finger-sized target; the negative margin
+          // keeps the line from growing.
+          className="hover:text-foreground -my-3 inline-block py-3 underline"
         >
           {RULES_SOURCE.label}
         </a>

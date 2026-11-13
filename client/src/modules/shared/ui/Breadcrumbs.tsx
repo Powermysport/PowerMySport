@@ -26,7 +26,7 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
     >
       <Link
         href="/"
-        className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+        className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange -my-3 inline-flex items-center rounded px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
         aria-label="Home"
       >
         <Home className="h-4 w-4" />
@@ -48,7 +48,7 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
             ) : (
               <Link
                 href={item.href}
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange rounded px-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange -my-3 inline-flex items-center rounded px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               >
                 {item.label}
               </Link>
@@ -80,7 +80,7 @@ export function MobileBreadcrumbs({ items, maxItems = 2, className }: MobileBrea
     >
       <Link
         href="/"
-        className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+        className="text-muted-foreground hover:text-foreground focus-visible:ring-power-orange -my-3 inline-flex items-center rounded px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
         aria-label="Home"
       >
         <Home className="h-4 w-4" />

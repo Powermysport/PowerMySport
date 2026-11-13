@@ -161,7 +161,12 @@ export function RankTrajectory({ points, label }: { points: TrajectoryPoint[]; l
           style={{ height: "13rem" }}
           onPointerMove={(event) => locate(event.clientX)}
           onPointerDown={(event) => locate(event.clientX)}
-          onPointerLeave={() => setActive(null)}
+          // A finger lifting is a pointer "leaving" too, which wiped the readout the
+          // instant a touch ended. Only a mouse leaving clears it; for touch it
+          // stays until the chart loses focus (a tap elsewhere).
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") setActive(null);
+          }}
           onBlur={() => setActive(null)}
           onKeyDown={(event) => {
             if (event.key === "ArrowRight") {
@@ -219,7 +224,7 @@ export function RankTrajectory({ points, label }: { points: TrajectoryPoint[]; l
               ellipses, and these have to stay round at every width. */}
           {coords.map((c, index) => (
             <span
-              key={c.asOnDate}
+              key={`${c.asOnDate}-${index}`}
               aria-hidden
               className={`bg-rank-accent absolute rounded-full transition-transform ${
                 active === index ? "scale-150" : ""
@@ -288,7 +293,7 @@ export function RankTrajectory({ points, label }: { points: TrajectoryPoint[]; l
       </span>
 
       <figcaption className="text-muted-foreground mt-2 text-sm leading-relaxed">
-        Point at any dot to see that week.{" "}
+        Point at the line or tap it to see a week, or Tab to the chart and use the arrow keys.{" "}
         <span className="text-foreground font-medium">
           {improved
             ? `Up ${(first.rank - last.rank).toLocaleString("en-IN")} places`
@@ -298,7 +303,84 @@ export function RankTrajectory({ points, label }: { points: TrajectoryPoint[]; l
           over {ordered.length} weeks, best of #{best.toLocaleString("en-IN")}.
         </span>
       </figcaption>
+
+      <WeeklyTable weeks={ordered} />
     </figure>
+  );
+}
+
+/**
+ * Every week as a table: the same numbers as the readout, for anyone who would
+ * rather read a list than find a dot, and for screen readers. Newest first,
+ * since the latest weeks are the ones a parent is checking.
+ */
+function WeeklyTable({ weeks }: { weeks: TrajectoryPoint[] }) {
+  const showPoints = weeks.some((week) => week.totalPoints !== undefined);
+  const rows = weeks
+    .map((week, index) => ({
+      week,
+      index,
+      // Positive means the rank improved that week.
+      change: index > 0 ? weeks[index - 1]!.rank - week.rank : null,
+    }))
+    .reverse();
+
+  return (
+    <details className="mt-3 text-sm">
+      <summary className="text-foreground w-fit cursor-pointer py-1 font-medium underline-offset-4 hover:underline">
+        Show every week as a table
+      </summary>
+      <div className="border-border mt-2 max-h-72 overflow-auto rounded-md border">
+        <table className="w-full text-left tabular-nums">
+          <caption className="sr-only">Rank for every published week</caption>
+          <thead className="bg-card text-muted-foreground sticky top-0 text-xs uppercase tracking-wide">
+            <tr>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Week
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Rank
+              </th>
+              {showPoints && (
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Points
+                </th>
+              )}
+              <th scope="col" className="px-3 py-2 font-medium">
+                Change
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-border divide-y">
+            {rows.map(({ week, index, change }) => (
+              // The index too: a corrected re-upload can leave two rows with one date.
+              <tr key={`${week.asOnDate}-${index}`}>
+                <th scope="row" className="px-3 py-2 font-normal">
+                  {formatAsOn(week.asOnDate)}
+                </th>
+                <td className="px-3 py-2 font-medium">#{week.rank.toLocaleString("en-IN")}</td>
+                {showPoints && (
+                  <td className="px-3 py-2">
+                    {week.totalPoints !== undefined ? formatPoints(week.totalPoints) : ""}
+                  </td>
+                )}
+                <td className="px-3 py-2">
+                  {change === null || change === 0 ? (
+                    <span className="text-muted-foreground">{change === 0 ? "No change" : ""}</span>
+                  ) : change > 0 ? (
+                    <span className="text-rank-delta-up font-medium">Up {change}</span>
+                  ) : (
+                    <span className="text-rank-delta-down font-medium">
+                      Down {Math.abs(change)}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
 
