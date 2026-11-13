@@ -48,10 +48,21 @@ const type = (label: string, value: string) =>
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
   });
 
+// jsdom has no <dialog> behaviour; the Filters modal needs showModal/close.
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function showModal() {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function close() {
+    this.removeAttribute("open");
+    this.dispatchEvent(new Event("close"));
+  };
   localStorage.clear();
   replace.mockClear();
 });
+
+/** The sport, type and child's answers live in the Filters modal. */
+const openFilters = () => fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
 afterEach(() => cleanup());
 
 describe("the list when there are only a few entries", () => {
@@ -90,19 +101,20 @@ describe("the list when there are only a few entries", () => {
     expect(screen.getByText("1 scholarship listed so far")).toBeTruthy();
   });
 
-  it("filters by type with chips, and only when there is more than one type", () => {
+  it("filters by type in the Filters modal, and only when there is more than one type", () => {
     browser(few);
+    openFilters();
 
-    fireEvent.click(screen.getByRole("button", { name: "Government" }));
+    type("Type", "government");
     expect(screen.queryByRole("heading", { name: "Alpha" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Bravo" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "All types" }));
+    type("Type", "");
     expect(screen.getByRole("heading", { name: "Alpha" })).toBeTruthy();
 
     cleanup();
     browser([few[0]!]);
-    expect(screen.queryByRole("group", { name: "Filter by type" })).toBeNull();
+    expect(screen.queryByLabelText("Type")).toBeNull();
   });
 
   it("offers a person on WhatsApp for what is not listed", () => {
@@ -227,6 +239,7 @@ describe("finding what fits", () => {
 
   it("remembers the child on this device", () => {
     browser(items);
+    openFilters();
     type("Sport", "chess");
     fireEvent.click(screen.getByRole("button", { name: "Girl" }));
 
@@ -403,6 +416,7 @@ describe("the one sport control", () => {
 
   it("lets boy or girl be taken back with a second tap", () => {
     browser(items);
+    openFilters();
     const girl = screen.getByRole("button", { name: "Girl" });
 
     fireEvent.click(girl);
