@@ -36,7 +36,7 @@ export default function PlannerPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-slate-50">
+      <div className="bg-paper min-h-screen">
         <PageHeader
           breadcrumbs={[{ label: "Season planner" }]}
           title="Season planner"

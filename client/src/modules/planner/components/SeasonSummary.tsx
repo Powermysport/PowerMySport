@@ -33,7 +33,6 @@ const TONE: Record<
   Tone,
   {
     card: string;
-    label: string;
     sub: string;
     note: string;
     faint: string;
@@ -45,7 +44,6 @@ const TONE: Record<
 > = {
   dark: {
     card: "border-slate-900 bg-slate-900 text-white",
-    label: "text-slate-300",
     sub: "text-slate-200",
     note: "text-slate-300",
     faint: "text-slate-400",
@@ -56,7 +54,6 @@ const TONE: Record<
   },
   warn: {
     card: "border-amber-300 bg-amber-50 text-amber-950",
-    label: "text-amber-900",
     sub: "text-amber-950",
     note: "text-amber-900",
     faint: "text-amber-800",
@@ -67,7 +64,6 @@ const TONE: Record<
   },
   light: {
     card: "border-hairline bg-white text-ink",
-    label: "text-ink-muted",
     sub: "text-ink-body",
     note: "text-ink-body",
     faint: "text-ink-muted",
@@ -136,12 +132,14 @@ function NextUpTile({
       data-tour="next"
       className={`order-1 rounded-lg border p-5 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] lg:order-none ${t.card}`}
     >
-      <h2 id="next-up" className={`${LABEL} ${t.label}`}>
+      {/* The sentence below says what to do, so a visible label above it only repeated
+          it. The heading stays for screen readers and for the section's name. */}
+      <h2 id="next-up" className="sr-only">
         {first ? "Do this next" : "Next step"}
       </h2>
 
       {first ? (
-        <div className="mt-2">
+        <div>
           <p className="font-title text-2xl font-semibold leading-snug tracking-[-0.02em]">
             {headline(first)}
           </p>
@@ -218,7 +216,7 @@ function NextUpTile({
           )}
         </div>
       ) : (
-        <div className="mt-2">
+        <div>
           <p className="font-title text-2xl font-semibold leading-snug tracking-[-0.02em]">
             Pick tournaments for {childName}
           </p>
