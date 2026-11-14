@@ -114,7 +114,7 @@ export function OfficialDetails({
           : "From AITA's 2026 rules for this level and these dates. This event's own page could not be read, so check it before you enter."}
       </p>
 
-      <details className="text-sm leading-relaxed text-slate-700">
+      <details className="disclosure-in text-sm leading-relaxed text-slate-700">
         <summary className="cursor-pointer font-semibold text-slate-600 hover:underline">
           If you withdraw late or do not turn up
         </summary>

@@ -136,7 +136,7 @@ export function EditionFilters({
         />
         <button
           type="submit"
-          className="bg-ink h-11 flex-1 shrink-0 rounded-md px-6 text-sm font-medium text-white transition hover:opacity-90 sm:flex-none"
+          className="btn-motion bg-ink hover:bg-ink-hover h-11 flex-1 shrink-0 rounded-md px-6 text-sm font-medium text-white sm:flex-none"
         >
           Search
         </button>
@@ -235,7 +235,7 @@ export function EditionFilters({
           <button
             type="button"
             onClick={applyFilters}
-            className="bg-ink h-11 rounded-md px-6 text-sm font-medium text-white transition hover:opacity-90"
+            className="btn-motion bg-ink hover:bg-ink-hover h-11 rounded-md px-6 text-sm font-medium text-white"
           >
             Apply filters
           </button>

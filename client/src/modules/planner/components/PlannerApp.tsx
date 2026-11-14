@@ -70,7 +70,7 @@ export function PlannerApp() {
         </p>
         <Link
           href="/dashboard"
-          className="bg-power-orange-solid mt-4 inline-flex min-h-11 items-center rounded-md px-6 text-sm font-semibold text-white hover:bg-orange-800"
+          className="btn-motion bg-power-orange-solid mt-4 inline-flex min-h-11 items-center rounded-md px-6 text-sm font-semibold text-white hover:bg-orange-800"
         >
           Add a player on your dashboard
         </Link>

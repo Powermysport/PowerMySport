@@ -193,7 +193,7 @@ export function CostLine({
       </div>
 
       {open && (
-        <div className="bg-paper-deep/50 mt-3 rounded-lg px-4 py-1">
+        <div className="disclosure-in bg-paper-deep/50 mt-3 rounded-lg px-4 py-1">
           <dl className="divide-hairline text-ink-body divide-y">
             {cost.travel && (
               <div className="flex justify-between gap-4 py-2.5">

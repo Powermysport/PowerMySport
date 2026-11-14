@@ -642,3 +642,32 @@ html[data-ask-transition] [data-ai-bubble] {
     animation: popover-fade 100ms linear both;
   }
 }
+
+/* ── Disclosure panels (planner cost breakdown, <details> bodies) ──
+   A short fade and 4px settle so opened content does not teleport in. Opacity
+   and transform only, played once per opening. No exit: closing stays instant.
+   Reduced motion keeps the fade and drops the movement. */
+@keyframes disclosure-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes disclosure-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+:not(details).disclosure-in,
+details.disclosure-in[open] > :not(summary) {
+  animation: disclosure-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :not(details).disclosure-in,
+  details.disclosure-in[open] > :not(summary) {
+    animation: disclosure-fade 100ms linear both;
+  }
+}

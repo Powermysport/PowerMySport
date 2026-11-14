@@ -396,7 +396,7 @@ export function SeasonSummary({
                 onClick={() =>
                   tileRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" })
                 }
-                className="bg-ink hover:bg-ink-hover inline-flex min-h-11 shrink-0 items-center rounded-lg px-4 text-sm font-semibold text-white"
+                className="btn-motion bg-ink hover:bg-ink-hover inline-flex min-h-11 shrink-0 items-center rounded-lg px-4 text-sm font-semibold text-white"
               >
                 Show
               </button>

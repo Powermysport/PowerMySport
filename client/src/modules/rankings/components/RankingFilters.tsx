@@ -271,7 +271,7 @@ export function RankingFilters({
           <button
             type="submit"
             disabled={isPending}
-            className="bg-ink inline-flex h-11 min-w-24 flex-1 shrink-0 items-center justify-center gap-2 rounded-md px-6 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-80 sm:flex-none"
+            className="btn-motion bg-ink hover:bg-ink-hover inline-flex h-11 min-w-24 flex-1 shrink-0 items-center justify-center gap-2 rounded-md px-6 text-sm font-medium text-white disabled:opacity-80 sm:flex-none"
           >
             {isPending ? (
               <>
@@ -423,7 +423,7 @@ export function RankingFilters({
           <button
             type="button"
             onClick={applyFilters}
-            className="bg-ink h-11 rounded-md px-6 text-sm font-medium text-white transition hover:opacity-90"
+            className="btn-motion bg-ink hover:bg-ink-hover h-11 rounded-md px-6 text-sm font-medium text-white"
           >
             Apply filters
           </button>
