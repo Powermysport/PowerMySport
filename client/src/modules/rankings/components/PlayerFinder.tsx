@@ -125,7 +125,7 @@ export function PlayerFinder({ sport }: { sport: string }) {
             aria-label="Matching players"
             // mousedown, not click: the input's blur would close the list first.
             onMouseDown={(event) => event.preventDefault()}
-            className="border-hairline absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-white shadow-lg"
+            className="popover-in border-hairline absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-white shadow-lg"
           >
             {items.map((item, index) => (
               <li

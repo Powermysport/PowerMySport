@@ -187,7 +187,7 @@ export function EditionFilters({
       <dialog
         ref={dialogRef}
         aria-labelledby="edition-filters-title"
-        className="border-hairline m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border bg-white p-0 shadow-xl backdrop:bg-black/40"
+        className="modal-dialog border-hairline m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border bg-white p-0 shadow-xl"
       >
         <div className="flex items-center justify-between px-5 pt-5">
           <h2 id="edition-filters-title" className="text-ink text-lg font-medium">

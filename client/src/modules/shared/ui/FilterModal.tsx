@@ -52,7 +52,7 @@ export function FilterModal({
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      className="border-hairline m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-xl border bg-white p-0 shadow-xl backdrop:bg-black/40"
+      className="modal-dialog border-hairline m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-xl border bg-white p-0 shadow-xl"
     >
       <div className="flex items-center justify-between px-5 pt-5">
         <h2 id={titleId} className="text-ink text-lg font-medium">

@@ -560,3 +560,85 @@ html[data-ask-transition] [data-ai-bubble] {
     animation-delay: calc(var(--i, 0) * 45ms);
   }
 }
+
+/* ── Native <dialog> modals (filters) ──
+   Opacity and scale only. `@starting-style` gives the entrance without JS and
+   `allow-discrete` on display/overlay lets the exit play before the dialog
+   leaves the top layer. Browsers without support just open and close instantly,
+   which is the behaviour before this existed. */
+.modal-dialog {
+  opacity: 0;
+  scale: 0.96;
+  transition:
+    opacity 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    scale 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    overlay 150ms allow-discrete,
+    display 150ms allow-discrete;
+}
+
+.modal-dialog[open] {
+  opacity: 1;
+  scale: 1;
+  transition-duration: 200ms;
+}
+
+@starting-style {
+  .modal-dialog[open] {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+.modal-dialog::backdrop {
+  background-color: rgb(0 0 0 / 0);
+  transition:
+    background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    overlay 150ms allow-discrete,
+    display 150ms allow-discrete;
+}
+
+.modal-dialog[open]::backdrop {
+  background-color: rgb(0 0 0 / 0.4);
+  transition-duration: 200ms;
+}
+
+@starting-style {
+  .modal-dialog[open]::backdrop {
+    background-color: rgb(0 0 0 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-dialog,
+  .modal-dialog[open] {
+    scale: 1;
+  }
+}
+
+/* ── Suggestion lists under search boxes ──
+   Grows a few pixels from the input edge on mount. Runs once per opening, because
+   the list element stays mounted while the visitor types. No exit: closing the
+   list should feel instant. */
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
+@keyframes popover-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.popover-in {
+  transform-origin: top;
+  animation: popover-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover-in {
+    animation: popover-fade 100ms linear both;
+  }
+}

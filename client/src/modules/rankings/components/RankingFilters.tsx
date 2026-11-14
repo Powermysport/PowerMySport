@@ -242,7 +242,7 @@ export function RankingFilters({
                 aria-label="Matching players"
                 // mousedown, not click: the input's blur would close the list first.
                 onMouseDown={(event) => event.preventDefault()}
-                className="border-hairline absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-white shadow-lg"
+                className="popover-in border-hairline absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-white shadow-lg"
               >
                 {suggestions.map((item, index) => (
                   <li
@@ -316,7 +316,7 @@ export function RankingFilters({
       <dialog
         ref={dialogRef}
         aria-labelledby="ranking-filters-title"
-        className="border-hairline m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border bg-white p-0 shadow-xl backdrop:bg-black/40"
+        className="modal-dialog border-hairline m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border bg-white p-0 shadow-xl"
       >
         <div className="flex items-center justify-between px-5 pt-5">
           <h2 id="ranking-filters-title" className="text-ink text-lg font-medium">
