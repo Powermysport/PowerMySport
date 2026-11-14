@@ -55,6 +55,7 @@ import {
 } from "../controllers/communityController";
 import { authMiddleware, optionalAuthMiddleware } from "../../middleware/auth";
 import { cacheControl } from "../../middleware/cacheControl";
+import { peopleSearchRateLimiter } from "../../middleware/rateLimit";
 import {
   communityBlockSchema,
   communityAddGroupMemberSchema,
@@ -82,7 +83,7 @@ import { validateRequest } from "../../middleware/validation";
 const router = Router();
 
 router.get("/profile", authMiddleware, getCommunityProfile);
-router.get("/players/search", authMiddleware, searchPlayers);
+router.get("/players/search", authMiddleware, peopleSearchRateLimiter, searchPlayers);
 router.get("/players/:userId/profile", authMiddleware, getPlayerProfile);
 router.patch(
   "/profile",

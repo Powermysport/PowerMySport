@@ -274,3 +274,29 @@ export const createRankingSuggestRateLimiter = (
   });
 
 export const rankingSuggestRateLimiter = createRankingSuggestRateLimiter();
+
+/**
+ * Limiter for the community people search, called as a parent types. Keyed by the
+ * signed-in user (the route is behind auth), not the address, because families
+ * share addresses and a limit per address would throttle strangers together.
+ *
+ * The client waits for a pause between keystrokes, so a real search is a handful
+ * of requests; 120 a minute leaves room for fast typists and a few searches in a
+ * row while capping a script that walks the user list a prefix at a time. Fails
+ * open when Redis is down. `store` is a parameter only so a test can pass an
+ * in-memory one.
+ */
+export const createPeopleSearchRateLimiter = (
+  store: Store = createRedisRateLimitStore("rl:community:people-search:")
+) =>
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store,
+    keyGenerator: (req) => req.user?.id || (req.ip ? ipKeyGenerator(req.ip) : "anon"),
+    message: { success: false, message: "Too many searches. Please wait a moment." },
+  });
+
+export const peopleSearchRateLimiter = createPeopleSearchRateLimiter();

@@ -1,4 +1,5 @@
 import { User } from "../../client/models/User";
+import { findUserIdsByName } from "./communityPeopleSearch";
 import { CommunityMessagePrivacy, CommunityProfile } from "../models/CommunityProfile";
 import {
   citiesOf,
@@ -15,6 +16,14 @@ import {
   escapeRegex,
   resolveUserPhotoUrl,
 } from "./communityShared";
+
+/**
+ * How long the plain (regex) name and alias queries may run. They read every row,
+ * so a single slow one is cut off and answered as "nothing found" rather than
+ * holding the database for every other request. Only reached when Atlas Search is
+ * off or unavailable.
+ */
+const NAME_SCAN_MS = 2000;
 
 /**
  * Community profiles, player search and blocking.
@@ -39,6 +48,7 @@ export const communityProfileService = {
     const myProfile = await CommunityProfile.findOne({ userId }).select("blockedUsers").lean();
     const myBlockedUsers = myProfile?.blockedUsers || [];
 
+    const roles = roleFilter ? [roleFilter] : COMMUNITY_ALLOWED_ROLES;
     const userMatchCriteria: any = {
       _id: { $ne: userId },
       role: roleFilter ? roleFilter : { $in: COMMUNITY_ALLOWED_ROLES },
@@ -52,25 +62,49 @@ export const communityProfileService = {
       profileMatchCriteria.anonymousAlias = new RegExp(escapeRegex(normalizedQuery), "i");
     }
 
+    // The name comes from the search index when there is one (see
+    // communityPeopleSearch.ts); otherwise from the plain query, which reads every
+    // user and so is time-capped. A capped query that runs out of time is treated
+    // as having found nothing: a slow search is not worth a failed page.
+    const atlasIds = normalizedQuery
+      ? await findUserIdsByName(normalizedQuery, roles, safeLimit * 3 + 1)
+      : null;
+
+    const findNameMatches = () =>
+      atlasIds
+        ? User.find({
+            _id: { $in: atlasIds.filter((id) => String(id) !== userId) },
+            role: userMatchCriteria.role,
+          })
+            .select("_id name photoUrl photoS3Key")
+            .limit(safeLimit * 3)
+            .lean()
+        : User.find(userMatchCriteria)
+            .select("_id name photoUrl photoS3Key")
+            .limit(safeLimit * 3)
+            .maxTimeMS(NAME_SCAN_MS)
+            .lean();
+
     const [nameMatches, aliasMatches] = await Promise.all([
-      User.find(userMatchCriteria)
-        .select("_id name photoUrl photoS3Key")
-        .limit(safeLimit * 3)
-        .lean(),
+      findNameMatches().catch(() => []),
       normalizedQuery
         ? CommunityProfile.find(profileMatchCriteria)
             .select("userId")
             .limit(safeLimit * 3)
+            .maxTimeMS(NAME_SCAN_MS)
             .lean()
+            .catch(() => [])
         : Promise.resolve([]),
     ]);
 
     const candidateIds = new Set<string>();
+    const matchedByAlias = new Set<string>();
     for (const user of nameMatches) {
       candidateIds.add(String(user._id));
     }
     for (const match of aliasMatches) {
       candidateIds.add(String(match.userId));
+      matchedByAlias.add(String(match.userId));
     }
 
     const ids = Array.from(candidateIds);
@@ -112,7 +146,19 @@ export const communityProfileService = {
           candidateProfile?.blockedUsers?.some((blockedUserId) => String(blockedUserId) === userId)
         );
 
-        return !blockedMe;
+        if (blockedMe) {
+          return false;
+        }
+
+        // A parent who keeps their identity private is shown under their alias.
+        // Finding them by their REAL name would show which alias is whom, so a
+        // search only reaches them through the alias.
+        const isPublic = candidateProfile?.isIdentityPublic ?? true;
+        if (normalizedQuery && !isPublic && !matchedByAlias.has(candidateId)) {
+          return false;
+        }
+
+        return true;
       })
       .map((user) => {
         const candidateId = String(user._id);
