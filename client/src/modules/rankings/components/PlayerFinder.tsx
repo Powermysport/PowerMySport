@@ -139,7 +139,9 @@ export function PlayerFinder({ sport }: { sport: string }) {
                   index === active ? "bg-muted" : ""
                 }`}
               >
-                <span className="min-w-0 truncate">
+                {/* Wraps instead of truncating: the family name is the end of the
+                    string, and a cut there leaves "Venkata Sai Krishna Chaitanya Pem…". */}
+                <span className="min-w-0 [overflow-wrap:anywhere]">
                   <HighlightedName name={item.fullName} term={term} />
                 </span>
                 <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
@@ -148,6 +150,8 @@ export function PlayerFinder({ sport }: { sport: string }) {
                     : ""}
                   #{item.rank}
                   {item.state ? ` · ${item.state}` : ""}
+                  {/* Two players can share a name; the registration number cannot. */}
+                  {` · AITA #${item.regNo}`}
                 </span>
               </li>
             ))}

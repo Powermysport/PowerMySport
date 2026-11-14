@@ -30,7 +30,10 @@ export function PlayerTabs({
   available,
   range,
   list,
+  data,
 }: {
+  /** Dev stress-fixture name, carried so switching tabs stays on the fixture. */
+  data?: string | undefined;
   basePath: string;
   active: PlayerTabId;
   available: PlayerTabId[];
@@ -44,6 +47,7 @@ export function PlayerTabs({
 
   const hrefFor = (id: PlayerTabId) => {
     const params = new URLSearchParams();
+    if (data) params.set("data", data);
     if (list) params.set("list", list);
     if (id !== tabs[0]!.id) params.set("tab", id);
     if (range.from) params.set("from", range.from);

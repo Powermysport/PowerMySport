@@ -138,11 +138,26 @@ export function nationalStandingPhrase(
 ): string | null {
   if (!listSize || listSize <= 0) return null;
   const percent = Math.max(1, Math.ceil((rank / listSize) * 100));
+  // A list of one has no "top" to be in; say what is true.
+  if (listSize === 1) return "the only player on this list";
   // Past the halfway mark "top 80%" is technically true and reads as praise for
   // being near the bottom. Ranked at all is the achievement worth naming there —
-  // roughly nine in ten registered players never appear on a list.
-  if (percent > 50) return `ranked among the top ${listSize.toLocaleString("en-IN")} in India`;
+  // roughly nine in ten registered players never appear on a list. Named as one of
+  // the players on the list, not as being "in the top N": at the foot of a list of
+  // 1,749 that would read as a claim of being in the top 1,749 of something larger.
+  if (percent > 50)
+    return `ranked among the ${listSize.toLocaleString("en-IN")} players on this list`;
   return `in the top ${percent}% in India`;
+}
+
+/** 1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st, 1,001st: English ordinals, grouped the Indian way. */
+export function ordinalLabel(value: number): string {
+  const lastTwo = value % 100;
+  const suffix =
+    lastTwo >= 11 && lastTwo <= 13
+      ? "th"
+      : (({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[value % 10] ?? "th");
+  return `${value.toLocaleString("en-IN")}${suffix}`;
 }
 
 /**

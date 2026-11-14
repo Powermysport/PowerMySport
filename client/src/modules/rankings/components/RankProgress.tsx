@@ -43,15 +43,24 @@ export function RankProgress({
         <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">{subtitle}</p>
       </div>
 
-      <HistoryRange
-        // Re-mounted on every range change so the custom From/To boxes show the
-        // range in force after a preset is clicked, not what was last typed.
-        key={`${range.from ?? ""}|${range.to ?? ""}`}
-        earliest={earliest}
-        latest={latest}
-        from={range.from}
-        to={range.to}
-      />
+      {charts.length === 0 && (
+        <p className="text-muted-foreground mt-6 max-w-2xl text-sm leading-relaxed">
+          We hold only one published list for this player so far, so there is no trend to draw yet.
+          It fills in as each week&apos;s list is added.
+        </p>
+      )}
+
+      {charts.length > 0 && (
+        <HistoryRange
+          // Re-mounted on every range change so the custom From/To boxes show the
+          // range in force after a preset is clicked, not what was last typed.
+          key={`${range.from ?? ""}|${range.to ?? ""}`}
+          earliest={earliest}
+          latest={latest}
+          from={range.from}
+          to={range.to}
+        />
+      )}
 
       {/* Side by side on a wide screen when there are two lists, so both trends
           can be read at once. One list takes the full width. */}

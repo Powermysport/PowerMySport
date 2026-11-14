@@ -21,7 +21,10 @@ export function PlayerListSwitch({
   home,
   tab,
   range,
+  data,
 }: {
+  /** Dev stress-fixture name, carried so switching list stays on the fixture. */
+  data?: string | undefined;
   basePath: string;
   /** Every list the player is on, own age group first. */
   standings: PlayerCurrentEntry[];
@@ -35,6 +38,7 @@ export function PlayerListSwitch({
 
   const hrefFor = (subcategory: string) => {
     const params = new URLSearchParams();
+    if (data) params.set("data", data);
     if (subcategory !== standings[0]!.subcategory) params.set("list", subcategory);
     if (tab) params.set("tab", tab);
     if (range.from) params.set("from", range.from);

@@ -120,7 +120,8 @@ export default async function SportRankingsPage({
                         <span className="text-muted-foreground flex items-center gap-3 text-sm tabular-nums">
                           {available ? (
                             <span>
-                              {info?.rowCount?.toLocaleString("en-IN")} players
+                              {info?.rowCount?.toLocaleString("en-IN")}{" "}
+                              {info?.rowCount === 1 ? "player" : "players"}
                               {!commonDate && <> · as on {formatAsOn(info?.asOnDate)}</>}
                             </span>
                           ) : (

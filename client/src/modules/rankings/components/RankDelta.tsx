@@ -61,7 +61,7 @@ export function RankDelta({
       } ${className}`}
     >
       <Icon className="h-3 w-3" aria-hidden />
-      {Math.abs(delta)}
+      {Math.abs(delta).toLocaleString("en-IN")}
       <span className="sr-only">
         {` ${Math.abs(delta) === 1 ? "place" : "places"} ${up ? "up" : "down"}`} since{" "}
         {sinceLabel ?? "the previous list"}

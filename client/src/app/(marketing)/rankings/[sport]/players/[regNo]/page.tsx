@@ -23,6 +23,8 @@ import {
 } from "@/modules/rankings/components/PlayerTabs";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { devPlayerFixture } from "@/modules/rankings/data/worstCasePlayer";
+import { DevDataToggle } from "@/modules/rankings/components/DevDataToggle";
 
 /**
  * One player's standing and history.
@@ -63,7 +65,13 @@ export default async function PlayerRankingPage({
   searchParams,
 }: {
   params: Promise<{ sport: string; regNo: string }>;
-  searchParams: Promise<{ from?: string; to?: string; tab?: string; list?: string }>;
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    tab?: string;
+    list?: string;
+    data?: string;
+  }>;
 }) {
   const { sport: sportSlug, regNo } = await params;
   const query = await searchParams;
@@ -72,7 +80,10 @@ export default async function PlayerRankingPage({
   if (!sport) notFound();
   if (!/^\d{4,8}$/.test(regNo)) notFound();
 
-  const data = await fetchPlayer(regNo, sport.slug);
+  // `?data=worst|one|empty` swaps in a stress fixture, outside production only.
+  const fixture = devPlayerFixture(query.data);
+  const fixtureName = fixture ? query.data : undefined;
+  const data = fixture ?? (await fetchPlayer(regNo, sport.slug));
   if (!data) notFound();
 
   const { player, current, history } = data;
@@ -168,6 +179,7 @@ export default async function PlayerRankingPage({
           home={home}
           tab={query.tab}
           range={range}
+          data={fixtureName}
         />
 
         <PlayerSummary
@@ -189,6 +201,7 @@ export default async function PlayerRankingPage({
           available={available}
           range={range}
           list={listParam}
+          data={fixtureName}
         />
 
         <div className="mt-8 min-h-64">
@@ -200,17 +213,14 @@ export default async function PlayerRankingPage({
           {tab === "rules" && rules}
         </div>
 
-        {history.length === 0 && current.length === 0 && (
-          <p className="text-muted-foreground mt-10 rounded-lg border border-dashed p-8 text-center">
-            No ranking history held for this player.
-          </p>
-        )}
-
         <p className="text-muted-foreground mt-10 text-xs leading-relaxed">
           Rankings are published by the All India Tennis Association and mirrored here. PowerMySport
           is not affiliated with AITA.
         </p>
       </div>
+      {process.env.NODE_ENV !== "production" && (
+        <DevDataToggle basePath={`/rankings/${sport.slug}/players/${regNo}`} active={fixtureName} />
+      )}
     </>
   );
 }

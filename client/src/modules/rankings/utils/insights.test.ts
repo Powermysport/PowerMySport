@@ -4,6 +4,7 @@ import {
   compositionLegend,
   explainTotal,
   nationalStandingPhrase,
+  ordinalLabel,
   ownBracket,
   percentileLabel,
   plainPointLabel,
@@ -229,12 +230,31 @@ describe("nationalStandingPhrase", () => {
   it("stops quoting a percentile once it would read as praise for being last", () => {
     // "Top 80%" is true and insulting. Being ranked at all is the fact worth
     // naming down there.
-    expect(nationalStandingPhrase(1500, 1602)).toBe("ranked among the top 1,602 in India");
+    expect(nationalStandingPhrase(1500, 1602)).toBe("ranked among the 1,602 players on this list");
+  });
+
+  it("does not claim a top of a list of one", () => {
+    expect(nationalStandingPhrase(1, 1)).toBe("the only player on this list");
   });
 
   it("withholds a phrase it cannot compute", () => {
     expect(nationalStandingPhrase(12, null)).toBeNull();
     expect(nationalStandingPhrase(12, 0)).toBeNull();
+  });
+});
+
+describe("ordinalLabel", () => {
+  it("gets the suffix right, including the teens and grouped thousands", () => {
+    expect(ordinalLabel(1)).toBe("1st");
+    expect(ordinalLabel(2)).toBe("2nd");
+    expect(ordinalLabel(3)).toBe("3rd");
+    expect(ordinalLabel(4)).toBe("4th");
+    expect(ordinalLabel(11)).toBe("11th");
+    expect(ordinalLabel(12)).toBe("12th");
+    expect(ordinalLabel(13)).toBe("13th");
+    expect(ordinalLabel(21)).toBe("21st");
+    expect(ordinalLabel(1001)).toBe("1,001st");
+    expect(ordinalLabel(1749)).toBe("1,749th");
   });
 });
 

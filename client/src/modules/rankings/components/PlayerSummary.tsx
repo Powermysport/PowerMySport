@@ -5,7 +5,13 @@ import type { ReactNode } from "react";
 
 import { PAGE_SIZE, comboHref, comboLabel } from "../config/rankings";
 import type { PlayerCurrentEntry } from "../services/api";
-import { formatAsOn, formatPoints, nationalStandingPhrase, tierPhrase } from "../utils/insights";
+import {
+  formatAsOn,
+  formatPoints,
+  nationalStandingPhrase,
+  ordinalLabel,
+  tierPhrase,
+} from "../utils/insights";
 import type { SeasonSummary } from "./PlayerHero";
 import { RankDelta } from "./RankDelta";
 
@@ -116,7 +122,7 @@ export function PlayerSummary({
             source, are under the Entry rules tab. */}
         {gates && gates.closed.length > 0 && (
           <p className="text-muted-foreground mt-2 max-w-md text-sm leading-relaxed">
-            {`At this rank: ${gates.summary.toLowerCase()}.`}
+            {`At this rank: ${gates.summary}.`}
           </p>
         )}
 
@@ -190,15 +196,18 @@ function Fact({ label, value, hint }: { label: string; value: string; hint: Reac
   );
 }
 
-/** For a player we hold history for but no current list. */
+/** For a player on no current list: with history we hold, or with none at all. */
 function NoCurrentStanding({ season }: { season: SeasonSummary }) {
+  const hasHistory = season.weeksTracked > 0;
   return (
     <section aria-labelledby="player-summary-heading" className="border-border border-b pb-10">
       <h2 id="player-summary-heading" className="text-xl font-semibold">
         Not on a current list
       </h2>
       <p className="text-muted-foreground mt-1 text-sm">
-        We hold earlier weeks for this player, but they are not on the latest published list.
+        {hasHistory
+          ? "We hold earlier weeks for this player, but they are not on the latest published list."
+          : "They are not on the latest published list, and we hold no earlier weeks for them."}
       </p>
       {season.careerBest && (
         <p className="mt-3 text-sm">
@@ -232,7 +241,7 @@ function FieldPosition({ rank, listSize }: { rank: number; listSize: number }) {
       </div>
       <div aria-hidden className="text-muted-foreground mt-2 flex justify-between text-xs">
         <span>best</span>
-        <span>{listSize.toLocaleString("en-IN")}th</span>
+        <span>{ordinalLabel(listSize)}</span>
       </div>
     </div>
   );

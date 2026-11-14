@@ -295,12 +295,12 @@ export function RankTrajectory({ points, label }: { points: TrajectoryPoint[]; l
       <figcaption className="text-muted-foreground mt-2 text-sm leading-relaxed">
         Point at the line or tap it to see a week, or Tab to the chart and use the arrow keys.{" "}
         <span className="text-foreground font-medium">
-          {improved
-            ? `Up ${(first.rank - last.rank).toLocaleString("en-IN")} places`
-            : last.rank === first.rank
-              ? "No change"
-              : `Down ${(last.rank - first.rank).toLocaleString("en-IN")} places`}{" "}
-          over {ordered.length} weeks, best of #{best.toLocaleString("en-IN")}.
+          {last.rank === first.rank && !improved
+            ? // Equal ends say nothing about the road between them: a player who
+              // reached #1 and came back is not "no change".
+              `Same rank as ${ordered.length} weeks ago`
+            : `${improved ? "Up" : "Down"} ${Math.abs(first.rank - last.rank).toLocaleString("en-IN")} places over ${ordered.length} weeks`}
+          , best of #{best.toLocaleString("en-IN")}.
         </span>
       </figcaption>
 
