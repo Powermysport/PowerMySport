@@ -29,7 +29,7 @@ import { FactSheetPanel } from "@/modules/tournaments/components/FactSheetPanel"
 import { FactSheetSections } from "@/modules/tournaments/components/FactSheetSections";
 import { EntryDetails, hasEntryDetails } from "@/modules/tournaments/components/EntryDetails";
 import { PageHeader } from "@/modules/shared/ui/PageHeader";
-import { editionSnippet } from "@/modules/tournaments/utils/editionFormat";
+import { editionMetaTitle, editionSnippet } from "@/modules/tournaments/utils/editionFormat";
 import { AddToCalendarButton } from "../../federations/[slug]/AddToCalendarButton";
 import { SPORT_LABEL } from "../../federations/[slug]/federationShared";
 
@@ -95,30 +95,18 @@ export async function generateMetadata({
     155
   );
 
-  // Many edition names are internal federation shorthand ("CS7 Delhi") with no
-  // sport or "tournament" in sight — a page can rank well for that name and
-  // still get skipped in the SERP because nothing confirms what it's for.
-  // Names that already read as a tournament (most chess listings do) are left
-  // alone rather than padded with a redundant suffix.
   const sportLabel = SPORT_LABEL[edition.sportSlug] ?? edition.sportSlug;
-  const nameLower = edition.name.toLowerCase();
-  const hasContext =
-    nameLower.includes("tournament") || nameLower.includes(sportLabel.toLowerCase());
-  const metaTitle = [
-    edition.name,
-    hasContext ? null : `${sportLabel} Tournament`,
-    formatShortDate(edition.startDate),
-    // A known next running is the one genuinely clickable fact we have for a
-    // finished event, so it earns the slot the city would otherwise take.
-    finished && nextInSeries
-      ? `Next edition ${formatShortDate(nextInSeries.startDate)}`
-      : // Many names already end in "(Chennai)"; repeating it wastes title width.
-        edition.city && !nameLower.includes(edition.city.toLowerCase())
-        ? edition.city
-        : null,
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  const metaTitle = editionMetaTitle(
+    {
+      name: edition.name,
+      sportLabel,
+      startDate: edition.startDate,
+      city: edition.city,
+      finished,
+      nextStartDate: nextInSeries?.startDate,
+    },
+    formatShortDate
+  );
 
   return {
     title: metaTitle,

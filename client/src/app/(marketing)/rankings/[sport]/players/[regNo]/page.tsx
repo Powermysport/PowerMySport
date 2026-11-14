@@ -53,11 +53,14 @@ import { DevDataToggle } from "@/modules/rankings/components/DevDataToggle";
  */
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ sport: string; regNo: string }>;
+  searchParams: Promise<{ list?: string }>;
 }): Promise<Metadata> {
   const { sport, regNo } = await params;
-  return { ...NOINDEX_METADATA, title: await playerPageTitle(sport, regNo) };
+  const { list } = await searchParams;
+  return { ...NOINDEX_METADATA, title: await playerPageTitle(sport, regNo, list) };
 }
 
 export default async function PlayerRankingPage({

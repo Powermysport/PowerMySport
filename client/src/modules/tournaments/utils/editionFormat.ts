@@ -152,3 +152,44 @@ export function formatEditionDates(startDate: string, endDate?: string | null): 
   const from = sameYear ? start.toLocaleDateString("en-IN", dayMonth) : withYear(start);
   return `${from} – ${withYear(end)}`;
 }
+
+/**
+ * The `<title>` for one dated tournament.
+ *
+ * Many edition names are internal federation shorthand ("CS7 Delhi") with no
+ * sport or "tournament" in sight, so a page can rank for that name and still be
+ * skipped in the SERP because nothing confirms what it is. Names that already
+ * read as a tournament (most chess listings do) are left alone rather than
+ * padded with a redundant suffix. A finished event with a known next running
+ * swaps the city for that date, the one clickable fact we have for it, and a
+ * name that already ends in "(Chennai)" does not repeat the city.
+ *
+ * `fmt` formats a date for display, as in `editionSnippet`.
+ */
+export function editionMetaTitle(
+  input: {
+    name: string;
+    sportLabel: string;
+    startDate: string;
+    city?: string | undefined;
+    finished: boolean;
+    nextStartDate?: string | undefined;
+  },
+  fmt: (date: string) => string
+): string {
+  const nameLower = input.name.toLowerCase();
+  const hasContext =
+    nameLower.includes("tournament") || nameLower.includes(input.sportLabel.toLowerCase());
+  return [
+    input.name,
+    hasContext ? null : `${input.sportLabel} Tournament`,
+    fmt(input.startDate),
+    input.finished && input.nextStartDate
+      ? `Next edition ${fmt(input.nextStartDate)}`
+      : input.city && !nameLower.includes(input.city.toLowerCase())
+        ? input.city
+        : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}

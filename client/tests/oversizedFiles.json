@@ -16,5 +16,5 @@
   "app/(marketing)/faq/page.tsx": 481,
   "app/(marketing)/how-it-works/page.tsx": 606,
   "app/(marketing)/parental-consent/page.tsx": 496,
-  "app/(marketing)/tournaments/[slug]/page.tsx": 510
+  "app/(marketing)/tournaments/[slug]/page.tsx": 501
 }
