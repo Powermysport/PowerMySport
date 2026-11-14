@@ -1,5 +1,6 @@
 import { GuestAnalyticsTracker } from "@/modules/analytics/components/GuestAnalyticsTracker";
 import { CookieConsentBanner } from "@/components/layout/CookieConsentBanner";
+import { DevEnvBadge } from "@/components/layout/DevEnvBadge";
 import { HydrationBoundary } from "@/components/layout/HydrationBoundary";
 import { NumericInputGuard } from "@/components/layout/NumericInputGuard";
 import { FriendSocketProvider } from "@/hooks/useFriendSocket";
@@ -132,6 +133,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`}
     >
       <body className="antialiased">
+        <DevEnvBadge app="client" />
         <NumericInputGuard />
         <GuestAnalyticsTracker />
         <HydrationBoundary>

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { Toaster } from "sonner";
 import CommunityNotificationToastListener from "@/modules/community/components/layout/CommunityNotificationToastListener";
 import CommunityTopNav from "@/modules/community/components/layout/CommunityTopNav";
+import { DevEnvBadge } from "@/modules/community/components/layout/DevEnvBadge";
 import { rootMetadata } from "@/lib/seo";
 import "./globals.css";
 
@@ -48,6 +49,7 @@ export default function RootLayout({
       className={`h-full ${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`}
     >
       <body className="bg-paper text-ink overflow-hidden antialiased">
+        <DevEnvBadge app="community" />
         <div className="flex h-dvh flex-col">
           <Suspense fallback={<div className="border-hairline bg-paper h-16 w-full border-b" />}>
             <CommunityTopNav />
