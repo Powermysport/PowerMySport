@@ -26,3 +26,6 @@ migration-reports/
 pms-dump.gz
 
 claude outputs
+
+.vercel
+.env*
