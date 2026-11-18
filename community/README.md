@@ -11,6 +11,8 @@ npm run dev         # community/ — next dev -p 3002
 
 Copy `.env.example` to `.env.local`. Key vars: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SOCKET_URL` (realtime), `NEXT_PUBLIC_MAIN_APP_URL`, `NEXT_PUBLIC_CHAT_BUCKET_DOMAIN`, `NEXT_PUBLIC_SITE_URL`.
 
+Production (Vercel project `power-my-sport-community`): `NEXT_PUBLIC_MAIN_APP_URL` and `NEXT_PUBLIC_SITE_URL` are both `https://powermysport.com`, the apex. `www` redirects to it, so pointing the login hop at `www` would add a redirect to every sign-in. `NEXT_PUBLIC_*` values are baked in at build time, and the project's `turbo-ignore` step skips a redeploy of an unchanged commit, so changing one needs a commit that touches `community/`.
+
 ## Scripts
 
 | Script                            | Purpose                                      |
