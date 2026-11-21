@@ -34,7 +34,7 @@ export default function MyBlogListItem({ blog, owner, onDelete }: MyBlogListItem
             className="h-full w-full object-cover saturate-[0.85] transition-transform duration-700 ease-out group-hover:scale-[1.04]"
           />
         ) : (
-          <BlogCoverFallback topic={blog.topic} />
+          <BlogCoverFallback topic={blog.topic} compact />
         )}
       </Link>
 
@@ -45,12 +45,12 @@ export default function MyBlogListItem({ blog, owner, onDelete }: MyBlogListItem
           {blog.status === "DRAFT" ? <span className="text-ink font-semibold">· Draft</span> : null}
         </p>
         <Link href={`/experiences/${blog.id}`} className="mt-1 min-w-0">
-          <h3 className="font-editorial text-ink decoration-ink/30 line-clamp-2 text-xl font-normal leading-tight underline-offset-4 group-hover:underline sm:text-2xl">
+          <h3 className="font-editorial text-ink decoration-ink/30 line-clamp-2 text-xl font-normal leading-tight underline-offset-4 [overflow-wrap:anywhere] group-hover:underline sm:text-2xl">
             {blog.title}
           </h3>
         </Link>
         {blog.excerpt && blog.excerpt.trim() !== blog.title.trim() ? (
-          <p className="text-ink-body mt-2 line-clamp-2 text-base leading-relaxed max-sm:hidden">
+          <p className="text-ink-body mt-2 line-clamp-2 text-base leading-relaxed [overflow-wrap:anywhere] max-sm:hidden">
             {blog.excerpt}
           </p>
         ) : null}
@@ -62,22 +62,25 @@ export default function MyBlogListItem({ blog, owner, onDelete }: MyBlogListItem
           </span>
           <span className="inline-flex items-center gap-1">
             <MessageCircle size={14} strokeWidth={1.5} aria-hidden="true" />
-            {blog.commentCount}
+            <span aria-hidden="true">{formatCount(blog.commentCount)}</span>
+            <span className="sr-only">
+              {blog.commentCount} {blog.commentCount === 1 ? "comment" : "comments"}
+            </span>
           </span>
         </div>
 
         {owner ? (
-          <div className="mt-3 flex items-center gap-5 text-sm font-semibold">
+          <div className="mt-1 flex items-center gap-5 text-sm font-semibold">
             <Link
               href={`/experiences/${blog.id}/edit`}
-              className="text-ink decoration-ink/30 hover:decoration-ink underline underline-offset-4 transition-colors duration-200"
+              className="text-ink decoration-ink/30 hover:decoration-ink inline-flex min-h-11 items-center underline underline-offset-4 transition-colors duration-200"
             >
               Edit
             </Link>
             <button
               type="button"
               onClick={() => onDelete?.(blog)}
-              className="text-red-700 underline decoration-red-700/30 underline-offset-4 transition-colors duration-200 hover:decoration-red-700"
+              className="inline-flex min-h-11 items-center text-red-700 underline decoration-red-700/30 underline-offset-4 transition-colors duration-200 hover:decoration-red-700"
             >
               Delete
             </button>

@@ -14,9 +14,9 @@ interface LikeButtonProps {
 }
 
 const SIZES = {
-  sm: { icon: 15, text: "text-xs", pad: "px-2 py-1 gap-1" },
+  sm: { icon: 16, text: "text-sm", pad: "min-h-11 min-w-11 justify-center px-2 gap-1" },
   md: { icon: 18, text: "text-sm", pad: "px-3 py-1.5 gap-1.5" },
-  lg: { icon: 20, text: "text-sm", pad: "px-4 py-2 gap-2" },
+  lg: { icon: 20, text: "text-sm", pad: "min-h-11 px-4 gap-2" },
 } as const;
 
 export default function LikeButton({

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 interface AuthorAvatarProps {
   name: string;
   photoUrl?: string | null;
@@ -13,7 +15,6 @@ const gradientFor = (seed: string): string => {
     "bg-ink-body",
     "bg-power-orange-solid",
     "bg-indigo-800",
-    "bg-slate-700",
     "bg-indigo-700",
   ];
   let hash = 0;
@@ -23,20 +24,25 @@ const gradientFor = (seed: string): string => {
   return palettes[Math.abs(hash) % palettes.length];
 };
 
-/** Circular author avatar: photo if present, otherwise a solid warm initial. */
+/** Circular author avatar: the photo, or a solid warm initial when there is
+ *  none or it fails to load. The initial is the first grapheme (so an emoji or
+ *  accented first letter is not cut in half). The name is always rendered next
+ *  to it, so the image itself is decorative. */
 export default function AuthorAvatar({
   name,
   photoUrl,
   size = 40,
   className = "",
 }: AuthorAvatarProps) {
-  const initial = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  const [failed, setFailed] = useState(false);
+  const initial = (Array.from((name || "?").trim())[0] ?? "?").toLocaleUpperCase();
 
-  if (photoUrl) {
+  if (photoUrl && !failed) {
     return (
       <img
         src={photoUrl}
-        alt={name}
+        alt=""
+        onError={() => setFailed(true)}
         width={size}
         height={size}
         style={{ width: size, height: size }}

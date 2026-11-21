@@ -36,6 +36,7 @@ export default function BlogLandingClient() {
   const [q, setQ] = useState("");
   const [likePendingId, setLikePendingId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   // Hydrate filters from the URL once.
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function BlogLandingClient() {
   const loadBlogs = useCallback(
     async (targetPage = 1, append = false) => {
       try {
+        setLoadError(false);
         if (append) setIsLoadingMore(true);
         else setIsLoading(true);
 
@@ -64,6 +66,7 @@ export default function BlogLandingClient() {
         setPage(targetPage);
         setHasMore(targetPage < (data.pagination?.totalPages || 0));
       } catch (error) {
+        setLoadError(true);
         toast.error(error instanceof Error ? error.message : "Failed to load experiences");
       } finally {
         setIsLoading(false);
@@ -161,15 +164,15 @@ export default function BlogLandingClient() {
 
   return (
     <div className="bg-paper relative isolate min-h-[calc(100vh-5.5rem)]">
-      <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
         {/* Blog-tab account access (avatar + username) */}
-        <div className="flex justify-end">
+        <div className="flex justify-end empty:hidden">
           <BlogAccountChip />
         </div>
 
         <BlogHero totalBlogs={total} />
 
-        <section className="space-y-6 pt-10">
+        <section className="space-y-6 pt-6 sm:pt-10">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="font-editorial text-ink text-3xl font-light sm:text-4xl">
@@ -208,17 +211,35 @@ export default function BlogLandingClient() {
         </section>
 
         <section className="space-y-10 pt-6">
-          <BlogGrid
-            blogs={blogs}
-            isLoading={isLoading}
-            onToggleLike={handleToggleLike}
-            likePendingId={likePendingId}
-            emptyMessage={
-              topic || q
-                ? "No experiences match this filter yet. Try another topic or clear the search."
-                : "Be the first parent to share one."
-            }
-          />
+          {loadError && blogs.length === 0 && !isLoading ? (
+            <div role="alert" className="bg-paper-deep rounded-2xl px-6 py-16 text-center">
+              <p className="font-editorial text-ink text-3xl font-light">
+                Could not load experiences.
+              </p>
+              <p className="text-ink-body mx-auto mt-3 max-w-[44ch] text-base leading-relaxed">
+                Check your connection and try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadBlogs(1, false)}
+                className="text-ink decoration-ink/30 hover:decoration-ink mt-5 min-h-11 text-base font-semibold underline underline-offset-4 transition-colors duration-200"
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <BlogGrid
+              blogs={blogs}
+              isLoading={isLoading}
+              onToggleLike={handleToggleLike}
+              likePendingId={likePendingId}
+              emptyMessage={
+                topic || q
+                  ? "No experiences match this filter yet. Try another topic or clear the search."
+                  : "Be the first parent to share one."
+              }
+            />
+          )}
 
           {hasMore ? (
             <div className="text-center">

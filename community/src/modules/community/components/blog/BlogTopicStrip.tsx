@@ -9,7 +9,7 @@ interface BlogTopicStripProps {
 }
 
 const chip =
-  "btn-motion inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border px-4 text-base font-medium";
+  "btn-motion inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm font-medium sm:min-h-10";
 const idle = "border-hairline text-ink-body hover:border-ink/45 hover:text-ink bg-transparent";
 const on = "border-ink bg-ink text-white";
 
@@ -21,7 +21,7 @@ export default function BlogTopicStrip({ activeTopic, onSelect }: BlogTopicStrip
     <div
       role="group"
       aria-label="Filter by topic"
-      className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+      className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden"
     >
       <button
         type="button"

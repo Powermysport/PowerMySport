@@ -12,6 +12,10 @@ interface BlogProfileViewProps {
   profile: BlogAuthorProfile;
   blogs: BlogListItem[];
   isLoadingBlogs: boolean;
+  /** More posts exist beyond the ones loaded. */
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
   onDeleteBlog?: (blog: BlogListItem) => void;
   onEditProfile?: () => void;
 }
@@ -20,6 +24,9 @@ export default function BlogProfileView({
   profile,
   blogs,
   isLoadingBlogs,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
   onDeleteBlog,
   onEditProfile,
 }: BlogProfileViewProps) {
@@ -50,32 +57,35 @@ export default function BlogProfileView({
               className="!rounded-2xl"
             />
             <div className="min-w-0 flex-1">
-              <h1 className="font-editorial text-ink text-balance text-4xl font-light leading-[1.08] sm:text-5xl">
+              <h1 className="font-editorial text-ink text-balance text-4xl font-light leading-[1.08] [overflow-wrap:anywhere] sm:text-5xl">
                 {profile.name}
               </h1>
               {profile.username ? (
-                <p className="text-ink-body mt-1 text-base">@{profile.username}</p>
+                <p className="text-ink-body mt-1 text-base [overflow-wrap:anywhere]">
+                  @{profile.username}
+                </p>
               ) : null}
 
               {profile.bio ? (
-                <p className="text-ink-body mt-5 max-w-[56ch] text-lg leading-relaxed">
+                <p className="text-ink-body mt-5 max-w-[56ch] whitespace-pre-line text-lg leading-relaxed [overflow-wrap:anywhere]">
                   {profile.bio}
                 </p>
               ) : null}
 
-              <p className="text-ink-body mt-5 text-base tabular-nums">
-                <span className="text-ink font-semibold">{formatCount(profile.blogCount)}</span>{" "}
-                {profile.blogCount === 1 ? "experience" : "experiences"}
-                <span aria-hidden className="mx-3">
-                  ·
-                </span>
-                <span className="text-ink font-semibold">{formatCount(profile.totalLikes)}</span>{" "}
-                {profile.totalLikes === 1 ? "like" : "likes"}
-                <span aria-hidden className="mx-3">
-                  ·
-                </span>
-                Joined {formatBlogDate(profile.joinedAt)}
-              </p>
+              <dl className="text-ink-body mt-5 flex flex-wrap gap-x-8 gap-y-2 text-base tabular-nums">
+                <div className="flex gap-1.5">
+                  <dd className="text-ink font-semibold">{formatCount(profile.blogCount)}</dd>
+                  <dt>{profile.blogCount === 1 ? "experience" : "experiences"}</dt>
+                </div>
+                <div className="flex gap-1.5">
+                  <dd className="text-ink font-semibold">{formatCount(profile.totalLikes)}</dd>
+                  <dt>{profile.totalLikes === 1 ? "like" : "likes"}</dt>
+                </div>
+                <div className="flex gap-1.5">
+                  <dt>Joined</dt>
+                  <dd>{formatBlogDate(profile.joinedAt)}</dd>
+                </div>
+              </dl>
 
               <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
                 {isOwner ? (
@@ -159,6 +169,19 @@ export default function BlogProfileView({
               ))}
             </ul>
           )}
+
+          {hasMore && onLoadMore ? (
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                className="btn-motion border-ink text-ink hover:bg-ink inline-flex min-h-12 items-center rounded-md border px-7 text-base font-semibold hover:text-white disabled:opacity-60"
+              >
+                {isLoadingMore ? "Loading" : "Load more experiences"}
+              </button>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

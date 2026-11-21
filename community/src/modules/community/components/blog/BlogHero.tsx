@@ -7,7 +7,7 @@ interface BlogHeroProps {
 
 export default function BlogHero({ totalBlogs }: BlogHeroProps) {
   return (
-    <section className="bg-paper-deep rounded-2xl px-5 py-10 sm:px-10 sm:py-16">
+    <section className="bg-paper-deep rounded-2xl px-5 py-8 sm:px-10 sm:py-12">
       <p className="text-ink-body text-sm font-medium">PowerMySport Experiences</p>
       <h1 className="font-editorial text-ink mt-3 text-balance text-4xl font-light leading-[1.08] sm:text-5xl lg:text-6xl">
         Share your <span className="text-ink-muted italic">experience</span>
@@ -17,7 +17,7 @@ export default function BlogHero({ totalBlogs }: BlogHeroProps) {
         lines is enough.
       </p>
 
-      <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 sm:mt-8">
         <Link
           href="/experiences/new"
           className="btn-motion bg-power-orange-solid inline-flex min-h-12 items-center gap-2 rounded-md px-7 py-3.5 text-base font-semibold text-white hover:bg-indigo-700"
@@ -27,7 +27,8 @@ export default function BlogHero({ totalBlogs }: BlogHeroProps) {
         </Link>
         {totalBlogs > 0 ? (
           <p className="text-ink-muted text-sm">
-            {totalBlogs} {totalBlogs === 1 ? "experience" : "experiences"} shared so far
+            {totalBlogs.toLocaleString("en-IN")} {totalBlogs === 1 ? "experience" : "experiences"}{" "}
+            shared so far
           </p>
         ) : null}
       </div>

@@ -45,10 +45,11 @@ export default function BlogAccountChip({ className = "" }: { className?: string
   if (loading) {
     return (
       <div
-        className={`inline-flex items-center gap-2 rounded-full border border-white/70 bg-white py-1 pl-1 pr-3 ${className}`}
+        className={`border-hairline inline-flex items-center gap-2 rounded-md border py-1 pl-1 pr-3 ${className}`}
+        aria-hidden="true"
       >
-        <span className="h-8 w-8 animate-pulse rounded-full bg-slate-200" />
-        <span className="h-3 w-16 animate-pulse rounded-full bg-slate-200" />
+        <span className="bg-ink/10 h-8 w-8 animate-pulse rounded-full" />
+        <span className="bg-ink/10 h-3 w-16 animate-pulse rounded-sm" />
       </div>
     );
   }
@@ -64,14 +65,12 @@ export default function BlogAccountChip({ className = "" }: { className?: string
       <Link
         href="/experiences/account"
         title="My Account"
-        className={`hover:border-power-orange/40 group inline-flex items-center gap-2 rounded-full border border-white/70 bg-white py-1 pl-1 pr-3 transition hover:bg-white ${className}`}
+        className={`border-hairline hover:border-ink/45 inline-flex min-h-11 items-center gap-2 rounded-md border bg-white py-1 pl-1 pr-3 transition-colors duration-200 ${className}`}
       >
         <AuthorAvatar name={profile.name} photoUrl={profile.photoUrl} size={32} />
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="truncate text-xs font-medium text-slate-400 group-hover:text-slate-500">
-            My Account
-          </span>
-          <span className="truncate text-xs font-semibold text-slate-800">
+          <span className="text-ink-muted truncate text-xs font-medium">My Account</span>
+          <span className="text-ink truncate text-sm font-semibold">
             {profile.username ? `@${profile.username}` : profile.name}
           </span>
         </span>

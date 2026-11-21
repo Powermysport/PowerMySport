@@ -7,8 +7,11 @@ import { redirectToMainLogin } from "@/lib/auth/redirect";
 import { isCommunityEligibleRole } from "@/lib/auth/roles";
 import { communityService } from "@/modules/community/services/community";
 import { toast } from "@/lib/toast";
+import { useConfirm } from "@/modules/community/hooks/useConfirm";
 import BlogProfileView from "./BlogProfileView";
 import EditProfileModal from "./EditProfileModal";
+
+const PAGE_SIZE = 20;
 
 export default function MyAccountClient() {
   const [profile, setProfile] = useState<BlogAuthorProfile | null>(null);
@@ -16,7 +19,11 @@ export default function MyAccountClient() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingBlogs, setIsLoadingBlogs] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -30,8 +37,10 @@ export default function MyAccountClient() {
       setProfile(me);
 
       setIsLoadingBlogs(true);
-      const data = await blogService.listBlogs(1, 50, { mine: true });
+      const data = await blogService.listBlogs(1, PAGE_SIZE, { mine: true });
       setBlogs(data.items || []);
+      setPage(1);
+      setHasMore(1 < (data.pagination?.totalPages || 0));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "We could not load your account");
     } finally {
@@ -44,32 +53,45 @@ export default function MyAccountClient() {
     void load();
   }, [load]);
 
-  const handleDeleteBlog = (blog: BlogListItem) => {
-    toast("Delete this experience permanently?", {
-      action: {
-        label: "Delete",
-        onClick: () => {
-          const proceed = async () => {
-            try {
-              await blogService.deleteBlog(blog.id);
-              setBlogs((current) => current.filter((item) => item.id !== blog.id));
-              setProfile((current) =>
-                current
-                  ? {
-                      ...current,
-                      blogCount: Math.max(0, current.blogCount - 1),
-                    }
-                  : current
-              );
-              toast.success("Experience deleted");
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Failed to delete");
-            }
-          };
-          void proceed();
-        },
-      },
+  const loadMore = async () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const next = page + 1;
+      const data = await blogService.listBlogs(next, PAGE_SIZE, { mine: true });
+      setBlogs((current) => [...current, ...(data.items || [])]);
+      setPage(next);
+      setHasMore(next < (data.pagination?.totalPages || 0));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load more");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleDeleteBlog = async (blog: BlogListItem) => {
+    const confirmed = await confirm({
+      title: "Delete this experience?",
+      description: `"${blog.title || "Untitled experience"}" will be removed permanently, along with its likes and comments. This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
     });
+    if (!confirmed) return;
+    try {
+      await blogService.deleteBlog(blog.id);
+      setBlogs((current) => current.filter((item) => item.id !== blog.id));
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              blogCount: Math.max(0, current.blogCount - 1),
+            }
+          : current
+      );
+      toast.success("Experience deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete");
+    }
   };
 
   if (isLoading || !profile) {
@@ -90,6 +112,9 @@ export default function MyAccountClient() {
         profile={profile}
         blogs={blogs}
         isLoadingBlogs={isLoadingBlogs}
+        hasMore={hasMore}
+        isLoadingMore={isLoadingMore}
+        onLoadMore={() => void loadMore()}
         onDeleteBlog={handleDeleteBlog}
         onEditProfile={() => setEditOpen(true)}
       />
@@ -100,6 +125,7 @@ export default function MyAccountClient() {
         email={email}
         onSaved={setProfile}
       />
+      {confirmDialog}
     </>
   );
 }

@@ -20,6 +20,7 @@ import { getCommunitySocket, blogRoom, subscribeToCommunityRoom } from "@/lib/re
 import { toast } from "@/lib/toast";
 import { getTopicMeta } from "@/modules/community/constants/experienceTaxonomy";
 import { formatBlogDate } from "@/modules/community/utils/blogFormat";
+import { useConfirm } from "@/modules/community/hooks/useConfirm";
 import { useReportModal } from "@/modules/community/hooks/useReportModal";
 import { ReportModal } from "@/modules/community/components/chat/ReportModal";
 import BlogContentRenderer from "./BlogContentRenderer";
@@ -47,6 +48,7 @@ export default function BlogDetailClient({
   const [likePending, setLikePending] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const { reportModal, handleOpenReportModal, setReportModal, isSubmittingReport, handleSubmitReportWrapper } = // prettier-ignore
     useReportModal();
 
@@ -142,10 +144,15 @@ export default function BlogDetailClient({
     }
   };
 
-  const confirmDelete = () => {
-    toast("Delete this experience permanently?", {
-      action: { label: "Delete", onClick: () => void handleDelete() },
+  const confirmDelete = async () => {
+    if (!blog) return;
+    const confirmed = await confirm({
+      title: "Delete this experience?",
+      description: `"${blog.title || "Untitled experience"}" will be removed permanently, along with its likes and comments. This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
     });
+    if (confirmed) void handleDelete();
   };
 
   const shareOnTwitter = () => {
@@ -206,9 +213,72 @@ export default function BlogDetailClient({
   const textLink =
     "text-ink decoration-ink/30 hover:decoration-ink inline-flex min-h-11 items-center gap-1.5 text-base font-semibold underline underline-offset-4 transition-colors duration-200 disabled:opacity-50";
 
+  // One set of actions, rendered twice: pinned in the side rail from `lg` up,
+  // and as the closing row of the article below that. Only one is ever
+  // displayed, so there is a single tab stop per action at any width.
+  const actions = (
+    <>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 lg:-ml-4">
+        <LikeButton
+          liked={blog.likedByMe}
+          count={blog.likeCount}
+          onToggle={handleToggleLike}
+          disabled={likePending}
+          size="lg"
+        />
+        <button
+          type="button"
+          onClick={() => setCommentsOpen(true)}
+          className="btn-motion text-ink-muted hover:bg-paper-deep hover:text-ink inline-flex min-h-11 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold tabular-nums"
+        >
+          <MessageCircle size={18} strokeWidth={1.5} aria-hidden="true" />
+          {blog.commentCount.toLocaleString("en-IN")}{" "}
+          {blog.commentCount === 1 ? "comment" : "comments"}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-5 lg:flex-col lg:items-start lg:gap-x-0">
+        <button type="button" onClick={() => void copyLink()} className={textLink}>
+          <LinkIcon size={15} strokeWidth={1.5} aria-hidden="true" />
+          Copy link
+        </button>
+        <button type="button" onClick={shareOnTwitter} className={textLink}>
+          <Twitter size={15} strokeWidth={1.5} aria-hidden="true" />
+          Share on X
+        </button>
+        {blog.isMine ? (
+          <>
+            <Link href={`/experiences/${blog.id}/edit`} className={textLink}>
+              <Pencil size={14} strokeWidth={1.5} aria-hidden="true" />
+              Edit
+            </Link>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="inline-flex min-h-11 items-center gap-1.5 text-base font-semibold text-red-700 underline decoration-red-700/30 underline-offset-4 transition-colors duration-200 hover:decoration-red-700 disabled:opacity-50"
+            >
+              <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
+              Delete
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleOpenReportModal("EXPERIENCE", blog.id)}
+            className="text-ink-muted hover:text-ink inline-flex min-h-11 items-center gap-1.5 text-sm font-medium transition-colors duration-200"
+          >
+            <Flag size={14} strokeWidth={1.5} aria-hidden="true" />
+            Report
+          </button>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="bg-paper relative min-h-[calc(100vh-5.5rem)]">
-      <article className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+      <article className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
         <Link
           href="/experiences"
           className="text-ink-body hover:text-ink inline-flex min-h-11 items-center gap-1.5 text-base font-medium transition-colors duration-200"
@@ -217,55 +287,9 @@ export default function BlogDetailClient({
           All experiences
         </Link>
 
-        <header className="mt-6">
-          <p className="text-ink-muted inline-flex items-center gap-1.5 text-sm font-medium">
-            <topic.Icon size={14} strokeWidth={1.5} aria-hidden="true" />
-            {topic.label}
-          </p>
-          <h1 className="font-editorial text-ink mt-3 text-balance text-4xl font-light leading-[1.08] sm:text-5xl lg:text-6xl">
-            {blog.title}
-          </h1>
-
-          <div className="border-hairline mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 border-y py-5">
-            <Link href={authorHref(blog.author)} className="flex items-center gap-3">
-              <AuthorAvatar name={blog.author.name} photoUrl={blog.author.photoUrl} size={44} />
-              <span>
-                <span className="text-ink block text-base font-semibold">{blog.author.name}</span>
-                <span className="text-ink-muted block text-sm">
-                  {blog.author.username ? `@${blog.author.username} · ` : ""}
-                  {formatBlogDate(blog.createdAt)}
-                </span>
-              </span>
-            </Link>
-
-            {blog.isMine ? (
-              <div className="flex items-center gap-5">
-                <Link href={`/experiences/${blog.id}/edit`} className={textLink}>
-                  <Pencil size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Edit
-                </Link>
-                <button
-                  type="button"
-                  onClick={confirmDelete}
-                  disabled={isDeleting}
-                  className="inline-flex min-h-11 items-center gap-1.5 text-base font-semibold text-red-700 underline decoration-red-700/30 underline-offset-4 transition-colors duration-200 hover:decoration-red-700 disabled:opacity-50"
-                >
-                  <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
-                  Delete
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handleOpenReportModal("EXPERIENCE", blog.id)}
-                className="text-ink-muted hover:text-ink inline-flex min-h-11 items-center gap-1.5 text-sm font-medium transition-colors duration-200"
-              >
-                <Flag size={14} strokeWidth={1.5} aria-hidden="true" />
-                Report
-              </button>
-            )}
-          </div>
-        </header>
+        <h1 className="font-editorial text-ink mt-4 max-w-4xl text-balance text-4xl font-light leading-[1.08] [overflow-wrap:anywhere] sm:text-5xl lg:text-6xl">
+          {blog.title}
+        </h1>
 
         {/* Cover, shown whole rather than cropped to a banner. A 16/9 box with
             object-cover cut the bottom off anything portrait, which for the
@@ -273,7 +297,7 @@ export default function BlogDetailClient({
             the part they uploaded it for. The fallback keeps a fixed ratio
             because it is generated art with nothing to lose. */}
         <div
-          className={`bg-paper-deep mt-8 w-full overflow-hidden rounded-2xl ${
+          className={`bg-paper-deep mt-8 w-full overflow-hidden rounded-2xl sm:mt-10 ${
             coverUrl ? "" : "aspect-[16/9]"
           }`}
         >
@@ -290,53 +314,56 @@ export default function BlogDetailClient({
           )}
         </div>
 
-        <div className="mt-10">
-          <BlogContentRenderer content={blog.content} />
-        </div>
+        <div className="mt-8 grid gap-8 sm:mt-10 lg:mt-14 lg:grid-cols-[13.5rem_minmax(0,40rem)] lg:gap-16">
+          {/* Who wrote it and what you can do with it. On a phone this is just
+              the byline; from lg it pins beside the text so like, comment and
+              share stay in reach for the whole read. */}
+          <aside aria-label="About this experience" className="lg:sticky lg:top-24 lg:self-start">
+            <Link href={authorHref(blog.author)} className="flex items-center gap-3">
+              <AuthorAvatar name={blog.author.name} photoUrl={blog.author.photoUrl} size={44} />
+              <span className="min-w-0">
+                <span className="text-ink block text-base font-semibold [overflow-wrap:anywhere]">
+                  {blog.author.name}
+                </span>
+                {blog.author.username ? (
+                  <span className="text-ink-muted block truncate text-sm">
+                    @{blog.author.username}
+                  </span>
+                ) : null}
+              </span>
+            </Link>
+            <p className="text-ink-muted mt-4 text-sm">{formatBlogDate(blog.createdAt)}</p>
+            <p className="text-ink-muted mt-1 inline-flex items-center gap-1.5 text-sm">
+              <topic.Icon size={14} strokeWidth={1.5} aria-hidden="true" />
+              {topic.label}
+            </p>
 
-        {blog.tags.length > 0 ? (
-          <p className="text-ink-muted mt-10 text-sm">
-            {blog.tags.map((tag) => `#${tag}`).join(" ")}
-          </p>
-        ) : null}
+            <div className="border-hairline mt-6 hidden flex-col gap-2 border-t pt-4 lg:flex">
+              {actions}
+            </div>
+          </aside>
 
-        {/* Right of reply: a coach or expert named in `subject` can post one
-            response to what was written about them. */}
-        {blog.subject ? (
-          <SubjectReplyBand
-            blog={blog}
-            onReplyPosted={(reply) => setBlog((current) => (current ? { ...current, subjectReply: reply } : current))} // prettier-ignore
-          />
-        ) : null}
+          <div className="min-w-0 lg:[&_.blog-prose]:!text-[1.125rem]">
+            <BlogContentRenderer content={blog.content} />
 
-        <div className="border-hairline mt-12 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 border-t pt-6">
-          <div className="flex items-center gap-3">
-            <LikeButton
-              liked={blog.likedByMe}
-              count={blog.likeCount}
-              onToggle={handleToggleLike}
-              disabled={likePending}
-              size="lg"
-            />
-            <button
-              type="button"
-              onClick={() => setCommentsOpen(true)}
-              className="btn-motion text-ink-muted hover:bg-paper-deep hover:text-ink inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold tabular-nums"
-            >
-              <MessageCircle size={18} strokeWidth={1.5} aria-hidden="true" />
-              {blog.commentCount} {blog.commentCount === 1 ? "comment" : "comments"}
-            </button>
-          </div>
+            {blog.tags.length > 0 ? (
+              <p className="text-ink-muted mt-10 text-sm [overflow-wrap:anywhere]">
+                {blog.tags.map((tag) => `#${tag}`).join(" ")}
+              </p>
+            ) : null}
 
-          <div className="flex items-center gap-5">
-            <button type="button" onClick={() => void copyLink()} className={textLink}>
-              <LinkIcon size={15} strokeWidth={1.5} aria-hidden="true" />
-              Copy link
-            </button>
-            <button type="button" onClick={shareOnTwitter} className={textLink}>
-              <Twitter size={15} strokeWidth={1.5} aria-hidden="true" />
-              Share on X
-            </button>
+            {/* Right of reply: a coach or expert named in `subject` can post one
+                response to what was written about them. */}
+            {blog.subject ? (
+              <SubjectReplyBand
+                blog={blog}
+                onReplyPosted={(reply) => setBlog((current) => (current ? { ...current, subjectReply: reply } : current))} // prettier-ignore
+              />
+            ) : null}
+
+            <div className="border-hairline mt-12 flex flex-col gap-2 border-t pt-6 lg:hidden">
+              {actions}
+            </div>
           </div>
         </div>
       </article>
@@ -367,6 +394,8 @@ export default function BlogDetailClient({
           onSubmit={handleSubmitReportWrapper}
         />
       ) : null}
+
+      {confirmDialog}
     </div>
   );
 }
