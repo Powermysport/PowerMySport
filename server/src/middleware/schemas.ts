@@ -9,7 +9,11 @@ import { z } from "zod";
 import { SELF_REGISTER_ROLES } from "../shared/constants/selfRegisterRoles";
 
 export const registerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name cannot exceed 100 characters"),
   email: z.string().email("Invalid email format"),
   phone: z.string().min(1, "Phone number is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
