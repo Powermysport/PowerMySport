@@ -13,11 +13,14 @@ export default function ChatsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center">
-          <div className="flex animate-pulse flex-col items-center">
-            <div className="border-t-power-orange h-8 w-8 animate-spin rounded-full border-4 border-slate-200" />
-            <p className="mt-4 text-sm text-slate-500">Loading Chats...</p>
-          </div>
+        <div
+          role="status"
+          aria-label="Loading chats"
+          className="bg-paper flex h-screen items-center justify-center"
+        >
+          <p className="font-editorial text-ink-muted animate-pulse text-2xl font-light">
+            Loading chats
+          </p>
         </div>
       }
     >

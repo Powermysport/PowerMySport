@@ -417,9 +417,13 @@ export default function CommunityChatPanel({ page }: Props) {
 
             {/* Three-dot menu */}
             <button
+              type="button"
+              data-chat-menu-trigger
               onClick={() => setShowHeaderMenu((prev) => !prev)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 active:bg-slate-200"
+              className="text-ink-body hover:bg-paper-deep inline-flex h-11 w-11 items-center justify-center rounded-md transition-colors duration-200"
               aria-label="More options"
+              aria-haspopup="menu"
+              aria-expanded={showHeaderMenu}
             >
               <MoreVertical size={18} />
             </button>

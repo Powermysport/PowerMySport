@@ -480,7 +480,7 @@ export const MessageBubble = memo(function MessageBubble({
 
           {/* Timestamp below bubble */}
           <div
-            className={`mt-1.5 flex items-center gap-1.5 text-xs text-slate-400 ${isOwnMessage ? "justify-end pr-1" : "justify-start pl-1"}`}
+            className={`text-ink-muted mt-1.5 flex items-center gap-1.5 text-xs ${isOwnMessage ? "justify-end pr-1" : "justify-start pl-1"}`}
           >
             {isPinned && <Pin size={10} className="text-power-orange-solid fill-power-orange" />}
             <span className="tabular-nums">{getMessageTimestamp(message.createdAt)}</span>
@@ -488,9 +488,14 @@ export const MessageBubble = memo(function MessageBubble({
             {/* Delivery status moved next to time */}
             {isOwnMessage &&
               (isFailed ? (
-                <span title="Failed to send. Tap to retry." className="text-red-400">
-                  <AlertCircle size={12} strokeWidth={2.2} />
-                </span>
+                <button
+                  type="button"
+                  onClick={() => onRetry(message)}
+                  className="-my-3 inline-flex min-h-11 items-center gap-1 py-3 font-semibold text-red-700 underline decoration-red-700/40 underline-offset-2 hover:decoration-red-700"
+                >
+                  <AlertCircle size={14} strokeWidth={2.2} aria-hidden="true" />
+                  Not sent. Retry
+                </button>
               ) : message.messageStatus === "SENDING" ? (
                 <span className="opacity-70">
                   <RotateCcw size={10} className="animate-spin" />
@@ -524,23 +529,22 @@ export const MessageBubble = memo(function MessageBubble({
               {!message.isDeleted && (
                 <div className="relative">
                   <button
+                    type="button"
                     onClick={() => setShowReactionPicker(!showReactionPicker)}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                     title="React"
+                    aria-label="React"
+                    aria-expanded={showReactionPicker}
                   >
                     <Smile size={14} />
                   </button>
                   <AnimatePresence>
                     {showReactionPicker && (
-                      <div
-                        className={`absolute bottom-full z-50 mb-2 ${isOwnMessage ? "right-0" : "left-0"}`}
-                      >
-                        <EmojiPicker
-                          onSelect={handleEmojiSelect}
-                          onClose={() => setShowReactionPicker(false)}
-                          alignRight={isOwnMessage}
-                        />
-                      </div>
+                      <EmojiPicker
+                        onSelect={handleEmojiSelect}
+                        onClose={() => setShowReactionPicker(false)}
+                        alignRight={isOwnMessage}
+                      />
                     )}
                   </AnimatePresence>
                 </div>

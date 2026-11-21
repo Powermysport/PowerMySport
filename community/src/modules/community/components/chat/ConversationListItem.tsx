@@ -41,14 +41,12 @@ export const ConversationListItem = memo(function ConversationListItem({
   const conversationAvatarChar = getAvatarCharacter(conversationName);
 
   // Truncate last message
+  // Full text goes to the DOM and CSS `truncate` clips it to the row. A JS
+  // slice cut by UTF-16 units, which splits emoji, and ignored the width.
   const lastMessageText =
     conversation.status === "PENDING"
       ? "Sent you a message request"
-      : conversation.latestMessage?.content
-        ? conversation.latestMessage.content.length > 38
-          ? conversation.latestMessage.content.slice(0, 38) + "..."
-          : conversation.latestMessage.content
-        : "No messages yet";
+      : conversation.latestMessage?.content || "No messages yet";
 
   useEffect(() => {
     if (!showContextMenu) return;
@@ -67,6 +65,7 @@ export const ConversationListItem = memo(function ConversationListItem({
         role="button"
         tabIndex={0}
         aria-disabled={isSelectMode}
+        aria-current={isSelected && !isSelectMode ? "true" : undefined}
         onClick={() => {
           if (!isSelectMode) onOpenConversation(conversation.id);
           else onToggleSelect?.(conversation.id);
@@ -78,19 +77,19 @@ export const ConversationListItem = memo(function ConversationListItem({
             else onToggleSelect?.(conversation.id);
           }
         }}
-        className={`relative w-full cursor-pointer overflow-hidden px-3 py-2.5 text-left transition-all ${
+        className={`relative w-full cursor-pointer overflow-hidden px-4 py-3 text-left transition-colors duration-200 ${
           isSelected && !isSelectMode
-            ? "bg-slate-100"
-            : "bg-white hover:bg-slate-50/80 active:bg-slate-100/60"
+            ? "bg-paper-deep"
+            : "bg-paper hover:bg-paper-deep/60 active:bg-paper-deep"
         }`}
       >
         <div className="flex items-center gap-3">
           {/* Avatar */}
-          <div className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+          <div className="bg-paper-deep text-ink relative inline-flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full text-base font-semibold">
             {conversationPhotoUrl ? (
               <img
                 src={conversationPhotoUrl}
-                alt={conversationName}
+                alt=""
                 className="h-full w-full object-cover"
                 loading="lazy"
               />
@@ -104,21 +103,31 @@ export const ConversationListItem = memo(function ConversationListItem({
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-1.5">
                 {conversation.unreadCount > 0 && (
-                  <div className="bg-power-orange mt-0.5 h-2 w-2 shrink-0 rounded-full" />
+                  <div
+                    className="bg-power-orange-solid mt-0.5 h-2 w-2 shrink-0 rounded-full"
+                    role="img"
+                    aria-label="Unread"
+                  />
                 )}
                 <p
-                  className={`truncate text-sm tracking-tight ${
-                    conversation.unreadCount > 0
-                      ? "font-semibold text-slate-900"
-                      : "font-medium text-slate-800"
+                  className={`text-ink truncate text-base ${
+                    conversation.unreadCount > 0 ? "font-semibold" : "font-medium"
                   }`}
                 >
                   {conversationName}
                 </p>
-                {isPinned && <Pin size={11} className="shrink-0 fill-slate-400 text-slate-400" />}
-                {isMuted && <BellOff size={11} className="shrink-0 text-slate-400" />}
+                {isPinned && (
+                  <Pin
+                    size={12}
+                    aria-label="Pinned"
+                    className="fill-ink-muted text-ink-muted shrink-0"
+                  />
+                )}
+                {isMuted && (
+                  <BellOff size={12} aria-label="Muted" className="text-ink-muted shrink-0" />
+                )}
                 {conversation.status === "PENDING" && (
-                  <span className="bg-wash shrink-0 rounded-md border border-transparent px-1.5 py-0.5 text-[9px] font-semibold text-orange-700">
+                  <span className="bg-wash text-ink shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold">
                     New
                   </span>
                 )}
@@ -128,8 +137,8 @@ export const ConversationListItem = memo(function ConversationListItem({
               <div className="flex shrink-0 items-center gap-1.5">
                 {conversation.latestMessage?.createdAt && (
                   <span
-                    className={`text-xs font-medium tabular-nums leading-none ${
-                      conversation.unreadCount > 0 ? "text-power-orange-solid" : "text-slate-400"
+                    className={`text-sm font-medium tabular-nums leading-none ${
+                      conversation.unreadCount > 0 ? "text-power-orange-solid" : "text-ink-muted"
                     }`}
                   >
                     {formatChatListDate(conversation.latestMessage.createdAt)}
@@ -137,22 +146,26 @@ export const ConversationListItem = memo(function ConversationListItem({
                 )}
                 {/* Context menu trigger */}
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowContextMenu((prev) => !prev);
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100"
+                  aria-label={`Options for ${conversationName}`}
+                  aria-haspopup="menu"
+                  aria-expanded={showContextMenu}
+                  className="text-ink-muted hover:bg-paper-deep hover:text-ink flex h-9 w-9 items-center justify-center rounded-md transition-colors duration-200 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
                   style={{ opacity: showContextMenu ? 1 : undefined }}
                 >
-                  <MoreHorizontal size={14} />
+                  <MoreHorizontal size={16} aria-hidden="true" />
                 </button>
               </div>
             </div>
 
             <div className="mt-0.5 flex items-center justify-between gap-2">
               <p
-                className={`truncate text-sm leading-tight ${
-                  conversation.unreadCount > 0 ? "font-medium text-slate-700" : "text-slate-500"
+                className={`truncate text-base leading-tight ${
+                  conversation.unreadCount > 0 ? "text-ink font-medium" : "text-ink-body"
                 }`}
               >
                 {lastMessageText}
@@ -163,7 +176,7 @@ export const ConversationListItem = memo(function ConversationListItem({
                 <motion.span
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="bg-power-orange-solid inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-md px-1 py-0.5 text-xs font-semibold text-white"
+                  className="bg-power-orange-solid inline-flex min-w-[20px] shrink-0 items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums text-white"
                 >
                   {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
                 </motion.span>
@@ -173,7 +186,7 @@ export const ConversationListItem = memo(function ConversationListItem({
         </div>
 
         {/* Subtle separator line */}
-        {!isSelected && <div className="bg-hairline absolute bottom-0 left-[64px] right-0 h-px" />}
+        {!isSelected && <div className="bg-hairline absolute bottom-0 left-[76px] right-0 h-px" />}
       </div>
 
       {/* Context Menu */}
@@ -185,7 +198,7 @@ export const ConversationListItem = memo(function ConversationListItem({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-3 top-1 z-30 w-40 overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-lg"
+            className="border-hairline bg-paper absolute right-3 top-1 z-30 w-44 overflow-hidden rounded-lg border"
           >
             <button
               onClick={(e) => {
@@ -193,10 +206,11 @@ export const ConversationListItem = memo(function ConversationListItem({
                 onTogglePin(conversation.id);
                 setShowContextMenu(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="text-ink hover:bg-paper-deep flex min-h-11 w-full items-center gap-2 px-3 text-base font-medium transition-colors duration-200"
             >
               <Pin
-                size={14}
+                size={16}
+                aria-hidden="true"
                 className={isPinned ? "fill-power-orange text-power-orange-solid" : ""}
               />
               {isPinned ? "Unpin" : "Pin"}
@@ -207,15 +221,15 @@ export const ConversationListItem = memo(function ConversationListItem({
                 onToggleMute(conversation.id);
                 setShowContextMenu(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="text-ink hover:bg-paper-deep flex min-h-11 w-full items-center gap-2 px-3 text-base font-medium transition-colors duration-200"
             >
               {isMuted ? (
                 <>
-                  <Volume2 size={14} /> Unmute
+                  <Volume2 size={16} aria-hidden="true" /> Unmute
                 </>
               ) : (
                 <>
-                  <BellOff size={14} /> Mute
+                  <BellOff size={16} aria-hidden="true" /> Mute
                 </>
               )}
             </button>

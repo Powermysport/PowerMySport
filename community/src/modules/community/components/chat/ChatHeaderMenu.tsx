@@ -16,7 +16,7 @@ import {
   UserCircle2,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { RefObject } from "react";
+import { RefObject, useEffect } from "react";
 
 interface Props {
   menuRef: RefObject<HTMLDivElement | null>;
@@ -56,11 +56,13 @@ function MenuItem({
 }) {
   return (
     <button
+      type="button"
+      role="menuitem"
       onClick={onClick}
       disabled={disabled}
-      className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        variant === "danger" ? "text-red-700 hover:bg-red-50" : "text-slate-700 hover:bg-slate-50"
-      } ${hasBorderBottom ? "border-b border-slate-100" : ""}`}
+      className={`flex min-h-11 w-full items-center gap-3 px-4 text-base font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+        variant === "danger" ? "text-red-700 hover:bg-red-50" : "text-ink hover:bg-paper-deep"
+      } ${hasBorderBottom ? "border-hairline border-b" : ""}`}
     >
       {icon}
       {label}
@@ -93,29 +95,51 @@ export default function ChatHeaderMenu({
     onClose();
   };
 
+  // Nothing else closed this menu, so it stayed open over the conversation and
+  // stacked with the next popover. Close on a press anywhere outside it (the
+  // trigger is excluded: it toggles the menu itself) and on Escape.
+  useEffect(() => {
+    const onPress = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (menuRef.current?.contains(target as Node)) return;
+      if (target?.closest?.("[data-chat-menu-trigger]")) return;
+      onClose();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onPress);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPress);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuRef, onClose]);
+
   return (
     <motion.div
       ref={menuRef}
+      role="menu"
       initial={{ opacity: 0, scale: 0.95, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: -4 }}
       transition={{ duration: 0.12 }}
-      className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-lg"
+      className="border-hairline bg-paper absolute right-0 top-full z-50 mt-1 w-60 overflow-hidden rounded-lg border"
     >
       {/* Group 1 — Info / Search */}
       <MenuItem
         icon={
           isGroup ? (
-            <Info size={15} className="text-slate-500" />
+            <Info size={16} className="text-ink-muted" aria-hidden="true" />
           ) : (
-            <UserCircle2 size={15} className="text-slate-500" />
+            <UserCircle2 size={16} className="text-ink-muted" aria-hidden="true" />
           )
         }
-        label={isGroup ? "Group Info" : "Contact Info"}
+        label={isGroup ? "Group info" : "Contact info"}
         onClick={wrap(onViewInfo)}
       />
       <MenuItem
-        icon={<Search size={15} className="text-slate-500" />}
+        icon={<Search size={16} className="text-ink-muted" aria-hidden="true" />}
         label="Search"
         onClick={wrap(onToggleSearch)}
         hasBorderBottom
@@ -124,12 +148,12 @@ export default function ChatHeaderMenu({
       {/* Group 2 — Messaging */}
       <MenuItem
         icon={<CheckCheck size={15} className="text-ink-muted" />}
-        label="Mark all as Read"
+        label="Mark all as read"
         onClick={wrap(onMarkAllAsRead)}
       />
       <MenuItem
         icon={<Check size={15} className="text-ink-muted" />}
-        label={isMessageSelectionMode ? "Cancel Selection" : "Select Messages"}
+        label={isMessageSelectionMode ? "Cancel selection" : "Select messages"}
         onClick={wrap(onToggleSelectMessages)}
         hasBorderBottom
       />
@@ -138,12 +162,12 @@ export default function ChatHeaderMenu({
       <MenuItem
         icon={
           isMuted ? (
-            <Bell size={15} className="text-slate-500" />
+            <Bell size={16} className="text-ink-muted" aria-hidden="true" />
           ) : (
-            <BellOff size={15} className="text-slate-500" />
+            <BellOff size={16} className="text-ink-muted" aria-hidden="true" />
           )
         }
-        label={isMuted ? "Unmute Notifications" : "Mute Notifications"}
+        label={isMuted ? "Unmute notifications" : "Mute notifications"}
         onClick={wrap(onToggleMute)}
       />
       <MenuItem
@@ -154,7 +178,7 @@ export default function ChatHeaderMenu({
             <Star size={15} className="text-ink-muted" />
           )
         }
-        label={isFavourited ? "Remove from Favourites" : "Add to Favourites"}
+        label={isFavourited ? "Remove from favourites" : "Add to favourites"}
         onClick={wrap(onToggleFavourite)}
         hasBorderBottom={!isGroup}
       />
@@ -163,7 +187,7 @@ export default function ChatHeaderMenu({
       {!isGroup && (
         <MenuItem
           icon={<Ban size={15} />}
-          label={isBlocked ? "Unblock User" : "Block User"}
+          label={isBlocked ? "Unblock user" : "Block user"}
           onClick={wrap(onBlock)}
           variant="danger"
           disabled={isTogglingBlockUser}
@@ -180,13 +204,13 @@ export default function ChatHeaderMenu({
       />
       <MenuItem
         icon={<Eraser size={15} />}
-        label="Clear Chat"
+        label="Clear chat"
         onClick={wrap(onClearChat)}
         variant="danger"
       />
       <MenuItem
         icon={<Trash2 size={15} />}
-        label="Delete Chat"
+        label="Delete chat"
         onClick={wrap(onDeleteChat)}
         variant="danger"
       />
