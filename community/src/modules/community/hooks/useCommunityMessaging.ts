@@ -187,6 +187,21 @@ export function useCommunityMessaging({
     }
   }, []);
 
+  // The conversation the messages in state belong to. The thread is cleared by
+  // comparing against this, not against `selectedConversationIdRef`: that ref is
+  // updated by an effect in the parent hook which runs BEFORE the effect below,
+  // so by then it already holds the new id, the comparison read "unchanged", and
+  // the previous conversation's messages stayed on screen.
+  const messagesOwnerRef = useRef<string | null>(null);
+
+  // Only this conversation's own messages may be merged into the thread. A
+  // message the server did not list is kept on purpose (an unsent optimistic
+  // one), but that must never include another conversation's messages.
+  const ownMessages = (current: ConversationMessage[], conversationId: string) =>
+    (Array.isArray(current) ? current : []).filter(
+      (message) => !message.conversationId || message.conversationId === conversationId
+    );
+
   const loadMessages = useCallback(
     async (conversationId: string) => {
       try {
@@ -196,17 +211,22 @@ export function useCommunityMessaging({
 
         // Optimistically load from IndexedDB
         const cached = await getCachedMessages(conversationId);
+        // The user may have moved to another conversation while this was read.
+        if (messagesOwnerRef.current !== conversationId) return;
         if (cached && cached.length > 0) {
           setMessages((current) =>
-            mergeServerMessages(Array.isArray(current) ? current : [], cached)
+            mergeServerMessages(ownMessages(current, conversationId), cached)
           );
         }
 
         const response = await communityService.getMessages(conversationId, 1);
+        // Same check after the network round trip: a slow response for the
+        // conversation you just left must not paint into the one you opened.
+        if (messagesOwnerRef.current !== conversationId) return;
         const serverMessages = Array.isArray(response.messages) ? response.messages : [];
         initialLoadSettledRef.current = true;
         setMessages((current) => {
-          const merged = mergeServerMessages(Array.isArray(current) ? current : [], serverMessages);
+          const merged = mergeServerMessages(ownMessages(current, conversationId), serverMessages);
           void setCachedMessages(conversationId, merged);
           return merged;
         });
@@ -283,12 +303,14 @@ export function useCommunityMessaging({
 
   useEffect(() => {
     if (!selectedConversationId || !hasSelectedConversation) {
+      messagesOwnerRef.current = null;
       setMessages([]);
       return;
     }
 
-    // Clear messages if switching to a new conversation to prevent stale data leaking
-    if (selectedConversationIdRef.current !== selectedConversationId) {
+    // Switching to another conversation: drop the previous one's messages first.
+    if (messagesOwnerRef.current !== selectedConversationId) {
+      messagesOwnerRef.current = selectedConversationId;
       setMessages([]);
     }
 
