@@ -30,7 +30,7 @@ export default function DynamicCommunityPosts() {
     return (
       <div className="border-hairline border-t" aria-busy="true" aria-label="Loading questions">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="border-hairline space-y-3 border-b py-7">
+          <div key={i} className="border-hairline space-y-3 border-b py-5 sm:py-7">
             <div className="bg-ink/10 h-3 w-20 animate-pulse rounded-sm" />
             <div className="bg-ink/10 h-6 w-3/4 animate-pulse rounded-sm" />
             <div className="bg-ink/10 h-4 w-full animate-pulse rounded-sm" />
@@ -65,23 +65,34 @@ export default function DynamicCommunityPosts() {
           <li key={post.id} className="border-hairline border-b">
             <Link
               href={`/questions/${post.id}`}
-              className="group -mx-3 block rounded-lg px-3 py-7 transition-colors duration-200 hover:bg-white/60"
+              className="group -mx-3 block rounded-lg px-3 py-5 transition-colors duration-200 hover:bg-white/60 sm:py-7"
             >
               <p className="text-ink-muted text-sm font-medium">{post.sport || "General"}</p>
-              <h3 className="font-editorial text-ink mt-2 text-balance text-2xl font-normal leading-tight">
+              <h3
+                dir="auto"
+                className="font-editorial text-ink mt-2 line-clamp-4 text-balance text-2xl font-normal leading-tight [overflow-wrap:anywhere]"
+              >
                 {post.title}
               </h3>
-              <p className="text-ink-body mt-2 line-clamp-2 max-w-[60ch] text-base leading-relaxed">
+              <p
+                dir="auto"
+                className="text-ink-body mt-2 line-clamp-2 max-w-[60ch] text-base leading-relaxed [overflow-wrap:anywhere]"
+              >
                 {post.body}
               </p>
               <p className="text-ink-muted mt-4 flex items-center gap-2 text-sm">
-                <span>{post.author?.displayName || "Anonymous"}</span>
-                <span aria-hidden>·</span>
-                <span>
-                  {post.answerCount} {post.answerCount === 1 ? "answer" : "answers"}
+                <span className="min-w-0 truncate" title={post.author?.displayName || undefined}>
+                  {post.author?.displayName || "Anonymous"}
+                </span>
+                <span aria-hidden className="shrink-0">
+                  ·
+                </span>
+                <span className="shrink-0 whitespace-nowrap tabular-nums">
+                  {post.answerCount.toLocaleString("en-IN")}{" "}
+                  {post.answerCount === 1 ? "answer" : "answers"}
                 </span>
                 <ArrowRight
-                  className="text-ink ml-auto h-4 w-4 -translate-x-1 opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                  className="text-ink ml-auto h-4 w-4 shrink-0 -translate-x-1 opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100"
                   aria-hidden
                 />
               </p>

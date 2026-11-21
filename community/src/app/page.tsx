@@ -81,10 +81,10 @@ function SectionHeading({
   return (
     <div className="max-w-3xl">
       {eyebrow ? <p className="text-ink-muted mb-3 text-sm font-medium">{eyebrow}</p> : null}
-      <h2 className="font-editorial text-ink text-balance text-4xl font-light leading-[1.08] sm:text-5xl">
+      <h2 className="font-editorial text-ink text-balance text-[2rem] font-light leading-[1.1] sm:text-5xl">
         {title}
       </h2>
-      <p className="text-ink-body mt-4 max-w-[56ch] text-pretty text-base leading-relaxed sm:text-lg">
+      <p className="text-ink-body mt-3 max-w-[56ch] text-pretty text-base leading-relaxed sm:mt-4 sm:text-lg">
         {description}
       </p>
     </div>
@@ -97,10 +97,10 @@ function ValuePropRow({ title, description, href, cta, icon: Icon }: ValueProp) 
   return (
     <Link
       href={href}
-      className="border-hairline hover:border-ink group flex h-full flex-col border-t pt-6 transition-colors duration-200"
+      className="border-hairline hover:border-ink group flex h-full flex-col border-t pt-5 transition-colors duration-200 sm:pt-6"
     >
-      <Icon className="text-ink h-6 w-6" strokeWidth={1.5} aria-hidden />
-      <h3 className="font-editorial text-ink mt-6 text-balance text-2xl font-normal leading-tight">
+      <Icon className="text-ink h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.5} aria-hidden />
+      <h3 className="font-editorial text-ink mt-4 text-balance text-2xl font-normal leading-tight sm:mt-6">
         {title}
       </h3>
       <p className="text-ink-body mt-3 max-w-[40ch] text-pretty text-base leading-relaxed">
@@ -108,7 +108,7 @@ function ValuePropRow({ title, description, href, cta, icon: Icon }: ValueProp) 
       </p>
       {/* mt-auto pins the link to the bottom so a longer description cannot
           push it out of line with its neighbours. */}
-      <span className="text-ink decoration-ink/30 group-hover:decoration-ink mt-auto inline-flex items-center gap-1.5 pt-6 text-base font-semibold underline underline-offset-4 transition-colors duration-200">
+      <span className="text-ink decoration-ink/30 group-hover:decoration-ink mt-auto inline-flex items-center gap-1.5 pt-4 text-base font-semibold underline underline-offset-4 transition-colors duration-200 sm:pt-6">
         {cta}
         <ArrowRight
           className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
@@ -124,8 +124,8 @@ export default function CommunityLandingPage() {
     <div className="bg-paper flex min-h-full flex-col overflow-x-hidden">
       <JsonLd data={[organizationSchema, websiteSchema]} />
       <main className="flex-1">
-        <div className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
-          <section className="bg-ink relative isolate overflow-hidden rounded-3xl">
+        <div className="mx-auto w-full max-w-7xl px-3 pt-3 sm:px-6 sm:pt-6 lg:px-8">
+          <section className="bg-ink relative isolate overflow-hidden rounded-2xl sm:rounded-3xl">
             {/* Hero photograph. `priority` because this is the largest element
                 above the fold on the landing page; lazy-loading it would show
                 a bare dark panel first and hurt LCP. */}
@@ -154,28 +154,28 @@ export default function CommunityLandingPage() {
                 without re-measuring: the sun haze sits behind the top rows. */}
             <div className="bg-ink/80 pointer-events-none absolute inset-0 -z-10" />
 
-            <div className="relative px-6 py-14 sm:px-10 sm:py-20 lg:px-16 lg:py-28">
+            <div className="relative px-5 py-10 sm:px-10 sm:py-20 lg:px-16 lg:py-28">
               <div className="max-w-3xl">
                 <p className="text-sm font-medium text-orange-200">
                   Parent-first youth sports community
                 </p>
-                <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.04] tracking-[-0.04em] text-white sm:text-5xl lg:text-[3.9rem]">
+                <h1 className="mt-4 text-balance text-[2.1rem] font-semibold leading-[1.06] tracking-[-0.04em] text-white sm:mt-5 sm:text-5xl lg:text-[3.9rem]">
                   Learn, connect, and plan your{" "}
-                  <span className="font-editorial text-[1.22em] font-light italic tracking-[-0.02em]">
+                  <span className="font-editorial text-[1.15em] font-light italic tracking-[-0.02em] sm:text-[1.22em]">
                     child&apos;s sports journey.
                   </span>
                 </h1>
-                <p className="mt-6 max-w-[56ch] text-pretty text-base leading-7 text-white/90 sm:text-lg">
+                <p className="mt-5 max-w-[56ch] text-pretty text-[0.95rem] leading-relaxed text-white/90 sm:mt-6 sm:text-lg sm:leading-7">
                   From choosing the right academy or coach to planning tournaments, exploring
                   scholarships and careers, learn from parents who have already walked the path, and
                   share your own experience to help the next family.
                 </p>
 
-                <div className="mt-8 max-w-xl">
+                <div className="mt-6 max-w-xl sm:mt-8">
                   <HeroSearch />
                 </div>
 
-                <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
+                <div className="mt-6 flex flex-col items-stretch gap-4 sm:mt-8 sm:flex-row sm:items-center sm:gap-6 [&>a:first-child]:justify-center sm:[&>a:first-child]:justify-start">
                   {/* White on the photograph: `bg-power-orange` with white text
                       measures 3.03:1 and fails AA. */}
                   <Link
@@ -198,12 +198,12 @@ export default function CommunityLandingPage() {
           </section>
         </div>
 
-        <section className="mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 sm:py-32 lg:px-8">
+        <section className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 sm:py-28 lg:px-8">
           <SectionHeading
             title="Why join the community"
             description="Ask, read and share what you have learned about youth sport, so the next decision for your child is a better informed one."
           />
-          <div className="mt-14 grid gap-x-8 gap-y-12 md:grid-cols-3">
+          <div className="mt-8 grid gap-x-8 gap-y-8 sm:mt-14 sm:gap-y-12 md:grid-cols-3">
             {valueProps.map((prop) => (
               <ValuePropRow key={prop.title} {...prop} />
             ))}
@@ -211,19 +211,19 @@ export default function CommunityLandingPage() {
         </section>
 
         <section className="bg-paper-deep">
-          <div className="mx-auto grid w-full max-w-7xl gap-14 px-4 py-24 sm:px-6 sm:py-32 lg:grid-cols-12 lg:px-8">
-            <div className="lg:col-span-7">
+          <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 sm:gap-14 sm:px-6 sm:py-28 lg:grid-cols-12 lg:px-8">
+            <div className="min-w-0 lg:col-span-7">
               <SectionHeading
                 eyebrow="Live community hub"
                 title="See what nearby parents are asking right now"
                 description="A forum-style feed of local conversations, coaching tips and the questions parents keep asking before they book."
               />
-              <div className="mt-10">
+              <div className="mt-6 sm:mt-10">
                 <DynamicCommunityPosts />
               </div>
             </div>
 
-            <div className="space-y-10 lg:col-span-5">
+            <div className="min-w-0 space-y-8 sm:space-y-10 lg:col-span-5">
               <DynamicFeaturedQA />
               <div>
                 <h3 className="font-editorial text-ink text-2xl font-normal">
@@ -250,15 +250,15 @@ export default function CommunityLandingPage() {
         </section>
 
         {/* The page's one orange moment (client/DESIGN.md). */}
-        <section className="mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 sm:py-32 lg:px-8">
-          <div className="bg-power-orange-solid rounded-3xl px-6 py-16 sm:px-12 sm:py-24 lg:px-20">
-            <h2 className="font-editorial text-paper max-w-3xl text-balance text-5xl font-light leading-[1.05] sm:text-6xl lg:text-7xl">
+        <section className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 sm:py-28 lg:px-8">
+          <div className="bg-power-orange-solid rounded-2xl px-5 py-12 sm:rounded-3xl sm:px-12 sm:py-24 lg:px-20">
+            <h2 className="font-editorial text-paper max-w-3xl text-balance text-[2.25rem] font-light leading-[1.08] sm:text-6xl lg:text-7xl">
               Stuck on a decision about your child&apos;s sport?
             </h2>
-            <p className="text-paper/90 mt-6 max-w-[48ch] text-pretty text-lg leading-relaxed">
+            <p className="text-paper/90 mt-4 max-w-[48ch] text-pretty text-base leading-relaxed sm:mt-6 sm:text-lg">
               Someone in this community has probably faced it. Ask, and read what they did.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">
+            <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-4 sm:mt-10">
               <Link
                 href="/questions"
                 className="btn-motion bg-ink hover:bg-ink-hover inline-flex min-h-12 items-center gap-2 rounded-md px-7 py-3.5 text-base font-semibold text-white"

@@ -37,13 +37,13 @@ export function HeroSearch() {
       <input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search questions and experiences"
+        placeholder="Search questions"
         aria-label="Search questions and stories"
         className="text-ink placeholder:text-ink-muted min-w-0 flex-1 bg-transparent py-2.5 text-base focus:outline-none"
       />
       <button
         type="submit"
-        className="btn-motion bg-power-orange-solid inline-flex min-h-10 shrink-0 items-center justify-center rounded-md px-5 text-base font-semibold text-white hover:bg-indigo-700"
+        className="btn-motion bg-power-orange-solid inline-flex min-h-10 shrink-0 items-center justify-center rounded-md px-4 text-base font-semibold text-white hover:bg-indigo-700 sm:px-5"
       >
         Search
       </button>

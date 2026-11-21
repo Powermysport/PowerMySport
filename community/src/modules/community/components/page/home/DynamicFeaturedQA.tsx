@@ -47,16 +47,16 @@ export default function DynamicFeaturedQA() {
   const topAnswer = [...answers].sort((a, b) => b.voteScore - a.voteScore)[0];
 
   return (
-    <article className="bg-wash rounded-3xl p-7 sm:p-9">
+    <article className="bg-wash rounded-2xl p-5 sm:rounded-3xl sm:p-9">
       <p className="text-ink-body text-sm font-medium">Most helpful answer</p>
-      <h3 className="font-editorial text-ink mt-3 text-balance text-3xl font-normal leading-tight">
+      <h3 className="font-editorial text-ink mt-3 line-clamp-4 text-balance text-2xl font-normal leading-tight [overflow-wrap:anywhere] sm:text-3xl">
         {post.title}
       </h3>
-      <blockquote className="border-ink mt-6 border-l-2 pl-5">
-        <p className="font-editorial text-ink line-clamp-5 text-xl font-light italic leading-relaxed">
+      <blockquote className="border-ink mt-5 border-l-2 pl-4 sm:mt-6 sm:pl-5">
+        <p className="font-editorial text-ink line-clamp-5 text-lg font-light italic leading-relaxed [overflow-wrap:anywhere] sm:text-xl">
           {topAnswer.content}
         </p>
-        <footer className="text-ink-body mt-3 text-sm">
+        <footer className="text-ink-body mt-3 text-sm [overflow-wrap:anywhere]">
           Answered by {topAnswer.author.displayName}
         </footer>
       </blockquote>
