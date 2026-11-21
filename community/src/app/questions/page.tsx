@@ -55,11 +55,14 @@ export default async function CommunityQnAPage() {
       />
       <Suspense
         fallback={
-          <div className="community-page-shell">
-            <div className="community-content-wrap border-border rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-              <div className="h-5 w-40 animate-pulse rounded-full bg-slate-200" />
-              <div className="mt-4 h-24 animate-pulse rounded-2xl bg-slate-100" />
-              <p className="mt-4 text-sm text-slate-500">Loading questions...</p>
+          <div className="community-page-shell" aria-busy="true" aria-label="Loading questions">
+            <div className="community-content-wrap">
+              <div className="bg-paper-deep h-56 animate-pulse rounded-2xl" />
+              <div className="border-hairline mt-8 space-y-3 border-t py-7">
+                <div className="bg-ink/10 h-3 w-24 animate-pulse rounded-sm" />
+                <div className="bg-ink/10 h-6 w-3/4 animate-pulse rounded-sm" />
+                <div className="bg-ink/10 h-4 w-full animate-pulse rounded-sm" />
+              </div>
             </div>
           </div>
         }

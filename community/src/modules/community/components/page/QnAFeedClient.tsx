@@ -690,7 +690,7 @@ export default function QnAFeedClient() {
     const place = [post.sport, post.city].filter(Boolean).join(" · ");
     const isOwner = post.author.id === currentUserId;
     const voteBtn =
-      "text-ink-muted hover:text-ink flex h-9 w-9 items-center justify-center rounded-md transition-colors duration-200 hover:bg-white/70 disabled:opacity-50";
+      "text-ink-muted hover:text-ink flex h-11 w-11 items-center justify-center rounded-md transition-colors duration-200 hover:bg-white/70 disabled:opacity-50";
 
     return (
       <li key={post.id}>
@@ -704,7 +704,7 @@ export default function QnAFeedClient() {
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="flex w-9 shrink-0 flex-col items-center"
+            className="flex w-11 shrink-0 flex-col items-center"
           >
             <button
               type="button"
@@ -715,12 +715,18 @@ export default function QnAFeedClient() {
               className={`${voteBtn} ${post.myVote === 1 ? "text-power-orange-solid" : ""}`}
             >
               <ArrowBigUp
-                size={20}
+                size={22}
+                aria-hidden="true"
                 strokeWidth={1.5}
                 className={post.myVote === 1 ? "fill-power-orange" : ""}
               />
             </button>
-            <span className="text-ink text-sm font-semibold tabular-nums">{post.voteScore}</span>
+            <span
+              className="text-ink text-sm font-semibold tabular-nums"
+              aria-label={`${post.voteScore} votes`}
+            >
+              {post.voteScore.toLocaleString("en-IN")}
+            </span>
             <button
               type="button"
               onClick={() => void vote(post, -1)}
@@ -730,7 +736,8 @@ export default function QnAFeedClient() {
               className={`${voteBtn} ${post.myVote === -1 ? "text-ink" : ""}`}
             >
               <ArrowBigDown
-                size={20}
+                size={22}
+                aria-hidden="true"
                 strokeWidth={1.5}
                 className={post.myVote === -1 ? "fill-ink" : ""}
               />
@@ -751,7 +758,7 @@ export default function QnAFeedClient() {
 
             <Link
               href={`/questions/${post.id}`}
-              className={`font-editorial text-ink decoration-ink/30 mt-2 block text-balance font-normal leading-tight underline-offset-4 group-hover:underline ${
+              className={`font-editorial text-ink decoration-ink/30 mt-2 line-clamp-3 block text-balance font-normal leading-tight underline-offset-4 [overflow-wrap:anywhere] group-hover:underline ${
                 featured ? "text-3xl sm:text-4xl" : "text-2xl"
               }`}
             >
@@ -759,7 +766,7 @@ export default function QnAFeedClient() {
             </Link>
 
             <p
-              className={`text-ink-body mt-3 max-w-[64ch] text-base leading-relaxed ${
+              className={`text-ink-body mt-3 max-w-[64ch] text-base leading-relaxed [overflow-wrap:anywhere] ${
                 featured ? "line-clamp-3" : "line-clamp-2"
               }`}
             >
@@ -767,7 +774,7 @@ export default function QnAFeedClient() {
             </p>
 
             {post.tags.length > 0 ? (
-              <p className="text-ink-muted mt-3 text-sm">
+              <p className="text-ink-muted mt-3 text-sm [overflow-wrap:anywhere]">
                 {post.tags.map((tag) => `#${tag.replace(/^#/, "")}`).join(" ")}
               </p>
             ) : null}
@@ -780,7 +787,9 @@ export default function QnAFeedClient() {
                   }
                   size={26}
                 />
-                <span className="text-ink font-semibold">{authorName}</span>
+                <span className="text-ink font-semibold [overflow-wrap:anywhere]">
+                  {authorName}
+                </span>
                 {post.author.isVerifiedExpert ? (
                   <span className="text-ink-body">· {post.author.expertTitle} (verified)</span>
                 ) : null}
@@ -788,12 +797,12 @@ export default function QnAFeedClient() {
               </div>
 
               <div className="flex items-center gap-4 text-sm">
-                <span
-                  className="text-ink-muted inline-flex items-center gap-1.5 tabular-nums"
-                  title={`${post.answerCount} answers`}
-                >
+                <span className="text-ink-muted inline-flex items-center gap-1.5 tabular-nums">
                   <MessageCircle size={15} strokeWidth={1.5} aria-hidden="true" />
-                  {post.answerCount}
+                  <span aria-hidden="true">{post.answerCount.toLocaleString("en-IN")}</span>
+                  <span className="sr-only">
+                    {post.answerCount} {post.answerCount === 1 ? "answer" : "answers"}
+                  </span>
                 </span>
                 {post.answerCount === 0 ? (
                   <span className="text-power-orange-solid font-semibold">Needs an answer</span>
@@ -841,7 +850,7 @@ export default function QnAFeedClient() {
       <div className="mx-auto w-full max-w-7xl space-y-5 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6 lg:px-6">
         <section
           aria-labelledby="qna-hero-title"
-          className="bg-paper-deep rounded-2xl px-5 py-8 sm:px-10 sm:py-12"
+          className="bg-paper-deep rounded-2xl px-5 py-7 sm:px-10 sm:py-12"
         >
           <p className="text-ink-body inline-flex items-center gap-1.5 text-sm font-medium">
             <Sparkles size={14} strokeWidth={1.5} aria-hidden="true" />
@@ -849,17 +858,17 @@ export default function QnAFeedClient() {
           </p>
           <h1
             id="qna-hero-title"
-            className="font-editorial text-ink mt-3 text-balance text-4xl font-light leading-[1.08] sm:text-5xl lg:text-6xl"
+            className="font-editorial text-ink mt-3 text-balance text-[2rem] font-light leading-[1.1] sm:text-5xl lg:text-6xl"
           >
             Ask better questions.{" "}
             <span className="text-ink-muted italic">Share better answers.</span>
           </h1>
-          <p className="text-ink-body mt-4 max-w-[56ch] text-pretty text-base leading-relaxed sm:text-lg">
+          <p className="text-ink-body mt-3 max-w-[56ch] text-pretty text-base leading-relaxed sm:mt-4 sm:text-lg">
             Post what you are stuck on and get practical answers from parents who have solved it
             before.
           </p>
 
-          <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-1 sm:mt-7 sm:gap-y-3">
             <button
               type="button"
               aria-haspopup="dialog"
@@ -877,7 +886,7 @@ export default function QnAFeedClient() {
             </button>
             <Link
               href="/contributors"
-              className="text-ink decoration-ink/30 hover:decoration-ink inline-flex items-center gap-2 text-base font-semibold underline underline-offset-4 transition-colors duration-200"
+              className="text-ink decoration-ink/30 hover:decoration-ink inline-flex min-h-11 items-center gap-2 text-base font-semibold underline underline-offset-4 transition-colors duration-200"
             >
               <Trophy size={16} strokeWidth={1.5} aria-hidden="true" />
               Leaderboard
@@ -981,7 +990,7 @@ export default function QnAFeedClient() {
                   type="button"
                   onClick={() => setShowFilterPanel((v) => !v)}
                   aria-expanded={showFilterPanel}
-                  className="text-ink decoration-ink/30 hover:decoration-ink ml-auto inline-flex items-center gap-2 text-base font-semibold underline underline-offset-4 transition-colors duration-200"
+                  className="text-ink decoration-ink/30 hover:decoration-ink ml-auto inline-flex min-h-11 items-center gap-2 text-base font-semibold underline underline-offset-4 transition-colors duration-200"
                 >
                   <SlidersHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
                   {showFilterPanel ? "Hide filters" : "More filters"}
