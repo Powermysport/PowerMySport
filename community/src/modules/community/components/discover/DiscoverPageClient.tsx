@@ -20,6 +20,32 @@ import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useConfirm } from "@/modules/community/hooks/useConfirm";
 
+/** Group cover: the photo, or the group's initial when there is none or it
+ *  fails to load. The initial is the first grapheme, upper-cased, so a name
+ *  that starts with an emoji or a lowercase letter still reads cleanly. */
+function GroupCover({ src, name }: { src?: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = (Array.from(name.trim())[0] ?? "?").toLocaleUpperCase();
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        onError={() => setFailed(true)}
+        className="absolute inset-0 h-full w-full object-cover saturate-[0.85] transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="font-editorial text-ink/20 absolute inset-0 flex items-center justify-center text-6xl font-light sm:text-7xl"
+    >
+      {initial}
+    </span>
+  );
+}
+
 export default function DiscoverPageClient() {
   const router = useRouter();
   const [confirm, confirmDialog] = useConfirm();
@@ -269,16 +295,17 @@ export default function DiscoverPageClient() {
           size="lg"
         />
 
-        <div className="mt-10 flex flex-col gap-10">
-          {/* Controls: tabs on the left, search on the right. Filters sit in
+        <div className="mt-6 flex flex-col gap-6 sm:mt-10 sm:gap-10">
+          {/* Controls: tabs and the create action on one row; search and the sport and
+              city filters on the next, so what narrows the list sits together. Filters sit in
               the open instead of behind a toggle, so a parent can see that
               sport and city narrow the list without hunting for it. */}
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-end justify-between gap-4">
               <div
                 role="tablist"
                 aria-label="Browse"
-                className="border-hairline flex gap-8 border-b"
+                className="border-hairline flex min-w-0 gap-5 border-b sm:gap-8"
               >
                 {(["COMMUNITIES", "PARENTS"] as const).map((tab) => {
                   const isActive = activeTab === tab;
@@ -309,8 +336,26 @@ export default function DiscoverPageClient() {
                   );
                 })}
               </div>
+              {activeTab === "COMMUNITIES" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!hasAuthToken()) {
+                      redirectToMainLogin();
+                      return;
+                    }
+                    setIsCreateModalOpen(true);
+                  }}
+                  className="bg-power-orange-solid btn-motion mb-1.5 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-0 text-base font-semibold text-white hover:bg-indigo-700 sm:px-5"
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  <span className="sr-only sm:not-sr-only">Create community</span>
+                </button>
+              )}
+            </div>
 
-              <div className="group relative w-full lg:max-w-md">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="group relative w-full lg:flex-1">
                 <div className="text-ink-muted pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
                   <Search size={18} aria-hidden="true" />
                 </div>
@@ -333,50 +378,49 @@ export default function DiscoverPageClient() {
                   </button>
                 )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:flex sm:items-center">
-              <label className="sr-only" htmlFor="discover-sport">
-                Sport
-              </label>
-              <select
-                id="discover-sport"
-                value={selectedSport}
-                onChange={(e) => setSelectedSport(e.target.value)}
-                className={selectClass}
-              >
-                <option value="All">All sports</option>
-                {availableSports.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <label className="sr-only" htmlFor="discover-city">
-                City
-              </label>
-              <select
-                id="discover-city"
-                value={selectedCity}
-                onChange={(e) => setSelectedCity(e.target.value)}
-                className={selectClass}
-              >
-                <option value="All">All cities</option>
-                {availableCities.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              {activeFilterCount > 0 && (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="text-ink decoration-ink/30 hover:decoration-ink col-span-2 w-fit text-base font-semibold underline underline-offset-4 transition-colors duration-200 sm:col-span-1"
+              <div className="grid grid-cols-2 gap-3 sm:flex sm:items-center lg:shrink-0">
+                <label className="sr-only" htmlFor="discover-sport">
+                  Sport
+                </label>
+                <select
+                  id="discover-sport"
+                  value={selectedSport}
+                  onChange={(e) => setSelectedSport(e.target.value)}
+                  className={selectClass}
                 >
-                  Clear filters
-                </button>
-              )}
+                  <option value="All">All sports</option>
+                  {availableSports.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <label className="sr-only" htmlFor="discover-city">
+                  City
+                </label>
+                <select
+                  id="discover-city"
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="All">All cities</option>
+                  {availableCities.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="text-ink decoration-ink/30 hover:decoration-ink col-span-2 w-fit text-base font-semibold underline underline-offset-4 transition-colors duration-200 sm:col-span-1"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -388,7 +432,7 @@ export default function DiscoverPageClient() {
             >
               {[1, 2, 3].map((i) => (
                 <div key={i}>
-                  <div className="bg-ink/10 aspect-[4/3] w-full animate-pulse rounded-2xl" />
+                  <div className="bg-ink/10 aspect-[16/10] w-full animate-pulse rounded-2xl" />
                   <div className="bg-ink/10 mt-5 h-6 w-2/3 animate-pulse rounded-sm" />
                   <div className="bg-ink/10 mt-3 h-4 w-full animate-pulse rounded-sm" />
                 </div>
@@ -398,31 +442,17 @@ export default function DiscoverPageClient() {
             <>
               {activeTab === "COMMUNITIES" && (
                 <section aria-labelledby="discover-communities">
-                  <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-                    <div>
+                  <div className="mb-6 sm:mb-8">
+                    <div className="min-w-0">
                       <h2 id="discover-communities" className="community-section-title">
                         Communities
                       </h2>
                       <p className="text-ink-body mt-1 text-base tabular-nums">
                         {filteredCommunities.length}{" "}
-                        {filteredCommunities.length === 1 ? "group" : "groups"} for parents and
-                        young players
+                        {filteredCommunities.length === 1 ? "group" : "groups"}
+                        <span className="hidden sm:inline"> for parents and young players</span>
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!hasAuthToken()) {
-                          redirectToMainLogin();
-                          return;
-                        }
-                        setIsCreateModalOpen(true);
-                      }}
-                      className="bg-power-orange-solid btn-motion inline-flex min-h-11 items-center gap-2 rounded-md px-5 text-base font-semibold text-white hover:bg-indigo-700"
-                    >
-                      <Plus size={16} aria-hidden="true" />
-                      Create community
-                    </button>
                   </div>
 
                   {filteredCommunities.length === 0 ? (
@@ -448,7 +478,7 @@ export default function DiscoverPageClient() {
                       )}
                     </div>
                   ) : (
-                    <ul className="grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
+                    <ul className="grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 sm:gap-y-14 lg:grid-cols-3">
                       {filteredCommunities.map((group) => (
                         <li key={group.id} className="group flex flex-col">
                           <button
@@ -458,19 +488,9 @@ export default function DiscoverPageClient() {
                               setIsCommunityModalOpen(true);
                             }}
                             aria-label={`View ${group.name}`}
-                            className="bg-paper-deep relative block aspect-[4/3] w-full overflow-hidden rounded-2xl"
+                            className="bg-paper-deep relative block aspect-[16/10] w-full overflow-hidden rounded-2xl"
                           >
-                            {group.profilePicture ? (
-                              <img
-                                src={group.profilePicture}
-                                alt=""
-                                className="absolute inset-0 h-full w-full object-cover saturate-[0.85] transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-                              />
-                            ) : (
-                              <span className="font-editorial text-ink/15 absolute inset-0 flex items-center justify-center text-8xl font-light">
-                                {group.name.charAt(0)}
-                              </span>
-                            )}
+                            <GroupCover src={group.profilePicture} name={group.name} />
                             {group.isMember && (
                               <span className="bg-paper text-ink absolute left-3 top-3 rounded-sm px-2 py-1 text-xs font-semibold">
                                 Joined
@@ -479,21 +499,23 @@ export default function DiscoverPageClient() {
                           </button>
 
                           <div className="mt-5 flex flex-1 flex-col">
-                            <h3 className="font-editorial text-ink line-clamp-2 text-2xl font-normal leading-tight">
+                            <h3 className="font-editorial text-ink line-clamp-2 text-2xl font-normal leading-tight [overflow-wrap:anywhere]">
                               {group.name}
                             </h3>
                             <p className="text-ink-muted mt-2 text-sm tabular-nums">
                               {[
                                 group.sport,
                                 group.city,
-                                `${group.memberCount} ${group.memberCount === 1 ? "member" : "members"}`,
+                                `${group.memberCount.toLocaleString("en-IN")} ${group.memberCount === 1 ? "member" : "members"}`,
                               ]
                                 .filter(Boolean)
                                 .join(" · ")}
                             </p>
-                            <p className="text-ink-body mt-3 line-clamp-2 text-base leading-relaxed">
-                              {group.description || "No description yet."}
-                            </p>
+                            {group.description ? (
+                              <p className="text-ink-body mt-3 line-clamp-2 text-base leading-relaxed [overflow-wrap:anywhere]">
+                                {group.description}
+                              </p>
+                            ) : null}
 
                             {/* mt-auto lines the actions up across cards of
                                 different description length. */}
@@ -524,7 +546,7 @@ export default function DiscoverPageClient() {
                                   setSelectedCommunity(group);
                                   setIsCommunityModalOpen(true);
                                 }}
-                                className="text-ink decoration-ink/30 hover:decoration-ink text-base font-semibold underline underline-offset-4 transition-colors duration-200"
+                                className="text-ink decoration-ink/30 hover:decoration-ink -my-3 py-3 text-base font-semibold underline underline-offset-4 transition-colors duration-200"
                               >
                                 Details
                               </button>
@@ -603,7 +625,7 @@ export default function DiscoverPageClient() {
                             </button>
 
                             <div className="min-w-0 flex-1">
-                              <h3 className="font-editorial text-ink line-clamp-1 text-xl font-normal">
+                              <h3 className="font-editorial text-ink line-clamp-1 text-xl font-normal [overflow-wrap:anywhere]">
                                 <button
                                   type="button"
                                   onClick={() => {

@@ -24,7 +24,13 @@ export default function DiscoverPage() {
         ])}
       />
       <Suspense
-        fallback={<div className="p-8 text-center text-slate-500">Loading discover...</div>}
+        fallback={
+          <div aria-busy="true" aria-label="Loading" className="community-page-shell">
+            <div className="community-content-wrap">
+              <div className="bg-paper-deep h-44 animate-pulse rounded-2xl" />
+            </div>
+          </div>
+        }
       >
         <DiscoverPageClient />
       </Suspense>

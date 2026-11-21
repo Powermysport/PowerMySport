@@ -25,7 +25,7 @@ export function CommunityPageHeader({
     <header
       className={`bg-paper-deep rounded-2xl ${
         isLarge
-          ? "flex min-h-[170px] flex-col justify-center p-6 sm:min-h-[210px] sm:p-10 lg:min-h-[230px] lg:p-12"
+          ? "flex flex-col justify-center p-5 sm:min-h-[210px] sm:p-10 lg:min-h-[230px] lg:p-12"
           : "p-5 sm:p-10"
       }`}
     >
