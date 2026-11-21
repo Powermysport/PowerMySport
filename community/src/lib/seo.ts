@@ -222,13 +222,12 @@ export const rootMetadata: Metadata = {
   // rather than being pinned to the production origin like the SEO URLs below.
   manifest: `${BASE_PATH}/site.webmanifest`,
   icons: {
+    // Smallest first, so a browser picking by size gets the file drawn for
+    // that size. The old favicon.png was a 1280x1280 copy of the full logo.
     icon: [
-      { url: `${BASE_PATH}/favicon.png`, type: "image/png" },
-      {
-        url: `${BASE_PATH}/favicon-32x32.png`,
-        sizes: "32x32",
-        type: "image/png",
-      },
+      { url: `${BASE_PATH}/favicon-16x16.png`, sizes: "16x16", type: "image/png" },
+      { url: `${BASE_PATH}/favicon-32x32.png`, sizes: "32x32", type: "image/png" },
+      { url: `${BASE_PATH}/favicon.png`, sizes: "48x48", type: "image/png" },
     ],
     shortcut: `${BASE_PATH}/favicon.png`,
     apple: [
