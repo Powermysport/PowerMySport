@@ -12,6 +12,31 @@ import { LeaderboardItem } from "@/modules/community/components/contributors/typ
 
 const LEADERBOARD_SIZE = 15;
 
+/** Photo, or the first grapheme of the name when there is none or it fails to
+ *  load (a broken-image icon in a leaderboard row reads as a bug). */
+function ContributorAvatar({ name, photoUrl }: { name: string; photoUrl?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const initial = (Array.from(name.trim())[0] ?? "?").toLocaleUpperCase();
+  return (
+    <span className="bg-paper-deep text-ink-muted flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl text-sm font-semibold">
+      {photoUrl && !failed ? (
+        <img
+          src={photoUrl}
+          alt=""
+          onError={() => setFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initial
+      )}
+    </span>
+  );
+}
+
+const GRID_COLS =
+  "grid-cols-[2rem_minmax(0,1fr)_3.5rem] sm:grid-cols-[3.5rem_minmax(0,1fr)_5rem_5rem_5rem_5.5rem]";
+const fmt = (n: number) => n.toLocaleString("en-IN");
+
 export default function ContributorsPage() {
   return (
     <Suspense
@@ -80,14 +105,17 @@ function ContributorsPageContent() {
 
   const myEntry = leaderboard?.me ?? null;
 
-  // "You" pinned first with your real rank, then the top of the board. Ranks
-  // come from the server now, so a pinned #204 stays #204 instead of being
-  // renumbered against whatever subset the page happened to load.
-  const displayRows = useMemo(() => {
-    const others = rows.filter((item) => item.id !== myEntry?.id);
-    const slotsForOthers = myEntry ? LEADERBOARD_SIZE - 1 : LEADERBOARD_SIZE;
-    const rest = others.slice(0, Math.max(0, slotsForOthers));
-    return myEntry ? [myEntry, ...rest] : rest;
+  // Rows stay in rank order so the Place column always reads 1, 2, 3. If you
+  // are inside the top of the board your row is simply highlighted in place; if
+  // you are further down, your real rank (the server's, so #204 stays #204)
+  // follows after a gap instead of jumping above the leader.
+  const { displayRows, meBelowBoard } = useMemo(() => {
+    const top = [...rows].sort((a, b) => a.rank - b.rank).slice(0, LEADERBOARD_SIZE);
+    const meInTop = Boolean(myEntry && top.some((item) => item.id === myEntry.id));
+    return {
+      displayRows: myEntry && !meInTop ? [...top, myEntry] : top,
+      meBelowBoard: Boolean(myEntry && !meInTop),
+    };
   }, [rows, myEntry]);
 
   const selectedContributor = useMemo(
@@ -158,8 +186,8 @@ function ContributorsPageContent() {
               ].map((stat) => (
                 <div key={stat.label} className="border-hairline border-b py-6 pr-4">
                   <dt className="text-ink-muted text-sm">{stat.label}</dt>
-                  <dd className="font-editorial text-ink mt-1 text-5xl font-light tabular-nums">
-                    {stat.value}
+                  <dd className="font-editorial text-ink mt-1 text-4xl font-light tabular-nums sm:text-5xl">
+                    {fmt(stat.value)}
                   </dd>
                 </div>
               ))}
@@ -192,63 +220,75 @@ function ContributorsPageContent() {
               </p>
             </div>
           ) : (
-            <div className="mt-4 overflow-x-auto">
-              <div className="border-hairline text-ink-muted grid min-w-[560px] grid-cols-[3.5rem_1fr_5rem_5rem_5rem_5.5rem] items-center gap-2 border-b border-t px-3 py-3 text-sm">
+            <div className="mt-4 max-w-4xl">
+              <div
+                className={`border-hairline text-ink-muted grid ${GRID_COLS} items-center gap-2 border-b border-t px-3 py-3 text-sm`}
+              >
                 <span>Place</span>
                 <span>Contributor</span>
-                <span className="text-right">Posts</span>
-                <span className="text-right">Answers</span>
-                <span className="text-right">Upvotes</span>
+                <span className="hidden text-right sm:block">Posts</span>
+                <span className="hidden text-right sm:block">Answers</span>
+                <span className="hidden text-right sm:block">Upvotes</span>
                 <span className="text-right">Points</span>
               </div>
 
               <ul>
                 {displayRows.map((item) => {
                   const isMe = item.id === currentUserId;
+                  const showGap = meBelowBoard && isMe && displayRows.length > 1;
                   return (
                     <li
                       key={`${item.rank}-${item.id || item.name}`}
                       className="border-hairline border-b"
                     >
+                      {showGap ? (
+                        <p className="text-ink-muted px-3 py-2 text-sm" aria-hidden="true">
+                          &hellip;
+                        </p>
+                      ) : null}
                       <button
                         type="button"
                         disabled={!item.id}
                         onClick={() => item.id && setSelectedContributorId(item.id)}
-                        className={`hover:bg-paper-deep/60 grid min-h-14 w-full min-w-[560px] grid-cols-[3.5rem_1fr_5rem_5rem_5rem_5.5rem] items-center gap-2 px-3 py-3 text-left transition-colors duration-200 disabled:cursor-default ${
+                        className={`hover:bg-paper-deep/60 grid min-h-14 w-full ${GRID_COLS} items-center gap-2 px-3 py-3 text-left transition-colors duration-200 disabled:cursor-default ${
                           isMe ? "bg-wash/60" : ""
                         }`}
                       >
                         <span className="font-editorial text-ink text-2xl font-light tabular-nums">
-                          {item.rank}
+                          {fmt(item.rank)}
                         </span>
                         <span className="flex min-w-0 items-center gap-3">
-                          <span className="bg-paper-deep text-ink-muted flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl text-sm font-semibold">
-                            {item.photoUrl ? (
-                              <img
-                                src={item.photoUrl}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              item.name.charAt(0).toUpperCase()
-                            )}
+                          <ContributorAvatar name={item.name} photoUrl={item.photoUrl} />
+                          <span className="min-w-0">
+                            <span className="flex min-w-0 items-baseline gap-2">
+                              <span
+                                className="text-ink truncate text-base font-semibold"
+                                title={item.name}
+                              >
+                                {item.name}
+                              </span>
+                              {isMe && (
+                                <span className="text-ink-body shrink-0 text-sm">(you)</span>
+                              )}
+                            </span>
+                            <span className="text-ink-muted block text-sm tabular-nums leading-snug sm:hidden">
+                              {fmt(item.posts)} {item.posts === 1 ? "post" : "posts"} ·{" "}
+                              {fmt(item.answers)} {item.answers === 1 ? "answer" : "answers"} ·{" "}
+                              {fmt(item.upvotes)} {item.upvotes === 1 ? "upvote" : "upvotes"}
+                            </span>
                           </span>
-                          <span className="text-ink truncate text-base font-semibold">
-                            {item.name}
-                          </span>
-                          {isMe && <span className="text-ink-body shrink-0 text-sm">(you)</span>}
                         </span>
-                        <span className="text-ink-body text-right text-base tabular-nums">
-                          {item.posts}
+                        <span className="text-ink-body hidden text-right text-base tabular-nums sm:block">
+                          {fmt(item.posts)}
                         </span>
-                        <span className="text-ink-body text-right text-base tabular-nums">
-                          {item.answers}
+                        <span className="text-ink-body hidden text-right text-base tabular-nums sm:block">
+                          {fmt(item.answers)}
                         </span>
-                        <span className="text-ink-body text-right text-base tabular-nums">
-                          {item.upvotes}
+                        <span className="text-ink-body hidden text-right text-base tabular-nums sm:block">
+                          {fmt(item.upvotes)}
                         </span>
                         <span className="text-ink text-right text-base font-semibold tabular-nums">
-                          {item.score}
+                          {fmt(item.score)}
                         </span>
                       </button>
                     </li>

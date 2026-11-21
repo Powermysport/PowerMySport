@@ -35,7 +35,7 @@ export function ContributorModal({
             ].map((stat) => (
               <div key={stat.label}>
                 <dd className="font-editorial text-ink text-3xl font-light tabular-nums">
-                  {stat.value}
+                  {stat.value.toLocaleString("en-IN")}
                 </dd>
                 <dt className="text-ink-muted mt-0.5 text-sm">{stat.label}</dt>
               </div>
@@ -59,7 +59,9 @@ export function ContributorModal({
                     onClick={onClose}
                     className="hover:bg-paper-deep/60 -mx-2 block px-2 py-3 transition-colors duration-200"
                   >
-                    <p className="text-ink line-clamp-2 text-base font-medium">{post.title}</p>
+                    <p className="text-ink line-clamp-2 text-base font-medium [overflow-wrap:anywhere]">
+                      {post.title}
+                    </p>
                     <p className="text-ink-muted mt-1 text-sm tabular-nums">
                       {post.answerCount} {post.answerCount === 1 ? "answer" : "answers"} ·{" "}
                       {post.upvoteCount} {post.upvoteCount === 1 ? "upvote" : "upvotes"}
