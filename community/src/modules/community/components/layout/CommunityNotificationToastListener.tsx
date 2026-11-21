@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getCommunitySocket } from "@/lib/realtime/socket";
 import { toast } from "@/lib/toast";
+import { buildNotificationHref } from "@/modules/community/utils/notificationLinks";
 
 type IncomingNotificationData = {
   event?: string;
@@ -19,22 +20,6 @@ type IncomingNotification = {
   message?: string;
   timestamp?: string;
   data?: IncomingNotificationData;
-};
-
-const buildActionHref = (payload: IncomingNotification): string | null => {
-  if (payload.data?.postId) {
-    return `/questions/${payload.data.postId}`;
-  }
-
-  if (payload.data?.conversationId) {
-    return `/chats?sidebar=inbox&conversation=${encodeURIComponent(payload.data.conversationId)}`;
-  }
-
-  if (payload.data?.groupId) {
-    return `/chats?group=${encodeURIComponent(payload.data.groupId)}`;
-  }
-
-  return null;
 };
 
 export default function CommunityNotificationToastListener() {
@@ -64,7 +49,7 @@ export default function CommunityNotificationToastListener() {
 
       const title = payload.title?.trim() || "New notification";
       const message = payload.message?.trim() || "New update";
-      const actionHref = buildActionHref(payload);
+      const actionHref = buildNotificationHref(payload.data);
       const toastKey = [
         payload.id || "",
         payload.type || "",
